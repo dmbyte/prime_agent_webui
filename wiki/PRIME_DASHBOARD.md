@@ -20,10 +20,15 @@ contains the live Prime terminal. The sidebar provides:
   as $0 API spend. GPT-5.4 is configured but cannot accrue usage until API billing
   credits are available.
 
+Usage excludes recorded models that are no longer configured. A provider with
+multiple configured models is a collapsed group showing rolled-up tokens/spend;
+expanding it reveals each model. Single-model providers remain ordinary rows.
+
 The model rows are not maintained manually. The dashboard invokes Prime's own
 authenticated `model list`, caches successful discovery for 60 seconds, unions it
 with custom/planned and recorded models, and refreshes the Usage screen every 30
-seconds. Failed discovery preserves the last successful catalog.
+seconds. Failed discovery preserves the last successful catalog. Only rows marked
+configured by that resulting catalog are rendered.
 
 The compact monitor above the tabs refreshes every two seconds. Its top row shows
 CPU, GPU, memory utilization, and power; its bottom row contains CPU, GPU, and

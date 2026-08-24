@@ -3,6 +3,18 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-24 — v0030 — Group configured Usage models by provider
+
+- Filtered Usage to the configured/authenticated catalog; historical activity for
+  removed models no longer creates a row by itself.
+- Added collapsed provider roll-ups for multi-model providers and expandable
+  per-model detail; single-model providers stay as direct rows.
+- Validation: live browser showed `openai-codex · 13 models` collapsed with its
+  rolled-up values, hid GPT-5.6 Sol until expansion, and retained direct OpenAI,
+  Nemotron, and Qwen rows.
+- Rollback: restore v0029 dashboard HTML, JavaScript, and `usage.css`.
+- Snapshot: [v0030](versions/v0030.md)
+
 ## 2026-08-24 — v0029 — Automatically discover Usage models
 
 - Replaced manual Usage catalog maintenance with Prime's authenticated live model

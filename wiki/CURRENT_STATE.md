@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-24
-Wiki version: `v0029`
+Wiki version: `v0030`
 
 ## Project summary
 
@@ -122,6 +122,10 @@ portfolio evaluation, paper-trading research, and supporting code.
   refreshes it at most once per minute; the screen itself refreshes every 30
   seconds. After ChatGPT `/login`, it discovered 13 `openai-codex` models plus
   direct OpenAI and the two Spark models (16 total), including GPT-5.6 Sol.
+- Usage renders configured/authenticated models only. Providers with multiple
+  models are collapsed by default into a provider row whose Today and Last 30
+  days figures sum all child models; expanding reveals per-model rows. Providers
+  with one configured model remain direct rows.
 - The Conversations view lists the 40 most recently modified Prime session files.
   Each row shows a sanitized, 96-character maximum topic derived from the first
   user message, then the timestamp of the latest chat, followed by model and opaque

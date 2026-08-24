@@ -6,6 +6,7 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0030](v0030.md) | 2026-08-24 | Grouped configured Usage models into collapsible provider roll-ups |
 | [v0029](v0029.md) | 2026-08-24 | Automatically discovered authenticated Prime models for Usage |
 | [v0028](v0028.md) | 2026-08-23 | Configured OpenAI GPT-5.4; billing credits remain required |
 | [v0027](v0027.md) | 2026-08-23 | Corrected OpenAI API-key model/provider mapping |
