@@ -320,6 +320,28 @@ def background_activity():
         return {"tasks": list(tasks), "generatedAt": datetime.now(timezone.utc).isoformat()}
 
 
+def stop_activity(session_id):
+    if not re.fullmatch(r"[A-Za-z0-9_-]{8,80}", session_id):
+        raise ValueError("Invalid task identifier")
+    active_ids = {task["id"] for task in background_activity()["tasks"]}
+    if session_id not in active_ids:
+        raise ValueError("Task is no longer active")
+    env = os.environ.copy()
+    env["PATH"] = f"{PRIME_BIN}:{env.get('PATH', '')}"
+    try:
+        subprocess.run(
+            [str(PRIME_AGENT), "stop", session_id], capture_output=True, text=True,
+            timeout=15, check=True, env=env,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError("Prime did not confirm the stop in time") from error
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError("Prime could not stop this task") from error
+    with ACTIVITY_LOCK:
+        ACTIVITY_CACHE.update({"at": 0, "tasks": []})
+    return {"stopped": True, "id": session_id}
+
+
 def activity_events(session_id):
     topic = None
     events = deque(maxlen=14)
@@ -451,7 +473,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(404, {"error": "Not found"})
 
     def do_POST(self):
-        if self.path != "/api/settings":
+        if self.path not in {"/api/settings", "/api/activity/stop"}:
             self.send_json(404, {"error": "Not found"})
             return
         if self.headers.get("Origin") not in ALLOWED_ORIGINS or self.headers.get("X-Prime-Dashboard") != "1":
@@ -462,9 +484,14 @@ class Handler(BaseHTTPRequestHandler):
             if length > 8192:
                 raise ValueError("Request too large")
             payload = json.loads(self.rfile.read(length))
-            self.send_json(200, {"settings": save_settings(payload)})
+            if self.path == "/api/activity/stop":
+                self.send_json(200, stop_activity(str(payload.get("id", ""))))
+            else:
+                self.send_json(200, {"settings": save_settings(payload)})
         except (ValueError, TypeError, json.JSONDecodeError) as error:
             self.send_json(400, {"error": str(error)})
+        except RuntimeError as error:
+            self.send_json(409, {"error": str(error)})
 
     def log_message(self, format, *args):
         return

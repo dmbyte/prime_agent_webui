@@ -58,6 +58,12 @@ interactive control surface. Only the selected task is attached, keeping the
 primary terminal plus overlay within ttyd's two-client cap. **Event feed** returns
 to the sanitized view.
 
+Both views include **Stop task**. After explicit browser confirmation, the API
+revalidates that the strict session ID is currently active and calls Prime's native
+single-agent `stop` command. Success removes the worker from active tasks while
+retaining its JSONL conversation for later review or resumption. The control never
+invokes Prime's global shutdown and cannot target an idle or historical session.
+
 ## Data semantics
 
 The dashboard reads only `~/.prime/agent/sessions/*.jsonl`. For every assistant

@@ -6,6 +6,7 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0033](v0033.md) | 2026-08-24 | Added a guarded single-task stop control |
 | [v0032](v0032.md) | 2026-08-24 | Added an optional read-only attached console for active tasks |
 | [v0031](v0031.md) | 2026-08-24 | Added tabbed, resizable background activity overlay |
 | [v0030](v0030.md) | 2026-08-24 | Grouped configured Usage models into collapsible provider roll-ups |

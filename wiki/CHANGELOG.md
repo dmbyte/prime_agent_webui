@@ -3,6 +3,19 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-24 — v0033 — Add per-task stop control
+
+- Added a confirmation-gated **Stop task** button to the event and live-console
+  views for every active task.
+- Added an origin-protected API action that validates a strict, currently active
+  session ID and invokes Prime's native single-agent stop command. Saved
+  conversation history remains intact; other workers and the supervisor continue.
+- Validation: local command-construction/inactive-ID tests passed; the deployed API
+  rejected a malformed target with HTTP 400; dashboard service and Spark model
+  validation passed. No live task was interrupted during validation.
+- Rollback: restore v0032 API, JavaScript, and `live-console.css` assets.
+- Snapshot: [v0033](versions/v0033.md)
+
 ## 2026-08-24 — v0032 — Add read-only live task console
 
 - Added a per-task option that attaches the overlay to the actual running Prime
