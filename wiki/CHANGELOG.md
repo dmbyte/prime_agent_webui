@@ -3,6 +3,19 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-24 — v0032 — Add read-only live task console
+
+- Added a per-task option that attaches the overlay to the actual running Prime
+  console, with a control to return to the sanitized event feed.
+- Made the overlay console read-only and lazy-loaded only for the selected task;
+  the primary terminal remains interactive and ttyd's two-client cap is respected.
+- Constrained browser attach requests to strict, existing session IDs; arbitrary
+  browser-supplied arguments continue to be discarded.
+- Validation: valid/invalid launcher tests and a live attach/return browser check
+  passed; the final read-only assets are deployed and full Spark validation passes.
+- Rollback: restore v0031 launcher/dashboard assets and remove `live-console.css`.
+- Snapshot: [v0032](versions/v0032.md)
+
 ## 2026-08-24 — v0031 — Add background activity overlay
 
 - Added an activity icon with active-task count and a floating overlay that is

@@ -50,6 +50,14 @@ message count, timestamps, tool names, and token progress. The API deliberately
 does not return full prompts, assistant text, thinking text, tool inputs/results,
 or status summaries. Credential-like topics retain the existing sensitive label.
 
+Each task tab also offers **Live console**. Selecting it lazily attaches a second
+ttyd client to that exact running Prime session and shows the real terminal in the
+overlay. The embedded console is deliberately read-only and removed from keyboard
+tab order to prevent accidental steering; the primary terminal remains the
+interactive control surface. Only the selected task is attached, keeping the
+primary terminal plus overlay within ttyd's two-client cap. **Event feed** returns
+to the sanitized view.
+
 ## Data semantics
 
 The dashboard reads only `~/.prime/agent/sessions/*.jsonl`. For every assistant
@@ -72,6 +80,9 @@ ttyd URL arguments terminate at `prime-web-launch`, which forwards only the exac
 two-argument resume form when the ID matches the strict character/length rule and
 an existing session file. Every other argument combination is discarded and the
 fixed new-conversation launcher runs. New conversation reloads that fixed endpoint.
+The same launcher accepts only the exact two-argument `--attach ID` form, using the
+same strict ID validation and existing-session check. No other browser-supplied
+command or argument is forwarded.
 
 ## Architecture and security
 

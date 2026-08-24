@@ -26,3 +26,4 @@ only historical evidence: when a decision changes, mark the old record
 - [ADR-0019: Discover authenticated models automatically](0019-automatic-model-discovery.md)
 - [ADR-0020: Group configured usage by provider](0020-provider-usage-groups.md)
 - [ADR-0021: Expose privacy-safe background activity](0021-background-activity.md)
+- [ADR-0022: Offer a read-only attached live console](0022-read-only-live-console.md)
