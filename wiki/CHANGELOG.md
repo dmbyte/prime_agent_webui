@@ -3,6 +3,15 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-24 — v0042 — Reboot-safe dashboard startup
+
+- Verified that `prime-web.service` and `prime-dashboard-api.service` restarted
+  correctly after reboot, while Nginx failed its explicit LAN-address bind test.
+- Added a bounded, fail-closed address wait before Nginx configuration validation.
+- Preserved the existing loopback/private listeners, TLS, PAM, and source ACL.
+- Added ADR-0030 and reviewable deployment source for the helper and drop-in.
+- Snapshot: [v0042](versions/v0042.md)
+
 ## 2026-08-24 — v0041 — Correct per-row delete targeting
 
 - Replaced position-based conversation lookup with a full session ID stored on

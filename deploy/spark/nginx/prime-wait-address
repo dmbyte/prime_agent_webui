@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+address="${1:?usage: prime-wait-address ADDRESS [TIMEOUT_SECONDS]}"
+timeout_seconds="${2:-120}"
+
+if [[ ! "$timeout_seconds" =~ ^[0-9]+$ ]] || (( timeout_seconds < 1 )); then
+    echo "TIMEOUT_SECONDS must be a positive integer" >&2
+    exit 2
+fi
+
+for ((elapsed = 0; elapsed < timeout_seconds; elapsed++)); do
+    if /usr/sbin/ip -o address show to "${address}/32" | /usr/bin/grep -q .; then
+        exit 0
+    fi
+    /usr/bin/sleep 1
+done
+
+echo "Timed out waiting for local address ${address}" >&2
+exit 1

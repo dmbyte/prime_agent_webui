@@ -34,3 +34,4 @@ only historical evidence: when a decision changes, mark the old record
 - [ADR-0027: Preserve explicit attachment but prohibit UI attachment](0027-explicit-not-automatic-attach.md)
 - [ADR-0028: Hide attachment-command session artifacts](0028-hide-attach-artifacts.md)
 - [ADR-0029: Use recoverable conversation deletion](0029-recoverable-conversation-delete.md)
+- [ADR-0030: Wait for the private address before starting Nginx](0030-wait-for-nginx-private-address.md)

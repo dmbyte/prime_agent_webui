@@ -18,3 +18,8 @@ self-signed. The ttyd backend remains loopback-only.
 Nginx validates WebSocket origins against the approved HTTPS hostnames before
 proxying; ttyd's backend-origin check is disabled because it cannot see through
 the reverse proxy correctly.
+
+`nginx-prime-address-wait.conf` replaces Nginx's preflight sequence so it waits
+up to 120 seconds for the private LAN address before validating its explicit
+binds. Install it as `/etc/systemd/system/nginx.service.d/prime-address-wait.conf`
+and install `prime-wait-address` as `/usr/local/sbin/prime-wait-address`.

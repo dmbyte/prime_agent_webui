@@ -1,6 +1,6 @@
 # Prime Agent deployment on DGX Spark
 
-Last verified: 2026-08-23
+Last verified: 2026-08-24
 
 ## Service layout
 
@@ -13,6 +13,11 @@ Last verified: 2026-08-23
 | Browser backend | `prime-web.service`, 127.0.0.1:7681 | ttyd 1.7.4, enabled and active |
 | Dashboard API | `prime-dashboard-api.service`, 127.0.0.1:8765 | enabled, active, health/state passed |
 | Authenticated HTTPS | Nginx, 127.0.0.1 and 172.16.253.231:8443 | private-source ACL + TLS + PAM |
+
+Nginx retains its explicit private listeners. A systemd drop-in first waits up
+to 120 seconds for `172.16.253.231` to become a local address and then runs the
+distribution configuration test. This repairs the observed reboot race without
+falling back to a wildcard/public listener.
 
 Both vLLM containers use image
 `vllm/vllm-openai:v0.27.1-aarch64-cu129-ubuntu2404`, local image ID
@@ -47,7 +52,10 @@ Non-secret deployed-file SHA-256 values:
 - Qwen correctly inspected a supplied PNG and reported its dominant color.
 - Prime explicit-provider tests passed for both models; its unqualified default
   produced `DEFAULT_ROUTE_OK` through Nemotron.
-- Both user services are enabled and active.
+- Both user services are enabled and active. After the 2026-08-24 reboot they
+  started through user lingering; Nginx alone failed due to address assignment
+  ordering and was repaired with the bounded pre-start wait. A second physical
+  reboot was not performed during repair.
 - The model ports are loopback-only.
 - The ttyd backend returned HTTP 200 and is loopback-only. The authenticated
   HTTPS endpoint returned 401 without credentials from both the Spark and a LAN

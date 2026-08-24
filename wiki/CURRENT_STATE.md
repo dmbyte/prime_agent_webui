@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-24
-Wiki version: `v0041`
+Wiki version: `v0042`
 
 ## Project summary
 
@@ -20,7 +20,10 @@ portfolio evaluation, paper-trading research, and supporting code.
 - Browser interface: ttyd 1.7.4 backend on `127.0.0.1:7681`, fronted by Nginx
   1.24 on `127.0.0.1:8443` and `172.16.253.231:8443` with TLS and PAM.
   Nginx allows loopback, RFC1918, and `100.64.0.0/10` VPN sources and denies all
-  other source ranges. The backend remains private to the Spark.
+  other source ranges. The backend remains private to the Spark. An Nginx
+  systemd pre-start check waits up to 120 seconds for the explicit private LAN
+  address before validating the configuration, avoiding the boot-time bind race
+  observed on 2026-08-24 while failing closed if the address never appears.
 - With explicit user approval, `www-data` is a supplementary member of `shadow`
   (GID 42), allowing the Nginx PAM module to retrieve authentication data.
   Nginx was restarted and all inspected workers inherited groups `33 42`.
