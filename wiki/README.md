@@ -27,8 +27,8 @@ verified current state and enough history to understand or reverse changes.
 
 ## Status
 
-- Current wiki version: `v0028`
-- Last verified: 2026-08-23
+- Current wiki version: `v0029`
+- Last verified: 2026-08-24
 - Project phase: conversation-first monitored Prime dashboard backed up to private GitHub
 
 ## Truth and precedence

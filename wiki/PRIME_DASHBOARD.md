@@ -1,6 +1,6 @@
 # Prime dashboard
 
-Last verified: 2026-08-23
+Last verified: 2026-08-24
 
 ## User experience
 
@@ -19,6 +19,11 @@ contains the live Prime terminal. The sidebar provides:
   Configured models remain visible with zero usage. Local inference is displayed
   as $0 API spend. GPT-5.4 is configured but cannot accrue usage until API billing
   credits are available.
+
+The model rows are not maintained manually. The dashboard invokes Prime's own
+authenticated `model list`, caches successful discovery for 60 seconds, unions it
+with custom/planned and recorded models, and refreshes the Usage screen every 30
+seconds. Failed discovery preserves the last successful catalog.
 
 The compact monitor above the tabs refreshes every two seconds. Its top row shows
 CPU, GPU, memory utilization, and power; its bottom row contains CPU, GPU, and

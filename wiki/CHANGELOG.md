@@ -3,6 +3,18 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-24 — v0029 — Automatically discover Usage models
+
+- Replaced manual Usage catalog maintenance with Prime's authenticated live model
+  discovery, cached for 60 seconds and combined with configured/recorded models.
+- After ChatGPT `/login`, discovered 13 `openai-codex` models and 16 total models,
+  including GPT-5.6 Sol, direct OpenAI GPT-5.4, Nemotron, and Qwen.
+- Fixed Prime emitting its model table on stderr by parsing both captured streams.
+- Validation: API reported all four provider families; the live browser rendered
+  representative models from each; both Spark model gates remain healthy.
+- Rollback: restore v0028 dashboard API.
+- Snapshot: [v0029](versions/v0029.md)
+
 ## 2026-08-23 — v0028 — Configure OpenAI GPT-5.4 route
 
 - Loaded the user-supplied rotated key into `prime-web.service` through a mode-0600

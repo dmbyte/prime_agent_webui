@@ -1,7 +1,7 @@
 # Current State
 
-Last verified: 2026-08-23  
-Wiki version: `v0028`
+Last verified: 2026-08-24
+Wiki version: `v0029`
 
 ## Project summary
 
@@ -118,6 +118,10 @@ portfolio evaluation, paper-trading research, and supporting code.
   Nemotron, Qwen, and OpenAI GPT-5.4 always have rows. Qwen currently shows zero
   usage. GPT-5.4 is configured and selectable under Parameters but will remain at
   zero until OpenAI billing credits are added and a request succeeds.
+- The Usage catalog automatically runs Prime's authenticated model discovery and
+  refreshes it at most once per minute; the screen itself refreshes every 30
+  seconds. After ChatGPT `/login`, it discovered 13 `openai-codex` models plus
+  direct OpenAI and the two Spark models (16 total), including GPT-5.6 Sol.
 - The Conversations view lists the 40 most recently modified Prime session files.
   Each row shows a sanitized, 96-character maximum topic derived from the first
   user message, then the timestamp of the latest chat, followed by model and opaque

@@ -23,3 +23,4 @@ only historical evidence: when a decision changes, mark the old record
 - [ADR-0016: Combine model token and spend reporting](0016-combined-usage.md)
 - [ADR-0017: Show intended models with operational status](0017-zero-usage-models.md)
 - [ADR-0018: Load OpenAI key from a service environment file](0018-openai-env-key.md)
+- [ADR-0019: Discover authenticated models automatically](0019-automatic-model-discovery.md)

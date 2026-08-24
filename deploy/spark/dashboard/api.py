@@ -32,6 +32,10 @@ MODELS = {
 THINKING = {"off", "minimal", "low", "medium", "high", "xhigh", "max"}
 CPU_LOCK = threading.Lock()
 CPU_SAMPLE = None
+MODEL_LOCK = threading.Lock()
+MODEL_CACHE = {"at": 0, "rows": []}
+PRIME_BIN = HOME / ".local/share/prime-agent-node/current/bin"
+PRIME_AGENT = PRIME_BIN / "prime-agent"
 
 
 def read_json(path, default):
@@ -84,11 +88,39 @@ def model_catalog():
             model_id = model.get("id") or model.get("model") or model.get("name")
             if model_id:
                 catalog.append({"provider": provider, "model": str(model_id), "configured": True})
+    catalog.extend(discovered_prime_models())
     existing = {f"{row['provider']}/{row['model']}" for row in catalog}
     for row in PLANNED_MODELS:
         if f"{row['provider']}/{row['model']}" not in existing:
             catalog.append({**row, "configured": openai_env_configured()})
-    return sorted(catalog, key=lambda row: (row["provider"], row["model"]))
+    unique = {f"{row['provider']}/{row['model']}": row for row in catalog}
+    return sorted(unique.values(), key=lambda row: (row["provider"], row["model"]))
+
+
+def discovered_prime_models():
+    now = time.monotonic()
+    with MODEL_LOCK:
+        if now - MODEL_CACHE["at"] < 60:
+            return list(MODEL_CACHE["rows"])
+        rows = []
+        try:
+            env = os.environ.copy()
+            env["PATH"] = f"{PRIME_BIN}:{env.get('PATH', '')}"
+            result = subprocess.run(
+                [str(PRIME_AGENT), "model", "list"], capture_output=True, text=True,
+                timeout=12, check=True, env=env,
+            )
+            for line in (result.stdout + "\n" + result.stderr).splitlines():
+                fields = line.split()
+                if len(fields) < 2 or fields[0] in {"provider", "Warning:"}:
+                    continue
+                provider, model = fields[:2]
+                if re.fullmatch(r"[A-Za-z0-9_.-]{2,64}", provider) and re.fullmatch(r"[A-Za-z0-9_.:-]{2,128}", model):
+                    rows.append({"provider": provider, "model": model, "configured": True})
+        except (OSError, subprocess.SubprocessError):
+            rows = list(MODEL_CACHE["rows"])
+        MODEL_CACHE.update({"at": now, "rows": rows})
+        return list(rows)
 
 
 def openai_env_configured():
