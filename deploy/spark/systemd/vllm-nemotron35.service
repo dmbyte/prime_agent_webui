@@ -1,0 +1,15 @@
+[Unit]
+Description=vLLM Nemotron 3.5 Lightning with DSpark
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=%h/vllm-nemotron35/start.sh
+ExecStop=/usr/bin/docker stop vllm-nemotron35
+TimeoutStartSec=0
+TimeoutStopSec=120
+
+[Install]
+WantedBy=default.target

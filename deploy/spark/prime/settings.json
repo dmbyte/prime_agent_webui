@@ -1,0 +1,18 @@
+{
+  "defaultProvider": "spark-nemotron",
+  "defaultModel": "nemotron-3.5-lightning",
+  "defaultThinkingLevel": "low",
+  "enabledModels": [
+    "spark-nemotron/nemotron-3.5-lightning",
+    "spark-qwen/qwen3.6-35b-a3b"
+  ],
+  "compaction": {
+    "enabled": true,
+    "reserveTokens": 8192,
+    "keepRecentTokens": 12000
+  },
+  "telemetry": {
+    "enabled": false,
+    "noticeShown": true
+  }
+}

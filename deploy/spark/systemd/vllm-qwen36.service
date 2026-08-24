@@ -1,0 +1,15 @@
+[Unit]
+Description=vLLM Qwen 3.6 35B A3B NVFP4
+After=docker.service network-online.target vllm-nemotron35.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=%h/vllm-qwen36/start.sh
+ExecStop=/usr/bin/docker stop vllm-qwen36
+TimeoutStartSec=0
+TimeoutStopSec=120
+
+[Install]
+WantedBy=default.target

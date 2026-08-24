@@ -1,0 +1,16 @@
+[Unit]
+Description=Prime dashboard settings and usage API
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/prime-dgx-dashboard/api.py
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=%h/.prime/agent
+
+[Install]
+WantedBy=default.target

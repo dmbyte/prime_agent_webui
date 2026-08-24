@@ -1,0 +1,12 @@
+[Unit]
+Description=Private browser terminal for DGX Spark Prime Agent
+After=network.target vllm-nemotron35.service vllm-qwen36.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/ttyd --interface 127.0.0.1 --port 7681 --writable --max-clients 2 --base-path /terminal --cwd %h/prime-dgx-agent --client-option titleFixed="DGX Spark Prime Agent" %h/.local/bin/prime-dgx
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

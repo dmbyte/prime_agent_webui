@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="${HOME}/.local/share/prime-agent-node/current/bin:${PATH}"
+exec prime-agent --cwd "${HOME}/prime-dgx-agent" "$@"
