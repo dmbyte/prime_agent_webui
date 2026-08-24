@@ -3,6 +3,21 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-24 — v0037 — Separate explicit attachment from UI behavior
+
+- Corrected v0036's over-broad policy: session attachment remains available, but
+  the dashboard UI contains no attach command, URL, control, or iframe.
+- Restored launcher attachment behind an exact `--attach ID --explicit` form with
+  strict ID syntax and existing-session validation. Stale two-argument attach URLs
+  fail with exit 64 and cannot fall through to start Prime.
+- Removed the reconnecting stale client PID 3149324 after installing the guard;
+  only the main terminal client PID 3113237 persisted.
+- Validation: deployed JavaScript contains no attach behavior; stale-form rejection
+  and one-client persistence passed; both services and full Spark validation passed.
+- Rollback: restore v0036 launcher only to disable explicit browser attachment;
+  retain the v0037 event-only dashboard JavaScript.
+- Snapshot: [v0037](versions/v0037.md)
+
 ## 2026-08-24 — v0036 — Retire browser session attachment
 
 - Removed the extra ttyd attachment client identified as PID 3111439 while

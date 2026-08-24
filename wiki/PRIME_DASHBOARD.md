@@ -55,11 +55,11 @@ message count, timestamps, tool names, and token progress. The API deliberately
 does not return full prompts, assistant text, thinking text, tool inputs/results,
 or status summaries. Credential-like topics retain the existing sensitive label.
 
-The overlay is event-feed-only. A previously offered live console was retired after
-its second attached TUI interfered with the running job. Compatibility CSS hides
-the old control if a browser still has earlier JavaScript cached, and the launcher
-rejects all `--attach` requests without starting Prime. The primary terminal is
-the only browser TUI client.
+The overlay is event-feed-only. Its deployed JavaScript has no attach command,
+attach URL, live-console control, or iframe. A previously offered automatic live
+console was retired after its second TUI interfered with a job. Session attachment
+itself remains available as an explicit launcher operation, outside normal UI
+behavior.
 
 The overlay deliberately has no stop control. While work is active, a control bar
 above the main conversation terminal presents **Stop task**. It follows a selected
@@ -93,8 +93,11 @@ ttyd URL arguments terminate at `prime-web-launch`, which forwards only the exac
 two-argument resume form when the ID matches the strict character/length rule and
 an existing session file. Every other argument combination is discarded and the
 fixed new-conversation launcher runs. New conversation reloads that fixed endpoint.
-The launcher explicitly rejects every browser `--attach` request. No attach target
-is forwarded and no fallback Prime session is started for that request.
+The launcher accepts only `--attach ID --explicit`, where `ID` passes the strict
+syntax rule and names an existing session. It forwards that as Prime's native
+`attach ID`. A two-argument request from stale cached dashboard code fails closed
+with exit 64 and never falls through to a new Prime conversation. The current UI
+never constructs either form.
 
 ## Architecture and security
 

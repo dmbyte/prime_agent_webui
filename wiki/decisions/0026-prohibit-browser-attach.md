@@ -1,7 +1,7 @@
 # ADR-0026: Prohibit browser session attachment
 
 Date: 2026-08-24
-Status: accepted
+Status: superseded by [ADR-0027](0027-explicit-not-automatic-attach.md)
 Supersedes: [ADR-0022](0022-read-only-live-console.md)
 
 ## Context
