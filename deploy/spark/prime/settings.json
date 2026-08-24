@@ -4,7 +4,8 @@
   "defaultThinkingLevel": "low",
   "enabledModels": [
     "spark-nemotron/nemotron-3.5-lightning",
-    "spark-qwen/qwen3.6-35b-a3b"
+    "spark-qwen/qwen3.6-35b-a3b",
+    "openai/gpt-5.4"
   ],
   "compaction": {
     "enabled": true,

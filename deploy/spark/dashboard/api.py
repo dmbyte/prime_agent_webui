@@ -16,7 +16,8 @@ HOME = Path.home()
 SETTINGS = HOME / ".prime/agent/settings.json"
 SESSIONS = HOME / ".prime/agent/sessions"
 MODEL_CONFIG = HOME / ".prime/agent/models.json"
-PLANNED_MODELS = [{"provider": "openai", "model": "gpt-5.6-sol", "configured": False}]
+OPENAI_ENV = HOME / ".config/prime-agent/openai.env"
+PLANNED_MODELS = [{"provider": "openai", "model": "gpt-5.4"}]
 ALLOWED_ORIGINS = {
     "https://172.16.253.231:8443",
     "https://127.0.0.1:8443",
@@ -26,6 +27,7 @@ ALLOWED_ORIGINS = {
 MODELS = {
     "spark-nemotron": {"nemotron-3.5-lightning"},
     "spark-qwen": {"qwen3.6-35b-a3b"},
+    "openai": {"gpt-5.4"},
 }
 THINKING = {"off", "minimal", "low", "medium", "high", "xhigh", "max"}
 CPU_LOCK = threading.Lock()
@@ -83,8 +85,17 @@ def model_catalog():
             if model_id:
                 catalog.append({"provider": provider, "model": str(model_id), "configured": True})
     existing = {f"{row['provider']}/{row['model']}" for row in catalog}
-    catalog.extend(row for row in PLANNED_MODELS if f"{row['provider']}/{row['model']}" not in existing)
+    for row in PLANNED_MODELS:
+        if f"{row['provider']}/{row['model']}" not in existing:
+            catalog.append({**row, "configured": openai_env_configured()})
     return sorted(catalog, key=lambda row: (row["provider"], row["model"]))
+
+
+def openai_env_configured():
+    try:
+        return any(line.startswith("OPENAI_API_KEY=") and len(line.partition("=")[2].strip()) >= 20 for line in OPENAI_ENV.read_text().splitlines())
+    except OSError:
+        return False
 
 
 def save_settings(payload):

@@ -4,6 +4,7 @@ After=network.target vllm-nemotron35.service vllm-qwen36.service
 
 [Service]
 Type=simple
+EnvironmentFile=%h/.config/prime-agent/openai.env
 ExecStart=/usr/bin/ttyd --interface 127.0.0.1 --port 7681 --writable --url-arg --max-clients 2 --base-path /terminal --cwd %h/prime-dgx-agent --client-option titleFixed="DGX Spark Prime Agent" %h/.local/bin/prime-web-launch
 Restart=on-failure
 RestartSec=3

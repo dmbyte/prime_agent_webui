@@ -3,6 +3,20 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-23 — v0028 — Configure OpenAI GPT-5.4 route
+
+- Loaded the user-supplied rotated key into `prime-web.service` through a mode-0600
+  environment file outside the repository and enabled `openai/gpt-5.4` in Prime.
+- Added GPT-5.4 to Parameters and corrected the Usage catalog/status.
+- Validation: service process received the credential variable name, Prime settings
+  enabled GPT-5.4, API/UI marked it configured, and OpenAI accepted authentication
+  far enough to return `no credits remaining`. Both Spark model gates still pass.
+- Blocker: add OpenAI API billing credits before the route can generate responses.
+- Rollback: remove the service EnvironmentFile line, remove GPT-5.4 from enabled
+  models, restore v0027 dashboard files, and restart services. Preserve/delete the
+  credential file only according to the user's credential-retention decision.
+- Snapshot: [v0028](versions/v0028.md)
+
 ## 2026-08-23 — v0027 — Correct OpenAI API model mapping
 
 - Verified from installed Prime 0.8.0 code that API-key auth uses provider

@@ -11,14 +11,14 @@ contains the live Prime terminal. The sidebar provides:
   topic first, latest-chat date/time second, then model and opaque ID, plus a New conversation
   button. “Conversation” is the user-facing term; “session” remains the storage term.
 
-- **Parameters:** default Nemotron or Qwen local model, thinking level,
+- **Parameters:** default Nemotron, Qwen, or OpenAI GPT-5.4 model, thinking level,
   compaction reserve, and recent-context retention. Changes apply to new terminal
   sessions and do not silently replace an active conversation.
 - **Usage:** one row per provider/model with tokens and recorded spend for Today
   and Last 30 days. Today begins at local midnight on the Spark; 30 days is rolling.
-  Configured/intended models remain visible with zero usage; a planned provider
-  that is not operational is explicitly labeled `not configured`. Local inference
-  is displayed as $0 API spend.
+  Configured models remain visible with zero usage. Local inference is displayed
+  as $0 API spend. GPT-5.4 is configured but cannot accrue usage until API billing
+  credits are available.
 
 The compact monitor above the tabs refreshes every two seconds. Its top row shows
 CPU, GPU, memory utilization, and power; its bottom row contains CPU, GPU, and
@@ -58,6 +58,8 @@ fixed new-conversation launcher runs. New conversation reloads that fixed endpoi
 - API service: `prime-dashboard-api.service`, `127.0.0.1:8765`
 - Terminal: ttyd at `127.0.0.1:7681`, base path `/terminal`
 - Boundary: Nginx/PAM/TLS at the private-network address
+- OpenAI credential: `~/.config/prime-agent/openai.env`, mode 0600, loaded only by
+  `prime-web.service`; never stored in deployment source, dashboard responses, or wiki
 
 The API runs as `dbyte`, has `NoNewPrivileges`, a private temporary directory,
 read-only system protection, and write access under `~/.prime/agent`. Settings

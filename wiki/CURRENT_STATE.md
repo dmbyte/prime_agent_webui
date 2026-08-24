@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-23  
-Wiki version: `v0027`
+Wiki version: `v0028`
 
 ## Project summary
 
@@ -58,9 +58,11 @@ portfolio evaluation, paper-trading research, and supporting code.
 - Multimodal/deep local tier: `nvidia/Qwen3.6-35B-A3B-NVFP4`, served as
   `qwen3.6-35b-a3b` on loopback port 30001. It uses Marlin, FP8 KV, 65,536
   context, an 8 GiB KV cache, and at most two sequences.
-- Frontier tier policy: GPT-5.6 Sol through the OpenAI Responses API for selected
-  difficult work. This route is not live because no OpenAI API credential has
-  been supplied; no credential is stored in the repository or wiki.
+- Frontier API tier: OpenAI GPT-5.4 through the Responses API. A rotated key is
+  loaded from a rootless user-service environment file outside the repository;
+  the dashboard and wiki never receive its value. Authentication/configuration
+  succeeded, but the first request was refused because the API account has no
+  credits remaining. GPT-5.6 Sol remains a separate `openai-codex`/ChatGPT route.
 - Hermes Agent is optional as an outer messaging/personal-assistant gateway when
   its channels and integrations are valuable; it is not the source of truth or
   autonomous decision authority.
@@ -113,10 +115,9 @@ portfolio evaluation, paper-trading research, and supporting code.
   columns for the Spark's current local calendar day and a rolling 30-day window.
   Local Spark providers correctly report $0 API spend.
 - Usage unions the intended/configured catalog with recorded activity, so
-  Nemotron, Qwen, and the planned OpenAI GPT-5.6 Sol route always have rows. Qwen
-  currently shows zero usage. OpenAI shows zero plus `not configured` because
-  Prime's `auth.json` is empty, its model catalog contains only the two Spark
-  providers, and no OpenAI-style key was found outside conversation history.
+  Nemotron, Qwen, and OpenAI GPT-5.4 always have rows. Qwen currently shows zero
+  usage. GPT-5.4 is configured and selectable under Parameters but will remain at
+  zero until OpenAI billing credits are added and a request succeeds.
 - The Conversations view lists the 40 most recently modified Prime session files.
   Each row shows a sanitized, 96-character maximum topic derived from the first
   user message, then the timestamp of the latest chat, followed by model and opaque
@@ -130,15 +131,15 @@ portfolio evaluation, paper-trading research, and supporting code.
   during validation. It is not reproduced in the repository or wiki and is not
   exposed by the dashboard. The credential must be revoked/rotated; removal or
   redaction of the sensitive session remains pending explicit user direction.
-- Prime claimed it configured the supplied OpenAI key, but a secret-safe re-audit
-  found no persisted OpenAI provider or credential. Do not recover or reuse the
-  key from conversation history; rotate it before a future controlled setup.
+- The earlier conversation-history key remains sensitive and should still be
+  revoked if that specific key was not the rotated credential now in use.
 - Installed Prime source establishes that OpenAI API-key authentication uses
   provider `openai`, environment variable `OPENAI_API_KEY`, and default model
   `gpt-5.4`. Its `gpt-5.6-sol` model belongs to provider `openai-codex` through
-  the ChatGPT backend, not the OpenAI API-key route. The dashboard's planned
-  `openai/gpt-5.6-sol` placeholder is therefore semantically incorrect pending a
-  separate UI correction.
+  the ChatGPT backend, not the OpenAI API-key route. The dashboard now correctly
+  represents `openai/gpt-5.4`.
+- OpenAI authentication is configured, but API requests are blocked by an empty
+  account credit balance. Add credits in the OpenAI Platform billing settings.
 
 - No throughput/latency benchmark or long concurrent soak has run.
 - Spend is only as complete as Prime session records and provider/model pricing
