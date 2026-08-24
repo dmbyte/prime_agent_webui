@@ -3,6 +3,16 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-23 — v0020 — Publish private GitHub backup
+
+- Initialized Git on `main`, committed the complete reviewable source/wiki, and
+  created private repository `dmbyte/dgx-spark`.
+- Pushed `main` and configured it to track `origin/main`.
+- Validation: GitHub accepted the push and returned the private repository URL.
+- Rollback: delete the GitHub repository only with explicit user confirmation;
+  local history remains independently recoverable.
+- Snapshot: [v0020](versions/v0020.md)
+
 ## 2026-08-23 — v0019 — Prepare private GitHub repository
 
 - Added repository exclusions for caches, environment files, logs, certificates,
