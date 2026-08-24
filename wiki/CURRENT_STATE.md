@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-23  
-Wiki version: `v0026`
+Wiki version: `v0027`
 
 ## Project summary
 
@@ -133,6 +133,12 @@ portfolio evaluation, paper-trading research, and supporting code.
 - Prime claimed it configured the supplied OpenAI key, but a secret-safe re-audit
   found no persisted OpenAI provider or credential. Do not recover or reuse the
   key from conversation history; rotate it before a future controlled setup.
+- Installed Prime source establishes that OpenAI API-key authentication uses
+  provider `openai`, environment variable `OPENAI_API_KEY`, and default model
+  `gpt-5.4`. Its `gpt-5.6-sol` model belongs to provider `openai-codex` through
+  the ChatGPT backend, not the OpenAI API-key route. The dashboard's planned
+  `openai/gpt-5.6-sol` placeholder is therefore semantically incorrect pending a
+  separate UI correction.
 
 - No throughput/latency benchmark or long concurrent soak has run.
 - Spend is only as complete as Prime session records and provider/model pricing

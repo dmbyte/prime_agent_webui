@@ -3,6 +3,15 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-23 — v0027 — Correct OpenAI API model mapping
+
+- Verified from installed Prime 0.8.0 code that API-key auth uses provider
+  `openai`, `OPENAI_API_KEY`, and default model `gpt-5.4`.
+- Verified `gpt-5.6-sol` belongs to Prime's separate `openai-codex`/ChatGPT route,
+  so the current dashboard placeholder must not be treated as API-key readiness.
+- No credential or runtime configuration changed.
+- Snapshot: [v0027](versions/v0027.md)
+
 ## 2026-08-23 — v0026 — Show zero-usage models and re-audit OpenAI
 
 - Changed Usage to union configured/intended models with recorded activity, so

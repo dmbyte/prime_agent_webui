@@ -6,6 +6,7 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0027](v0027.md) | 2026-08-23 | Corrected OpenAI API-key model/provider mapping |
 | [v0026](v0026.md) | 2026-08-23 | Added zero-usage rows and corrected OpenAI configuration status |
 | [v0025](v0025.md) | 2026-08-23 | Verified why Qwen and OpenAI have no Usage rows |
 | [v0024](v0024.md) | 2026-08-23 | Grouped power with utilization and temperatures together |
