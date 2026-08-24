@@ -3,6 +3,17 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-24 — v0039 — Hide attach artifacts from Conversations
+
+- Identified eight saved sessions whose sanitized first-user topic was exactly
+  `attach`, created by earlier attachment behavior.
+- Filtered those artifacts at the API layer before applying the 40-row limit, so
+  genuine older conversations replace them. No session history was deleted.
+- Validation: the deployed API returned 40 conversations and zero exact `attach`
+  topics; dashboard service and full Spark validation passed.
+- Rollback: restore the v0038 dashboard API; retained JSONL artifacts will reappear.
+- Snapshot: [v0039](versions/v0039.md)
+
 ## 2026-08-24 — v0038 — Clarify minimized overlay control
 
 - Changed the overlay header control from a static minus to a state-aware symbol:

@@ -32,3 +32,4 @@ only historical evidence: when a decision changes, mark the old record
 - [ADR-0025: Locate task interruption in the main conversation](0025-main-conversation-stop.md)
 - [ADR-0026: Prohibit browser session attachment](0026-prohibit-browser-attach.md)
 - [ADR-0027: Preserve explicit attachment but prohibit UI attachment](0027-explicit-not-automatic-attach.md)
+- [ADR-0028: Hide attachment-command session artifacts](0028-hide-attach-artifacts.md)

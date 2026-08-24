@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-24
-Wiki version: `v0038`
+Wiki version: `v0039`
 
 ## Project summary
 
@@ -155,6 +155,9 @@ portfolio evaluation, paper-trading research, and supporting code.
   ID. It does not return full prompts, summaries, or assistant messages. Clicking
   a row resumes that Prime conversation in the embedded terminal; New conversation
   starts the fixed default launcher.
+- Sessions whose sanitized first-user topic is exactly `attach` are treated as UI
+  command artifacts and excluded before the 40-row limit. Their JSONL files are
+  retained; genuine older conversations fill the vacated list positions.
 
 ## Known gaps
 

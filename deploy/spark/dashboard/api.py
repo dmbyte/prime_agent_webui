@@ -248,7 +248,7 @@ def usage_summary():
 def session_catalog():
     sessions = []
     try:
-        paths = sorted(SESSIONS.glob("*.jsonl"), key=lambda path: path.stat().st_mtime, reverse=True)[:40]
+        paths = sorted(SESSIONS.glob("*.jsonl"), key=lambda path: path.stat().st_mtime, reverse=True)
     except OSError:
         paths = []
     for path in paths:
@@ -276,6 +276,8 @@ def session_catalog():
                             parts = message.get("content") or []
                             text = " ".join(str(part.get("text", "")) for part in parts if isinstance(part, dict) and part.get("type") == "text")
                             topic = safe_topic(text)
+            if (topic or "").strip().casefold() == "attach":
+                continue
             sessions.append({
                 "id": session_id,
                 "topic": topic or "Untitled conversation",
@@ -285,6 +287,8 @@ def session_catalog():
                 "model": model,
                 "sizeBytes": stat.st_size,
             })
+            if len(sessions) >= 40:
+                break
         except (OSError, json.JSONDecodeError, TypeError, ValueError):
             continue
     return sessions

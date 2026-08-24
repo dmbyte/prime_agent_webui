@@ -91,6 +91,9 @@ whitespace, caps topics at 96 characters, and replaces credential-like input wit
 `Sensitive conversation`. Topics are rendered using DOM `textContent`, never HTML.
 The API does not send full prompts, summaries, or assistant messages to the browser.
 Clicking a conversation reloads the terminal with `--resume` and its opaque ID.
+An exact sanitized topic of `attach` is recognized as an attachment-command
+artifact and omitted before the 40-conversation limit is applied. The underlying
+session file is retained, and the next genuine conversation fills that row.
 ttyd URL arguments terminate at `prime-web-launch`, which forwards only the exact
 two-argument resume form when the ID matches the strict character/length rule and
 an existing session file. Every other argument combination is discarded and the
