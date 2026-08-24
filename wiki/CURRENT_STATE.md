@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-23  
-Wiki version: `v0025`
+Wiki version: `v0026`
 
 ## Project summary
 
@@ -112,11 +112,11 @@ portfolio evaluation, paper-trading research, and supporting code.
 - Usage combines tokens and recorded spend by provider/model in one table, with
   columns for the Spark's current local calendar day and a rolling 30-day window.
   Local Spark providers correctly report $0 API spend.
-- Usage currently contains 214 recorded calls, all for
-  `spark-nemotron/nemotron-3.5-lightning` (6,098,750 tokens, $0). Qwen is enabled
-  and its service is active but has no recorded assistant calls, so no Qwen row
-  is rendered. OpenAI is not configured as a Prime provider and no OpenAI API
-  credential is present in the inspected service environment, so it also has no row.
+- Usage unions the intended/configured catalog with recorded activity, so
+  Nemotron, Qwen, and the planned OpenAI GPT-5.6 Sol route always have rows. Qwen
+  currently shows zero usage. OpenAI shows zero plus `not configured` because
+  Prime's `auth.json` is empty, its model catalog contains only the two Spark
+  providers, and no OpenAI-style key was found outside conversation history.
 - The Conversations view lists the 40 most recently modified Prime session files.
   Each row shows a sanitized, 96-character maximum topic derived from the first
   user message, then the timestamp of the latest chat, followed by model and opaque
@@ -130,6 +130,9 @@ portfolio evaluation, paper-trading research, and supporting code.
   during validation. It is not reproduced in the repository or wiki and is not
   exposed by the dashboard. The credential must be revoked/rotated; removal or
   redaction of the sensitive session remains pending explicit user direction.
+- Prime claimed it configured the supplied OpenAI key, but a secret-safe re-audit
+  found no persisted OpenAI provider or credential. Do not recover or reuse the
+  key from conversation history; rotate it before a future controlled setup.
 
 - No throughput/latency benchmark or long concurrent soak has run.
 - Spend is only as complete as Prime session records and provider/model pricing

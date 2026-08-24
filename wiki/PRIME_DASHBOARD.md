@@ -16,7 +16,9 @@ contains the live Prime terminal. The sidebar provides:
   sessions and do not silently replace an active conversation.
 - **Usage:** one row per provider/model with tokens and recorded spend for Today
   and Last 30 days. Today begins at local midnight on the Spark; 30 days is rolling.
-  Local inference is displayed as $0 API spend.
+  Configured/intended models remain visible with zero usage; a planned provider
+  that is not operational is explicitly labeled `not configured`. Local inference
+  is displayed as $0 API spend.
 
 The compact monitor above the tabs refreshes every two seconds. Its top row shows
 CPU, GPU, memory utilization, and power; its bottom row contains CPU, GPU, and

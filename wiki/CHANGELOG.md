@@ -3,6 +3,18 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-23 — v0026 — Show zero-usage models and re-audit OpenAI
+
+- Changed Usage to union configured/intended models with recorded activity, so
+  Nemotron, Qwen, and planned OpenAI GPT-5.6 Sol rows are always visible.
+- OpenAI is labeled `not configured`; Qwen is configured and shows zero usage.
+- Secret-safe audit found empty Prime auth storage, no OpenAI provider, and no
+  OpenAI-style key outside conversation history despite Prime's earlier claim.
+- Validation: all three rows rendered; four zero-token cells appeared for the two
+  unused models; both local models and the full Spark gate passed.
+- Rollback: restore v0025 dashboard API and JavaScript.
+- Snapshot: [v0026](versions/v0026.md)
+
 ## 2026-08-23 — v0025 — Explain missing Usage models
 
 - Verified that Usage is activity-driven rather than a configured-model catalog.

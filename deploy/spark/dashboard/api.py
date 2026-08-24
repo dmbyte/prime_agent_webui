@@ -15,6 +15,8 @@ from pathlib import Path
 HOME = Path.home()
 SETTINGS = HOME / ".prime/agent/settings.json"
 SESSIONS = HOME / ".prime/agent/sessions"
+MODEL_CONFIG = HOME / ".prime/agent/models.json"
+PLANNED_MODELS = [{"provider": "openai", "model": "gpt-5.6-sol", "configured": False}]
 ALLOWED_ORIGINS = {
     "https://172.16.253.231:8443",
     "https://127.0.0.1:8443",
@@ -65,6 +67,24 @@ def settings_view():
         "reserveTokens": compaction.get("reserveTokens", 8192),
         "keepRecentTokens": compaction.get("keepRecentTokens", 12000),
     }
+
+
+def model_catalog():
+    catalog = []
+    data = read_json(MODEL_CONFIG, {})
+    for provider, definition in (data.get("providers") or {}).items():
+        models = definition.get("models") or []
+        if isinstance(models, dict):
+            models = [{"id": model_id} for model_id in models]
+        for model in models:
+            if not isinstance(model, dict):
+                continue
+            model_id = model.get("id") or model.get("model") or model.get("name")
+            if model_id:
+                catalog.append({"provider": provider, "model": str(model_id), "configured": True})
+    existing = {f"{row['provider']}/{row['model']}" for row in catalog}
+    catalog.extend(row for row in PLANNED_MODELS if f"{row['provider']}/{row['model']}" not in existing)
+    return sorted(catalog, key=lambda row: (row["provider"], row["model"]))
 
 
 def save_settings(payload):
@@ -298,7 +318,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/api/state":
-            self.send_json(200, {"settings": settings_view(), "usage": usage_summary(), "sessions": session_catalog(), "telemetry": telemetry()})
+            self.send_json(200, {"settings": settings_view(), "models": model_catalog(), "usage": usage_summary(), "sessions": session_catalog(), "telemetry": telemetry()})
         elif self.path == "/api/telemetry":
             self.send_json(200, {"telemetry": telemetry()})
         elif self.path == "/api/health":

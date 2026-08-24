@@ -21,3 +21,4 @@ only historical evidence: when a decision changes, mark the old record
 - [ADR-0014: Display sanitized conversation topics](0014-conversation-topics.md)
 - [ADR-0015: Constrain browser conversation resumption](0015-constrained-resume.md)
 - [ADR-0016: Combine model token and spend reporting](0016-combined-usage.md)
+- [ADR-0017: Show intended models with operational status](0017-zero-usage-models.md)
