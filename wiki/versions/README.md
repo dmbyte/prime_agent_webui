@@ -6,6 +6,7 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0034](v0034.md) | 2026-08-24 | Moved activity to the top and added searchable provider switches |
 | [v0033](v0033.md) | 2026-08-24 | Added a guarded single-task stop control |
 | [v0032](v0032.md) | 2026-08-24 | Added an optional read-only attached console for active tasks |
 | [v0031](v0031.md) | 2026-08-24 | Added tabbed, resizable background activity overlay |

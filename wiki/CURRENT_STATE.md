@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-24
-Wiki version: `v0033`
+Wiki version: `v0034`
 
 ## Project summary
 
@@ -108,9 +108,12 @@ portfolio evaluation, paper-trading research, and supporting code.
 - Run `~/prime-dgx-agent/validate.sh` before and after runtime changes.
 - Detailed settings, browser access, hashes, tests, and rollback are in
   `wiki/PRIME_DEPLOYMENT.md`.
-- Dashboard settings control the default local model, thinking level, compaction
-  reserve, and recent-context retention. Saves are allowlisted, origin checked,
-  atomic, and apply to new terminal sessions.
+- Dashboard settings control the default model, thinking level, compaction reserve,
+  recent-context retention, and enabled providers. A searchable switch list shows
+  all configured/discovered providers and writes Prime's native `enabledModels`
+  setting. The default-model list follows enabled providers; the current default
+  cannot be disabled until another enabled default is selected. Saves are
+  allowlisted, origin checked, atomic, and apply to new terminal sessions.
 - Usage combines tokens and recorded spend by provider/model in one table, with
   columns for the Spark's current local calendar day and a rolling 30-day window.
   Local Spark providers correctly report $0 API spend.
@@ -127,7 +130,7 @@ portfolio evaluation, paper-trading research, and supporting code.
   days figures sum all child models; expanding reveals per-model rows. Providers
   with one configured model remain direct rows.
 - A header activity icon shows the count of working background Prime tasks. It
-  opens a floating, draggable, natively resizable, minimizable overlay. Parallel
+  opens a top-right floating, draggable, natively resizable, minimizable overlay. Parallel
   tasks become tabs; each tab shows model/status/message count and a privacy-safe
   event timeline (task received, tool running/completed, response update, token
   count) without full prompts, model output, tool output, or secrets.

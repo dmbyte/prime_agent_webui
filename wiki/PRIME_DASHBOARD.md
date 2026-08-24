@@ -11,9 +11,13 @@ contains the live Prime terminal. The sidebar provides:
   topic first, latest-chat date/time second, then model and opaque ID, plus a New conversation
   button. “Conversation” is the user-facing term; “session” remains the storage term.
 
-- **Parameters:** default Nemotron, Qwen, or OpenAI GPT-5.4 model, thinking level,
-  compaction reserve, and recent-context retention. Changes apply to new terminal
-  sessions and do not silently replace an active conversation.
+- **Parameters:** default model, thinking level, compaction reserve, recent-context
+  retention, and a searchable list of every configured/discovered provider. Each
+  provider has an enable switch backed by Prime's native `enabledModels`; enabling
+  a provider enables all of its currently discovered models. The default-model
+  menu contains enabled models only, and its provider cannot be disabled until a
+  different enabled default is selected. Changes apply to new terminal sessions
+  and do not silently replace an active conversation.
 - **Usage:** one row per provider/model with tokens and recorded spend for Today
   and Last 30 days. Today begins at local midnight on the Spark; 30 days is rolling.
   Configured models remain visible with zero usage. Local inference is displayed
@@ -43,7 +47,8 @@ sensors render as unavailable. Full usage/session data refreshes every 30 second
 The header activity icon polls every three seconds and shows the number of Prime
 sessions whose lifecycle is live and activity is not idle. Clicking it opens a
 floating overlay that can be dragged, resized from its corner, minimized, and
-reopened. Concurrent tasks appear as tabs.
+reopened. Its default location is the top-right of the browser window (top inset
+on narrow screens). Concurrent tasks appear as tabs.
 
 Each tab reports sanitized topic, activity, provider/model, thinking level,
 message count, timestamps, tool names, and token progress. The API deliberately

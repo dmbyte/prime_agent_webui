@@ -3,6 +3,22 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-24 — v0034 — Move overlay and add provider switches
+
+- Moved the activity overlay's default position from bottom-right to top-right,
+  including a top inset on narrow screens; dragging and resizing remain available.
+- Rebuilt Parameters' model menu from live configured models and added a searchable
+  provider list with enable/disable switches backed by Prime `enabledModels`.
+- Guarded against disabling the selected default provider and against empty,
+  unknown, or unconfigured provider submissions. Enabling a provider activates all
+  models currently discovered for it; changes apply to new tasks after Save.
+- Validation: local allowlist/default-provider tests passed; the live API found four
+  configured providers and preserved the existing three enabled providers through
+  a no-change save; deployed layout checks and full Spark validation passed.
+- Rollback: restore v0033 API/HTML/JavaScript/activity CSS and remove
+  `provider-settings.css`.
+- Snapshot: [v0034](versions/v0034.md)
+
 ## 2026-08-24 — v0033 — Add per-task stop control
 
 - Added a confirmation-gated **Stop task** button to the event and live-console

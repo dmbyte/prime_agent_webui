@@ -68,17 +68,20 @@ def atomic_json(path, value):
 def settings_view():
     data = read_json(SETTINGS, {})
     compaction = data.get("compaction", {})
+    enabled_models = [str(value) for value in data.get("enabledModels", []) if isinstance(value, str)]
     return {
         "provider": data.get("defaultProvider", "spark-nemotron"),
         "model": data.get("defaultModel", "nemotron-3.5-lightning"),
         "thinking": data.get("defaultThinkingLevel", "low"),
         "reserveTokens": compaction.get("reserveTokens", 8192),
         "keepRecentTokens": compaction.get("keepRecentTokens", 12000),
+        "enabledProviders": sorted({value.split("/", 1)[0] for value in enabled_models if "/" in value}),
     }
 
 
 def model_catalog():
     catalog = []
+    enabled_models = set(read_json(SETTINGS, {}).get("enabledModels") or [])
     data = read_json(MODEL_CONFIG, {})
     for provider, definition in (data.get("providers") or {}).items():
         models = definition.get("models") or []
@@ -96,6 +99,8 @@ def model_catalog():
         if f"{row['provider']}/{row['model']}" not in existing:
             catalog.append({**row, "configured": openai_env_configured()})
     unique = {f"{row['provider']}/{row['model']}": row for row in catalog}
+    for key, row in unique.items():
+        row["enabled"] = key in enabled_models
     return sorted(unique.values(), key=lambda row: (row["provider"], row["model"]))
 
 
@@ -138,8 +143,21 @@ def save_settings(payload):
     thinking = str(payload.get("thinking", ""))
     reserve = int(payload.get("reserveTokens", 0))
     recent = int(payload.get("keepRecentTokens", 0))
-    if provider not in MODELS or model not in MODELS[provider]:
+    enabled_providers = payload.get("enabledProviders")
+    catalog = [row for row in model_catalog() if row.get("configured")]
+    available = {(row["provider"], row["model"]) for row in catalog}
+    configured_providers = {row["provider"] for row in catalog}
+    if not isinstance(enabled_providers, list) or not enabled_providers:
+        raise ValueError("At least one provider must be enabled")
+    enabled_providers = {str(value) for value in enabled_providers}
+    if any(not re.fullmatch(r"[A-Za-z0-9_.-]{2,64}", value) for value in enabled_providers):
+        raise ValueError("Invalid provider name")
+    if not enabled_providers <= configured_providers:
+        raise ValueError("Unknown or unconfigured provider")
+    if (provider, model) not in available:
         raise ValueError("Unsupported provider/model pairing")
+    if provider not in enabled_providers:
+        raise ValueError("The default model provider must remain enabled")
     if thinking not in THINKING:
         raise ValueError("Unsupported thinking level")
     if not 2048 <= reserve <= 32768 or not 2048 <= recent <= 32768:
@@ -150,6 +168,10 @@ def save_settings(payload):
     data["defaultProvider"] = provider
     data["defaultModel"] = model
     data["defaultThinkingLevel"] = thinking
+    data["enabledModels"] = sorted(
+        f"{row['provider']}/{row['model']}" for row in catalog
+        if row["provider"] in enabled_providers
+    )
     data.setdefault("compaction", {})["reserveTokens"] = reserve
     data["compaction"]["keepRecentTokens"] = recent
     atomic_json(SETTINGS, data)
