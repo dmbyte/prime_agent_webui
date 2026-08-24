@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-23  
-Wiki version: `v0022`
+Wiki version: `v0023`
 
 ## Project summary
 
@@ -28,7 +28,7 @@ portfolio evaluation, paper-trading research, and supporting code.
   origins. ttyd's incompatible backend `--check-origin` option is disabled because
   a reverse proxy hides the external origin/host relationship from ttyd.
 - The authenticated root page is a dashboard with an embedded Prime terminal and
-  a default Conversations view plus Parameters, Tokens, and Spend tabs. A compact live
+  a default Conversations view plus Parameters and Usage tabs. A compact live
   monitor shows CPU/GPU/memory utilization, CPU/GPU/system temperature, and GPU
   board power. Its loopback-only API
   runs as `dbyte` under `prime-dashboard-api.service` on port 8765.
@@ -109,9 +109,9 @@ portfolio evaluation, paper-trading research, and supporting code.
 - Dashboard settings control the default local model, thinking level, compaction
   reserve, and recent-context retention. Saves are allowlisted, origin checked,
   atomic, and apply to new terminal sessions.
-- Tokenomics sums Prime's recorded per-call input, output, cache, total-token, and
-  cost fields for Today, 7 days, or All. API Spend is recorded cost by provider;
-  local Spark providers correctly report $0 API spend.
+- Usage combines tokens and recorded spend by provider/model in one table, with
+  columns for the Spark's current local calendar day and a rolling 30-day window.
+  Local Spark providers correctly report $0 API spend.
 - The Conversations view lists the 40 most recently modified Prime session files.
   Each row shows a sanitized, 96-character maximum topic derived from the first
   user message, then the timestamp of the latest chat, followed by model and opaque

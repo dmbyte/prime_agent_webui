@@ -6,6 +6,7 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0023](v0023.md) | 2026-08-23 | Combined per-model tokens and spend for today and 30 days |
 | [v0022](v0022.md) | 2026-08-23 | Added constrained click-to-resume conversations |
 | [v0021](v0021.md) | 2026-08-23 | Renamed the private repository to dmbyte/prime_agent_webui |
 | [v0020](v0020.md) | 2026-08-23 | Published the project to private GitHub repository dmbyte/dgx-spark |

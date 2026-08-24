@@ -104,7 +104,9 @@ def parse_timestamp(value):
 
 def usage_summary():
     now = time.time()
-    windows = {"today": now - 86400, "7d": now - 7 * 86400, "all": 0}
+    local_now = datetime.now().astimezone()
+    today_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+    windows = {"today": today_start, "30d": now - 30 * 86400, "all": 0}
     totals = {name: defaultdict(lambda: defaultdict(float)) for name in windows}
     latest_context = defaultdict(int)
     calls = 0
@@ -131,7 +133,7 @@ def usage_summary():
                     for window, start in windows.items():
                         if timestamp < start:
                             continue
-                        row = totals[window][provider]
+                        row = totals[window][f"{provider}/{model}"]
                         row["input"] += float(usage.get("input", 0))
                         row["output"] += float(usage.get("output", 0))
                         row["cacheRead"] += float(usage.get("cacheRead", 0))

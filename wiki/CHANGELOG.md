@@ -3,6 +3,18 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-23 — v0023 — Combine tokens and spend by model
+
+- Replaced separate Tokens and Spend tabs with one Usage screen grouped by exact
+  provider/model pair.
+- Added side-by-side token and recorded-spend values for local-calendar Today and
+  a rolling Last 30 days window.
+- Validation: API returned the expected periods/model grouping; the live browser
+  showed Model, Today, and Last 30 days with tokens and spend on each row. Full
+  Spark validation passed.
+- Rollback: restore v0022 dashboard API, HTML, and JavaScript; remove `usage.css`.
+- Snapshot: [v0023](versions/v0023.md)
+
 ## 2026-08-23 — v0022 — Add click-to-resume conversations
 
 - Made conversation rows interactive: selecting one resumes its existing Prime

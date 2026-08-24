@@ -1,0 +1,9 @@
+nav{grid-template-columns:repeat(3,1fr)}
+.usage-head,.usage-row{display:grid;grid-template-columns:1.25fr 1fr 1fr;gap:8px;align-items:center}
+.usage-head{padding:7px 8px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.04em}
+.usage-row{padding:11px 8px;border-top:1px solid var(--line)}
+.usage-row strong{font-size:11px;overflow:hidden;text-overflow:ellipsis}
+.usage-row span{min-width:0}
+.usage-row b,.usage-row small{display:block;text-align:right;white-space:nowrap}
+.usage-row b{font-size:11px}
+.usage-row small{color:var(--accent);font-size:10px;margin-top:2px}

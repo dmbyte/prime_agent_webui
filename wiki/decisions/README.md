@@ -20,3 +20,4 @@ only historical evidence: when a decision changes, mark the old record
 - [ADR-0013: Use metadata-only sessions and read-only telemetry](0013-session-monitor.md)
 - [ADR-0014: Display sanitized conversation topics](0014-conversation-topics.md)
 - [ADR-0015: Constrain browser conversation resumption](0015-constrained-resume.md)
+- [ADR-0016: Combine model token and spend reporting](0016-combined-usage.md)

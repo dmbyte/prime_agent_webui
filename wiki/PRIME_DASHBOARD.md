@@ -14,9 +14,8 @@ contains the live Prime terminal. The sidebar provides:
 - **Parameters:** default Nemotron or Qwen local model, thinking level,
   compaction reserve, and recent-context retention. Changes apply to new terminal
   sessions and do not silently replace an active conversation.
-- **Tokenomics:** Today, 7-day, and all-time recorded model calls; total, input,
-  output, and context-peak tokens.
-- **API Spend:** recorded token count, call count, and cost grouped by provider.
+- **Usage:** one row per provider/model with tokens and recorded spend for Today
+  and Last 30 days. Today begins at local midnight on the Spark; 30 days is rolling.
   Local inference is displayed as $0 API spend.
 
 The compact monitor above the tabs refreshes every two seconds and shows CPU,
@@ -33,7 +32,7 @@ message it uses Prime's recorded `provider`, `model`, and `usage` object. Input,
 output, cache, total tokens, calls, and `usage.cost.total` are summed per provider
 and time window. Repeated full-context input is intentionally counted per call.
 
-Costs are not an invoice. They exclude calls outside Prime, subscriptions,
+Usage is keyed by the exact Prime provider/model pair. Costs are not an invoice. They exclude calls outside Prime, subscriptions,
 minimum charges, taxes, discounts, and credits, and depend on correct pricing
 metadata. Providers with zero pricing metadata—including local Spark providers—
 show $0.
