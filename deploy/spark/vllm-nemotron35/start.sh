@@ -25,6 +25,6 @@ exec docker run -d --restart unless-stopped \
   --spec-model "${DSPARK_CKPT:-nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4-DSpark}" \
   --spec-tokens "${SPEC_TOKENS:-3}" --mamba-backend flashinfer --mamba-cache-mode align \
   --reasoning-parser nemotron_v3 --tool-call-parser qwen3_coder --enable-auto-tool-choice \
-  --max-model-len "${MAX_MODEL_LEN:-65536}" --gpu-memory-utilization "${GPU_MEMORY_UTILIZATION:-0.48}" \
+  --max-model-len "${MAX_MODEL_LEN:-81920}" --gpu-memory-utilization "${GPU_MEMORY_UTILIZATION:-0.48}" \
   --kv-cache-memory-bytes "${KV_CACHE_MEMORY_BYTES:-12G}" --max-num-seqs "${MAX_NUM_SEQS:-2}" \
   --served-model-name "${SERVED_MODEL_NAME:-nemotron-3.5-lightning}"

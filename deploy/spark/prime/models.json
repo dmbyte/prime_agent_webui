@@ -5,7 +5,7 @@
       "api": "openai-completions",
       "apiKey": "EMPTY",
       "compat": {"supportsDeveloperRole": false, "supportsReasoningEffort": false},
-      "models": [{"id": "nemotron-3.5-lightning", "name": "Nemotron 3.5 Lightning + DSpark", "reasoning": true, "contextWindow": 65536, "maxTokens": 16384}]
+      "models": [{"id": "nemotron-3.5-lightning", "name": "Nemotron 3.5 Lightning + DSpark", "reasoning": true, "contextWindow": 81920, "maxTokens": 16384}]
     },
     "spark-qwen": {
       "baseUrl": "http://127.0.0.1:30001/v1",

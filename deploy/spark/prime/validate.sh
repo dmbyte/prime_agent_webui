@@ -33,11 +33,13 @@ else
   fail=1
 fi
 
+total_kib="$(awk '/MemTotal:/ {print $2}' /proc/meminfo)"
 available_kib="$(awk '/MemAvailable:/ {print $2}' /proc/meminfo)"
-if (( available_kib < 20 * 1024 * 1024 )); then
-  echo "FAIL: less than 20 GiB memory available" >&2
+minimum_available_kib=$(( total_kib / 5 ))
+if (( available_kib < minimum_available_kib )); then
+  echo "FAIL: less than 20% system memory available" >&2
   fail=1
 fi
 
 if (( fail != 0 )); then exit 1; fi
-echo "PASS: both local models healthy, private, and memory headroom >= 20 GiB"
+echo "PASS: both local models healthy, private, and memory headroom >= 20%"

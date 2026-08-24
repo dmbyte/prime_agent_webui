@@ -35,3 +35,4 @@ only historical evidence: when a decision changes, mark the old record
 - [ADR-0028: Hide attachment-command session artifacts](0028-hide-attach-artifacts.md)
 - [ADR-0029: Use recoverable conversation deletion](0029-recoverable-conversation-delete.md)
 - [ADR-0030: Wait for the private address before starting Nginx](0030-wait-for-nginx-private-address.md)
+- [ADR-0031: Increase Nemotron context with a fixed KV cache](0031-increase-nemotron-context-with-fixed-kv-cache.md)

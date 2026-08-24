@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-24
-Wiki version: `v0042`
+Wiki version: `v0043`
 
 ## Project summary
 
@@ -56,7 +56,7 @@ portfolio evaluation, paper-trading research, and supporting code.
   and a reviewable Continual Harness with snapshots and rollback.
 - Default local tier: `nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4`
   plus its DSpark drafter, served as `nemotron-3.5-lightning` on loopback port
-  30000. It uses Marlin, FP8 KV, 3 speculative tokens, 65,536 context, a 12 GiB
+  30000. It uses Marlin, FP8 KV, 3 speculative tokens, 81,920 context, a 12 GiB
   KV cache, and at most two sequences.
 - Multimodal/deep local tier: `nvidia/Qwen3.6-35B-A3B-NVFP4`, served as
   `qwen3.6-35b-a3b` on loopback port 30001. It uses Marlin, FP8 KV, 65,536
@@ -86,8 +86,9 @@ portfolio evaluation, paper-trading research, and supporting code.
 
 - Both endpoints passed simultaneous health, text generation, and routing tests;
   Qwen also passed a data-URL image test.
-- After warm-up and tests, Linux reported about 38 GiB available memory and less
-  than 1 MiB swap used. The acceptance floor is 20 GiB available memory.
+- After the 81,920-token Nemotron warm-up and tests, Linux reported 39.1 GiB
+  available memory (32.15%). The validation gate now requires at least 20% of
+  usable RAM, about 24.3 GiB on this Spark.
 - Both inference ports bind only to `127.0.0.1`. Hermes WebUI still listens on
   all interfaces at port 8787; that pre-existing exposure is unchanged.
 - NVFP4 is the checkpoint format. Nemotron's published GB10 recipe uses W4A16

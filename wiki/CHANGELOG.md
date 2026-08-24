@@ -3,6 +3,16 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-24 — v0043 — Raise Nemotron context with 20% RAM reserve
+
+- Raised Nemotron's served and advertised context from 65,536 to 81,920 tokens.
+- Kept the FP8 KV cache fixed at 12 GiB and maximum concurrency at two, avoiding
+  an intentional increase in reserved model memory.
+- Set a 20%-of-usable-RAM acceptance floor (about 24.3 GiB available).
+- Updated the validation gate to enforce that percentage dynamically; warm
+  verification reported 39.1 GiB available (32.15%) and passed both models.
+- Added ADR-0031 and snapshot [v0043](versions/v0043.md).
+
 ## 2026-08-24 — v0042 — Reboot-safe dashboard startup
 
 - Verified that `prime-web.service` and `prime-dashboard-api.service` restarted

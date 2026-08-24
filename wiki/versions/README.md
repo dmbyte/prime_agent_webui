@@ -6,6 +6,7 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0043](v0043.md) | 2026-08-24 | Increased Nemotron context to 81,920 tokens without enlarging its KV cache |
 | [v0042](v0042.md) | 2026-08-24 | Made private dashboard startup tolerate delayed LAN address assignment |
 | [v0041](v0041.md) | 2026-08-24 | Corrected right-click deletion to target the clicked row |
 | [v0040](v0040.md) | 2026-08-24 | Added guarded, recoverable right-click conversation deletion |

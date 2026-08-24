@@ -26,7 +26,7 @@ Qwen's downloaded checkpoint size was reported by vLLM as 21.82 GiB.
 
 ## Configuration
 
-Nemotron uses a 65,536-token cap, 12 GiB FP8 KV cache, two sequences, Marlin
+Nemotron uses an 81,920-token cap, 12 GiB FP8 KV cache, two sequences, Marlin
 MoE, prefix caching, FlashInfer Mamba, and three DSpark speculative tokens. Qwen
 uses a 65,536-token cap, 8 GiB FP8 KV cache, two sequences, Marlin, chunked
 prefill, async scheduling, and an 8,192-token batch cap. These are intentionally
@@ -62,8 +62,9 @@ Non-secret deployed-file SHA-256 values:
   Mac and advertised the expected PAM realm. The generic
   system-wide ttyd unit installed by Ubuntu was disabled; only the scoped user
   service is enabled.
-- Linux reported 38 GiB available memory after warm-up and tests, with less than
-  1 MiB swap used. The validation script passed its 20 GiB floor.
+- Linux reported 39.1 GiB available memory (32.15%) after the 81,920-token
+  Nemotron restart and a warm generation. The validation script passed its
+  dynamic 20%-of-system-memory floor (about 24.3 GiB on this Spark).
 
 ## Rollback
 
