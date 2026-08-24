@@ -6,6 +6,7 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0025](v0025.md) | 2026-08-23 | Verified why Qwen and OpenAI have no Usage rows |
 | [v0024](v0024.md) | 2026-08-23 | Grouped power with utilization and temperatures together |
 | [v0023](v0023.md) | 2026-08-23 | Combined per-model tokens and spend for today and 30 days |
 | [v0022](v0022.md) | 2026-08-23 | Added constrained click-to-resume conversations |

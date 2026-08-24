@@ -3,6 +3,16 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-23 — v0025 — Explain missing Usage models
+
+- Verified that Usage is activity-driven rather than a configured-model catalog.
+- Found 214 recorded Nemotron calls and no recorded Qwen calls; Qwen remains
+  enabled and its inference service is active.
+- Verified OpenAI is not configured as a Prime provider and no OpenAI credential
+  is present in the service environment.
+- No runtime or interface configuration changed.
+- Snapshot: [v0025](versions/v0025.md)
+
 ## 2026-08-23 — v0024 — Reorder system monitor metrics
 
 - Moved Power to the fourth position on the utilization row and grouped CPU,

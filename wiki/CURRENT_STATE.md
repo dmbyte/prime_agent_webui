@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-23  
-Wiki version: `v0024`
+Wiki version: `v0025`
 
 ## Project summary
 
@@ -112,6 +112,11 @@ portfolio evaluation, paper-trading research, and supporting code.
 - Usage combines tokens and recorded spend by provider/model in one table, with
   columns for the Spark's current local calendar day and a rolling 30-day window.
   Local Spark providers correctly report $0 API spend.
+- Usage currently contains 214 recorded calls, all for
+  `spark-nemotron/nemotron-3.5-lightning` (6,098,750 tokens, $0). Qwen is enabled
+  and its service is active but has no recorded assistant calls, so no Qwen row
+  is rendered. OpenAI is not configured as a Prime provider and no OpenAI API
+  credential is present in the inspected service environment, so it also has no row.
 - The Conversations view lists the 40 most recently modified Prime session files.
   Each row shows a sanitized, 96-character maximum topic derived from the first
   user message, then the timestamp of the latest chat, followed by model and opaque
