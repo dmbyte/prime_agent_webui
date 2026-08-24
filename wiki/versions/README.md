@@ -6,6 +6,7 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0038](v0038.md) | 2026-08-24 | Made the minimized overlay control show an expand symbol |
 | [v0037](v0037.md) | 2026-08-24 | Preserved explicit attach while removing all UI attach behavior |
 | [v0036](v0036.md) | 2026-08-24 | Retired interfering browser session attachment |
 | [v0035](v0035.md) | 2026-08-24 | Moved Stop task from the overlay to the main conversation |

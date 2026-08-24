@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-24
-Wiki version: `v0037`
+Wiki version: `v0038`
 
 ## Project summary
 
@@ -134,6 +134,8 @@ portfolio evaluation, paper-trading research, and supporting code.
   tasks become tabs; each tab shows model/status/message count and a privacy-safe
   event timeline (task received, tool running/completed, response update, token
   count) without full prompts, model output, tool output, or secrets.
+- The overlay header shows a minus while expanded and changes to a plus while
+  minimized; its tooltip, accessible label, and `aria-expanded` state change with it.
 - The activity overlay is event-feed-only and its JavaScript contains no attach
   command, attach URL, live-console iframe, or automatic attachment behavior.
   Explicit session attachment remains available through `prime-web-launch` only

@@ -48,7 +48,9 @@ The header activity icon polls every three seconds and shows the number of Prime
 sessions whose lifecycle is live and activity is not idle. Clicking it opens a
 floating overlay that can be dragged, resized from its corner, minimized, and
 reopened. Its default location is the top-right of the browser window (top inset
-on narrow screens). Concurrent tasks appear as tabs.
+on narrow screens). The header control shows a minus when it can minimize and a
+plus when it can expand, with synchronized tooltip and accessibility state.
+Concurrent tasks appear as tabs.
 
 Each tab reports sanitized topic, activity, provider/model, thinking level,
 message count, timestamps, tool names, and token progress. The API deliberately

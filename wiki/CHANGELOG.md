@@ -3,6 +3,16 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-24 — v0038 — Clarify minimized overlay control
+
+- Changed the overlay header control from a static minus to a state-aware symbol:
+  minus while expanded and plus while minimized.
+- Synchronized its tooltip, accessible label, and `aria-expanded` value.
+- Validation: JavaScript syntax and deployed-code checks passed; dashboard/terminal
+  services and full Spark validation passed.
+- Rollback: restore the v0037 dashboard JavaScript.
+- Snapshot: [v0038](versions/v0038.md)
+
 ## 2026-08-24 — v0037 — Separate explicit attachment from UI behavior
 
 - Corrected v0036's over-broad policy: session attachment remains available, but
