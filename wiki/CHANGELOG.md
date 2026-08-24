@@ -3,6 +3,22 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-24 — v0040 — Add recoverable conversation deletion
+
+- Added a custom right-click conversation menu with **Delete conversation** and an
+  explicit confirmation prompt.
+- Added an origin-protected API action that accepts only strict session IDs,
+  rejects every live conversation, and atomically moves inactive JSONL transcripts
+  to private mode-0700 recovery storage instead of unlinking them.
+- Preserved historical Usage accounting by reading active and trashed transcripts;
+  deleted rows disappear from the Conversations catalog only.
+- Validation: Python/JavaScript checks passed; the live API rejected a traversal-
+  style ID with HTTP 400, the 40-row catalog remained intact, UI assets deployed,
+  and full Spark validation passed. No real conversation was deleted in testing.
+- Rollback: restore v0039 API/HTML/JavaScript and remove `conversation-menu.css`.
+  Previously moved transcripts remain recoverable in session trash.
+- Snapshot: [v0040](versions/v0040.md)
+
 ## 2026-08-24 — v0039 — Hide attach artifacts from Conversations
 
 - Identified eight saved sessions whose sanitized first-user topic was exactly

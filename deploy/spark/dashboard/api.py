@@ -15,6 +15,7 @@ from pathlib import Path
 HOME = Path.home()
 SETTINGS = HOME / ".prime/agent/settings.json"
 SESSIONS = HOME / ".prime/agent/sessions"
+SESSION_TRASH = HOME / ".prime/agent/session-trash"
 MODEL_CONFIG = HOME / ".prime/agent/models.json"
 OPENAI_ENV = HOME / ".config/prime-agent/openai.env"
 PLANNED_MODELS = [{"provider": "openai", "model": "gpt-5.4"}]
@@ -197,7 +198,8 @@ def usage_summary():
     totals = {name: defaultdict(lambda: defaultdict(float)) for name in windows}
     latest_context = defaultdict(int)
     calls = 0
-    for path in SESSIONS.glob("*.jsonl"):
+    usage_paths = list(SESSIONS.glob("*.jsonl")) + list(SESSION_TRASH.glob("*.jsonl"))
+    for path in usage_paths:
         try:
             handle = path.open(errors="replace")
         except OSError:
@@ -239,7 +241,7 @@ def usage_summary():
     return {
         "windows": result,
         "latestContext": latest_context,
-        "sessionFiles": len(list(SESSIONS.glob("*.jsonl"))),
+        "sessionFiles": len(usage_paths),
         "recordedCalls": calls,
         "generatedAt": datetime.now(timezone.utc).isoformat(),
     }
@@ -305,6 +307,40 @@ def safe_topic(text):
         return "Sensitive conversation"
     value = re.sub(r"[\x00-\x1f\x7f]", "", value)
     return value[:96].rstrip(" ,.;:-") + ("…" if len(value) > 96 else "")
+
+
+def live_session_ids():
+    env = os.environ.copy()
+    env["PATH"] = f"{PRIME_BIN}:{env.get('PATH', '')}"
+    try:
+        result = subprocess.run(
+            [str(PRIME_AGENT), "list", "--all", "--json"], capture_output=True,
+            text=True, timeout=12, check=True, env=env,
+        )
+        raw = result.stdout[result.stdout.find("{"):]
+        rows = json.loads(raw).get("sessions") or []
+        return {
+            str(row.get("sessionId") or row.get("id")) for row in rows
+            if row.get("lifecycle") == "live"
+        }
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError, TypeError, ValueError) as error:
+        raise RuntimeError("Could not verify whether the conversation is active") from error
+
+
+def delete_conversation(session_id):
+    if not re.fullmatch(r"[A-Za-z0-9_-]{8,80}", session_id):
+        raise ValueError("Invalid conversation identifier")
+    if session_id in live_session_ids():
+        raise RuntimeError("Stop and close the active conversation before deleting it")
+    source = SESSIONS / f"{session_id}.jsonl"
+    if not source.is_file():
+        raise ValueError("Conversation no longer exists")
+    SESSION_TRASH.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(SESSION_TRASH, 0o700)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    target = SESSION_TRASH / f"{session_id}.{stamp}.jsonl"
+    os.replace(source, target)
+    return {"deleted": True, "recoverable": True, "id": session_id}
 
 
 def background_activity():
@@ -499,7 +535,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(404, {"error": "Not found"})
 
     def do_POST(self):
-        if self.path not in {"/api/settings", "/api/activity/stop"}:
+        if self.path not in {"/api/settings", "/api/activity/stop", "/api/conversations/delete"}:
             self.send_json(404, {"error": "Not found"})
             return
         if self.headers.get("Origin") not in ALLOWED_ORIGINS or self.headers.get("X-Prime-Dashboard") != "1":
@@ -512,6 +548,8 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(self.rfile.read(length))
             if self.path == "/api/activity/stop":
                 self.send_json(200, stop_activity(str(payload.get("id", ""))))
+            elif self.path == "/api/conversations/delete":
+                self.send_json(200, delete_conversation(str(payload.get("id", ""))))
             else:
                 self.send_json(200, {"settings": save_settings(payload)})
         except (ValueError, TypeError, json.JSONDecodeError) as error:

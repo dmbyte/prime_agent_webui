@@ -94,6 +94,12 @@ Clicking a conversation reloads the terminal with `--resume` and its opaque ID.
 An exact sanitized topic of `attach` is recognized as an attachment-command
 artifact and omitted before the 40-conversation limit is applied. The underlying
 session file is retained, and the next genuine conversation fills that row.
+Right-clicking a row opens a custom context menu with **Delete conversation**.
+Deletion requires confirmation and server-side proof that the session is not live.
+The JSONL transcript is moved atomically into private recovery storage under
+`~/.prime/agent/session-trash/`, rather than unlinked. It disappears from the
+conversation catalog, but Usage continues reading trashed transcripts so historical
+token and spend totals do not change.
 ttyd URL arguments terminate at `prime-web-launch`, which forwards only the exact
 two-argument resume form when the ID matches the strict character/length rule and
 an existing session file. Every other argument combination is discarded and the

@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-24
-Wiki version: `v0039`
+Wiki version: `v0040`
 
 ## Project summary
 
@@ -158,6 +158,11 @@ portfolio evaluation, paper-trading research, and supporting code.
 - Sessions whose sanitized first-user topic is exactly `attach` are treated as UI
   command artifacts and excluded before the 40-row limit. Their JSONL files are
   retained; genuine older conversations fill the vacated list positions.
+- Right-clicking a conversation opens a custom menu with **Delete conversation**.
+  After confirmation, an inactive transcript is atomically moved to private mode-
+  0700 recovery storage at `~/.prime/agent/session-trash/`; active/live sessions
+  are rejected. Deleted conversations disappear from the catalog, while their
+  recorded tokens and spend remain included in Usage.
 
 ## Known gaps
 
