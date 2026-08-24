@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-24
-Wiki version: `v0040`
+Wiki version: `v0041`
 
 ## Project summary
 
@@ -162,7 +162,9 @@ portfolio evaluation, paper-trading research, and supporting code.
   After confirmation, an inactive transcript is atomically moved to private mode-
   0700 recovery storage at `~/.prime/agent/session-trash/`; active/live sessions
   are rejected. Deleted conversations disappear from the catalog, while their
-  recorded tokens and spend remain included in Usage.
+  recorded tokens and spend remain included in Usage. Each rendered row carries
+  its exact full session ID, so selection and deletion target that row directly
+  rather than inferring identity from its list position.
 
 ## Known gaps
 

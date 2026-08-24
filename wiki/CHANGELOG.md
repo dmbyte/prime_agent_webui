@@ -3,6 +3,17 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-24 — v0041 — Correct per-row delete targeting
+
+- Replaced position-based conversation lookup with a full session ID stored on
+  each rendered row.
+- Updated both right-click deletion and ordinary row selection to resolve directly
+  through the clicked row's ID, so the third row targets the third conversation.
+- Validation: JavaScript syntax and deployed-code assertions passed; dashboard and
+  terminal services plus full Spark validation passed. No conversation was deleted.
+- Rollback: restore the v0040 dashboard JavaScript.
+- Snapshot: [v0041](versions/v0041.md)
+
 ## 2026-08-24 — v0040 — Add recoverable conversation deletion
 
 - Added a custom right-click conversation menu with **Delete conversation** and an

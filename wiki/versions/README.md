@@ -6,6 +6,7 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0041](v0041.md) | 2026-08-24 | Corrected right-click deletion to target the clicked row |
 | [v0040](v0040.md) | 2026-08-24 | Added guarded, recoverable right-click conversation deletion |
 | [v0039](v0039.md) | 2026-08-24 | Hid attachment-command artifacts from Conversations |
 | [v0038](v0038.md) | 2026-08-24 | Made the minimized overlay control show an expand symbol |

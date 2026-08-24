@@ -100,6 +100,9 @@ The JSONL transcript is moved atomically into private recovery storage under
 `~/.prime/agent/session-trash/`, rather than unlinked. It disappears from the
 conversation catalog, but Usage continues reading trashed transcripts so historical
 token and spend totals do not change.
+Conversation rows bind their full validated session ID in DOM data. Both ordinary
+selection and the context-menu action resolve the session through that exact row
+ID; neither uses an array index, preventing a lower row from targeting the first.
 ttyd URL arguments terminate at `prime-web-launch`, which forwards only the exact
 two-argument resume form when the ID matches the strict character/length rule and
 an existing session file. Every other argument combination is discarded and the
