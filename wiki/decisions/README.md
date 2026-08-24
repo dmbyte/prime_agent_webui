@@ -19,3 +19,4 @@ only historical evidence: when a decision changes, mark the old record
 - [ADR-0012: Add a local settings and usage dashboard](0012-dashboard-usage-settings.md)
 - [ADR-0013: Use metadata-only sessions and read-only telemetry](0013-session-monitor.md)
 - [ADR-0014: Display sanitized conversation topics](0014-conversation-topics.md)
+- [ADR-0015: Constrain browser conversation resumption](0015-constrained-resume.md)

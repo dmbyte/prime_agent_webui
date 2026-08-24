@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-23  
-Wiki version: `v0021`
+Wiki version: `v0022`
 
 ## Project summary
 
@@ -115,9 +115,9 @@ portfolio evaluation, paper-trading research, and supporting code.
 - The Conversations view lists the 40 most recently modified Prime session files.
   Each row shows a sanitized, 96-character maximum topic derived from the first
   user message, then the timestamp of the latest chat, followed by model and opaque
-  ID. It does not return full prompts, summaries, or assistant messages. New conversation
-  reloads the embedded terminal; saved conversations
-  are currently informational and cannot be resumed from the sidebar.
+  ID. It does not return full prompts, summaries, or assistant messages. Clicking
+  a row resumes that Prime conversation in the embedded terminal; New conversation
+  starts the fixed default launcher.
 
 ## Known gaps
 
@@ -125,9 +125,6 @@ portfolio evaluation, paper-trading research, and supporting code.
   during validation. It is not reproduced in the repository or wiki and is not
   exposed by the dashboard. The credential must be revoked/rotated; removal or
   redaction of the sensitive session remains pending explicit user direction.
-- Browser-controlled session resumption is deferred. ttyd URL arguments were
-  rejected because they would allow URL-controlled process arguments; a future
-  implementation needs a narrowly validated server-side session selector.
 
 - No throughput/latency benchmark or long concurrent soak has run.
 - Spend is only as complete as Prime session records and provider/model pricing

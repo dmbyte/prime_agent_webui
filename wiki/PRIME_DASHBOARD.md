@@ -43,10 +43,11 @@ user approval to display that text to authenticated LAN/VPN users. It normalizes
 whitespace, caps topics at 96 characters, and replaces credential-like input with
 `Sensitive conversation`. Topics are rendered using DOM `textContent`, never HTML.
 The API does not send full prompts, summaries, or assistant messages to the browser.
-Saved conversations are intentionally read-only in this version. ttyd URL arguments
-are not enabled; allowing browser URLs to modify Prime process arguments was
-rejected as an unnecessary command-injection surface. New conversation safely reloads
-the existing fixed terminal endpoint.
+Clicking a conversation reloads the terminal with `--resume` and its opaque ID.
+ttyd URL arguments terminate at `prime-web-launch`, which forwards only the exact
+two-argument resume form when the ID matches the strict character/length rule and
+an existing session file. Every other argument combination is discarded and the
+fixed new-conversation launcher runs. New conversation reloads that fixed endpoint.
 
 ## Architecture and security
 
@@ -68,7 +69,8 @@ and terminal uniformly.
 API health/state/settings passed. The current catalog parsed 36 session files.
 Browser verification showed Conversations as the active default, a New conversation button,
 metadata-only rows, all seven live telemetry readings, the remaining tabs, and an
-active terminal. Both services are active; ports 8765 and 7681 remain loopback-only;
+active terminal. Click-to-resume returned an active terminal without emitting its
+conversation content into validation output. Both services are active; ports 8765 and 7681 remain loopback-only;
 both model services and the project gate pass.
 
 Rollback disables `prime-dashboard-api.service`, restores v0014 Nginx and ttyd,

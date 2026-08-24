@@ -1,7 +1,7 @@
 # ADR-0013: Use metadata-only sessions and read-only telemetry
 
 Date: 2026-08-23  
-Status: partially superseded by [ADR-0014](0014-conversation-topics.md); telemetry and fixed ttyd decisions remain active
+Status: superseded in part by [ADR-0014](0014-conversation-topics.md) and [ADR-0015](0015-constrained-resume.md); telemetry remains active
 
 ## Decision
 

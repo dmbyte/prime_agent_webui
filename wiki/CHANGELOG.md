@@ -3,6 +3,18 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-23 — v0022 — Add click-to-resume conversations
+
+- Made conversation rows interactive: selecting one resumes its existing Prime
+  conversation in the embedded terminal.
+- Added `prime-web-launch`, which forwards only `--resume` plus a strictly valid
+  ID backed by an existing session file; all other browser arguments are ignored.
+- Validation: valid resume and arbitrary-argument rejection tests passed; live
+  browser click returned an active terminal without emitting conversation content.
+  Services, private bindings, both models, and the full validation gate passed.
+- Rollback: restore v0021 ttyd unit/dashboard JavaScript and remove the web launcher.
+- Snapshot: [v0022](versions/v0022.md)
+
 ## 2026-08-23 — v0021 — Rename GitHub repository
 
 - Renamed the private repository from `dmbyte/dgx-spark` to
