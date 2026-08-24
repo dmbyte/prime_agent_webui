@@ -1,7 +1,7 @@
 # ADR-0022: Offer a read-only attached live console
 
 Date: 2026-08-24
-Status: accepted
+Status: superseded by [ADR-0026](0026-prohibit-browser-attach.md)
 
 ## Context
 

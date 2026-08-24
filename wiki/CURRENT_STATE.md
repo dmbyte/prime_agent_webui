@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-24
-Wiki version: `v0035`
+Wiki version: `v0036`
 
 ## Project summary
 
@@ -134,12 +134,12 @@ portfolio evaluation, paper-trading research, and supporting code.
   tasks become tabs; each tab shows model/status/message count and a privacy-safe
   event timeline (task received, tool running/completed, response update, token
   count) without full prompts, model output, tool output, or secrets.
-- Each active-task tab can optionally replace that safe event feed with the actual
-  attached Prime console. The live console is read-only in the overlay, is opened
-  lazily for only the selected task, and can return to the event feed. Unlike the
-  safe feed, it can display full session content and is therefore protected by the
-  dashboard's existing private-network, TLS, and PAM boundary. The normal primary
-  terminal remains interactive.
+- Live attachment from the activity overlay is disabled because a second attached
+  TUI interfered with the running job. The overlay is event-feed-only. Its former
+  button is hidden for compatibility with cached JavaScript, the browser launcher
+  explicitly rejects every `--attach` request with no Prime process launch, and
+  the obsolete live-console stylesheet has been removed. The primary terminal
+  remains the only browser TUI client.
 - A control bar above the main conversation terminal appears while tasks are
   active. It follows a selected active conversation and provides a task selector
   when parallel work exists, plus a confirmation-gated **Stop task** button. The

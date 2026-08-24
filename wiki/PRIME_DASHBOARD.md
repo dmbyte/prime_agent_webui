@@ -55,13 +55,11 @@ message count, timestamps, tool names, and token progress. The API deliberately
 does not return full prompts, assistant text, thinking text, tool inputs/results,
 or status summaries. Credential-like topics retain the existing sensitive label.
 
-Each task tab also offers **Live console**. Selecting it lazily attaches a second
-ttyd client to that exact running Prime session and shows the real terminal in the
-overlay. The embedded console is deliberately read-only and removed from keyboard
-tab order to prevent accidental steering; the primary terminal remains the
-interactive control surface. Only the selected task is attached, keeping the
-primary terminal plus overlay within ttyd's two-client cap. **Event feed** returns
-to the sanitized view.
+The overlay is event-feed-only. A previously offered live console was retired after
+its second attached TUI interfered with the running job. Compatibility CSS hides
+the old control if a browser still has earlier JavaScript cached, and the launcher
+rejects all `--attach` requests without starting Prime. The primary terminal is
+the only browser TUI client.
 
 The overlay deliberately has no stop control. While work is active, a control bar
 above the main conversation terminal presents **Stop task**. It follows a selected
@@ -95,9 +93,8 @@ ttyd URL arguments terminate at `prime-web-launch`, which forwards only the exac
 two-argument resume form when the ID matches the strict character/length rule and
 an existing session file. Every other argument combination is discarded and the
 fixed new-conversation launcher runs. New conversation reloads that fixed endpoint.
-The same launcher accepts only the exact two-argument `--attach ID` form, using the
-same strict ID validation and existing-session check. No other browser-supplied
-command or argument is forwarded.
+The launcher explicitly rejects every browser `--attach` request. No attach target
+is forwarded and no fallback Prime session is started for that request.
 
 ## Architecture and security
 

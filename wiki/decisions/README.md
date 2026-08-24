@@ -30,3 +30,4 @@ only historical evidence: when a decision changes, mark the old record
 - [ADR-0023: Stop only explicitly selected active tasks](0023-single-task-stop.md)
 - [ADR-0024: Manage provider availability through Prime settings](0024-provider-switches.md)
 - [ADR-0025: Locate task interruption in the main conversation](0025-main-conversation-stop.md)
+- [ADR-0026: Prohibit browser session attachment](0026-prohibit-browser-attach.md)

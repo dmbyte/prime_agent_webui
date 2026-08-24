@@ -8,9 +8,10 @@ if [[ $# -eq 2 && $1 == "--resume" && $2 =~ ^[A-Za-z0-9_-]{8,80}$ && -f "${sessi
   exec "${launcher}" --resume "$2"
 fi
 
-if [[ $# -eq 2 && $1 == "--attach" && $2 =~ ^[A-Za-z0-9_-]{8,80}$ && -f "${sessions}/$2.jsonl" ]]; then
-  exec "${launcher}" attach "$2"
+if [[ $# -gt 0 && $1 == "--attach" ]]; then
+  echo "Browser session attachment is disabled. Use the activity event feed."
+  exit 64
 fi
 
-# Browser-supplied arguments outside the exact resume and attach forms are ignored.
+# Browser-supplied arguments outside the exact resume form are ignored.
 exec "${launcher}"

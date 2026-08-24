@@ -3,6 +3,20 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-24 — v0036 — Retire browser session attachment
+
+- Removed the extra ttyd attachment client identified as PID 3111439 while
+  preserving the original main terminal client PID 3111303 and daemon worker.
+- Retired the overlay live-console control and removed its deployed stylesheet.
+- Changed `prime-web-launch` to reject every `--attach` request with exit 64 and
+  no Prime launch, including protection against stale cached browser JavaScript.
+- Validation: only the original ttyd client remained; attach rejection passed;
+  ttyd and dashboard services stayed active; full Spark validation passed. ttyd
+  was deliberately not restarted so the running job was not interrupted.
+- Rollback is not recommended while work is active. To restore later, redeploy
+  v0035 wrapper/HTML/activity/live-console assets after confirming attach safety.
+- Snapshot: [v0036](versions/v0036.md)
+
 ## 2026-08-24 — v0035 — Move Stop task to the conversation window
 
 - Removed the Stop task control from both activity-overlay views.

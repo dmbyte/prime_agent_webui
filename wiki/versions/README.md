@@ -6,6 +6,7 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0036](v0036.md) | 2026-08-24 | Retired interfering browser session attachment |
 | [v0035](v0035.md) | 2026-08-24 | Moved Stop task from the overlay to the main conversation |
 | [v0034](v0034.md) | 2026-08-24 | Moved activity to the top and added searchable provider switches |
 | [v0033](v0033.md) | 2026-08-24 | Added a guarded single-task stop control |
