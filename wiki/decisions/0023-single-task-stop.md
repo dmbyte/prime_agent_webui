@@ -1,7 +1,7 @@
 # ADR-0023: Stop only explicitly selected active tasks
 
 Date: 2026-08-24
-Status: accepted
+Status: superseded by [ADR-0025](0025-main-conversation-stop.md)
 
 ## Context
 

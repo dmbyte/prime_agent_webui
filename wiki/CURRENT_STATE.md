@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-24
-Wiki version: `v0034`
+Wiki version: `v0035`
 
 ## Project summary
 
@@ -140,10 +140,13 @@ portfolio evaluation, paper-trading research, and supporting code.
   safe feed, it can display full session content and is therefore protected by the
   dashboard's existing private-network, TLS, and PAM boundary. The normal primary
   terminal remains interactive.
-- Each active-task tab has a confirmation-gated **Stop task** button in both the
-  event and live-console views. The API accepts only strict IDs that are currently
-  active, invokes Prime's native single-agent stop command, and leaves the saved
-  conversation available. It does not stop other agents or the Prime supervisor.
+- A control bar above the main conversation terminal appears while tasks are
+  active. It follows a selected active conversation and provides a task selector
+  when parallel work exists, plus a confirmation-gated **Stop task** button. The
+  activity overlay has no stop control. The API still accepts only strict IDs that
+  are currently active, invokes Prime's native single-agent stop command, and
+  leaves saved conversation history available without stopping other agents or
+  the Prime supervisor.
 - The Conversations view lists the 40 most recently modified Prime session files.
   Each row shows a sanitized, 96-character maximum topic derived from the first
   user message, then the timestamp of the latest chat, followed by model and opaque

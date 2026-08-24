@@ -3,6 +3,20 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-24 — v0035 — Move Stop task to the conversation window
+
+- Removed the Stop task control from both activity-overlay views.
+- Added a running-task bar above the main terminal with the guarded Stop task
+  action; it follows an active sidebar selection and offers a selector for parallel
+  running conversations.
+- Preserved confirmation, active-ID validation, conversation retention, and
+  single-agent Prime stop semantics.
+- Validation: JavaScript and asset checks passed; deployed HTML contains the sole
+  visible Stop task button in the main workspace; full Spark validation passed.
+- Rollback: restore v0034 HTML/JavaScript/CSS and remove
+  `conversation-control.css`.
+- Snapshot: [v0035](versions/v0035.md)
+
 ## 2026-08-24 — v0034 — Move overlay and add provider switches
 
 - Moved the activity overlay's default position from bottom-right to top-right,
