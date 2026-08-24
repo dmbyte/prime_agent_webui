@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-23  
-Wiki version: `v0023`
+Wiki version: `v0024`
 
 ## Project summary
 
@@ -29,8 +29,8 @@ portfolio evaluation, paper-trading research, and supporting code.
   a reverse proxy hides the external origin/host relationship from ttyd.
 - The authenticated root page is a dashboard with an embedded Prime terminal and
   a default Conversations view plus Parameters and Usage tabs. A compact live
-  monitor shows CPU/GPU/memory utilization, CPU/GPU/system temperature, and GPU
-  board power. Its loopback-only API
+  monitor shows CPU/GPU/memory utilization and GPU board power on its first row,
+  with CPU/GPU/system temperatures on the second. Its loopback-only API
   runs as `dbyte` under `prime-dashboard-api.service` on port 8765.
 - vLLM: `0.27.1` ARM64/CUDA 12.9 image, two user services enabled at boot
 - Hermes WebUI remains installed and active but is not the orchestration core.

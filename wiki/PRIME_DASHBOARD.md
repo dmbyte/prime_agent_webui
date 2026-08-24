@@ -18,8 +18,9 @@ contains the live Prime terminal. The sidebar provides:
   and Last 30 days. Today begins at local midnight on the Spark; 30 days is rolling.
   Local inference is displayed as $0 API spend.
 
-The compact monitor above the tabs refreshes every two seconds and shows CPU,
-GPU, and memory utilization; CPU, GPU, and system temperatures; and power draw.
+The compact monitor above the tabs refreshes every two seconds. Its top row shows
+CPU, GPU, memory utilization, and power; its bottom row contains CPU, GPU, and
+system temperatures.
 CPU use is derived from `/proc/stat`, memory from `/proc/meminfo`, GPU use,
 temperature, and board power from `nvidia-smi`, CPU temperature from the maximum
 ACPI thermal zone, and system temperature from the maximum NVMe sensor. Missing

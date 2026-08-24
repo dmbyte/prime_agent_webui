@@ -3,6 +3,15 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-23 — v0024 — Reorder system monitor metrics
+
+- Moved Power to the fourth position on the utilization row and grouped CPU,
+  GPU, and System temperature together on the second row.
+- Validation: JavaScript syntax passed and the live browser reported the exact
+  requested metric order.
+- Rollback: restore the v0023 dashboard JavaScript.
+- Snapshot: [v0024](versions/v0024.md)
+
 ## 2026-08-23 — v0023 — Combine tokens and spend by model
 
 - Replaced separate Tokens and Spend tabs with one Usage screen grouped by exact
