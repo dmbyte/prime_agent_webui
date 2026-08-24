@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-23  
-Wiki version: `v0020`
+Wiki version: `v0021`
 
 ## Project summary
 
@@ -13,7 +13,7 @@ portfolio evaluation, paper-trading research, and supporting code.
 
 - Workspace: `/Users/byte/Documents/Codex/dgx-spark`
 - Version control: Git `main`, private GitHub repository
-  `https://github.com/dmbyte/dgx-spark`, tracking `origin/main`
+  `https://github.com/dmbyte/prime_agent_webui`, tracking `origin/main`
 - Reviewable deployment source: `deploy/spark/`
 - Target Spark: SSH verified as `dbyte@172.16.253.231`; passwordless sudo works
 - Prime Agent: `0.8.0`, installed for `dbyte`; launcher `prime-dgx`

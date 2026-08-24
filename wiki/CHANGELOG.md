@@ -3,6 +3,15 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-23 — v0021 — Rename GitHub repository
+
+- Renamed the private repository from `dmbyte/dgx-spark` to
+  `dmbyte/prime_agent_webui` and updated local `origin` for fetch and push.
+- Validation: GitHub reports the new name, private visibility, and `main` default;
+  local remote URLs match the renamed repository.
+- Rollback: rename the repository back and update `origin` only on request.
+- Snapshot: [v0021](versions/v0021.md)
+
 ## 2026-08-23 — v0020 — Publish private GitHub backup
 
 - Initialized Git on `main`, committed the complete reviewable source/wiki, and

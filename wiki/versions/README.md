@@ -6,6 +6,7 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0021](v0021.md) | 2026-08-23 | Renamed the private repository to dmbyte/prime_agent_webui |
 | [v0020](v0020.md) | 2026-08-23 | Published the project to private GitHub repository dmbyte/dgx-spark |
 | [v0019](v0019.md) | 2026-08-23 | Prepared a secret-conscious private GitHub backup |
 | [v0018](v0018.md) | 2026-08-23 | Added sanitized topics and latest-chat timestamps |
