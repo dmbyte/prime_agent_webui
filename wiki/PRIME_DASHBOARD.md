@@ -38,6 +38,18 @@ temperature, and board power from `nvidia-smi`, CPU temperature from the maximum
 ACPI thermal zone, and system temperature from the maximum NVMe sensor. Missing
 sensors render as unavailable. Full usage/session data refreshes every 30 seconds.
 
+## Background activity overlay
+
+The header activity icon polls every three seconds and shows the number of Prime
+sessions whose lifecycle is live and activity is not idle. Clicking it opens a
+floating overlay that can be dragged, resized from its corner, minimized, and
+reopened. Concurrent tasks appear as tabs.
+
+Each tab reports sanitized topic, activity, provider/model, thinking level,
+message count, timestamps, tool names, and token progress. The API deliberately
+does not return full prompts, assistant text, thinking text, tool inputs/results,
+or status summaries. Credential-like topics retain the existing sensitive label.
+
 ## Data semantics
 
 The dashboard reads only `~/.prime/agent/sessions/*.jsonl`. For every assistant

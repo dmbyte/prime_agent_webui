@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 import threading
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -34,6 +34,8 @@ CPU_LOCK = threading.Lock()
 CPU_SAMPLE = None
 MODEL_LOCK = threading.Lock()
 MODEL_CACHE = {"at": 0, "rows": []}
+ACTIVITY_LOCK = threading.Lock()
+ACTIVITY_CACHE = {"at": 0, "tasks": []}
 PRIME_BIN = HOME / ".local/share/prime-agent-node/current/bin"
 PRIME_AGENT = PRIME_BIN / "prime-agent"
 
@@ -279,6 +281,83 @@ def safe_topic(text):
     return value[:96].rstrip(" ,.;:-") + ("…" if len(value) > 96 else "")
 
 
+def background_activity():
+    now = time.monotonic()
+    with ACTIVITY_LOCK:
+        if now - ACTIVITY_CACHE["at"] < 4:
+            return {"tasks": list(ACTIVITY_CACHE["tasks"]), "generatedAt": datetime.now(timezone.utc).isoformat()}
+        tasks = []
+        try:
+            env = os.environ.copy()
+            env["PATH"] = f"{PRIME_BIN}:{env.get('PATH', '')}"
+            result = subprocess.run(
+                [str(PRIME_AGENT), "list", "--all", "--json"], capture_output=True,
+                text=True, timeout=12, check=True, env=env,
+            )
+            raw = result.stdout[result.stdout.find("{"):]
+            sessions = json.loads(raw).get("sessions") or []
+            for session in sessions:
+                if session.get("lifecycle") != "live" or session.get("activity") in {None, "idle"}:
+                    continue
+                session_id = str(session.get("sessionId") or session.get("id") or "")
+                if not re.fullmatch(r"[A-Za-z0-9_-]{8,80}", session_id):
+                    continue
+                model = session.get("model") or {}
+                topic, events = activity_events(session_id)
+                tasks.append({
+                    "id": session_id,
+                    "topic": topic or "Background task",
+                    "activity": str(session.get("activity") or "working"),
+                    "model": f"{model.get('provider', '')}/{model.get('id', '')}".strip("/"),
+                    "thinking": session.get("thinkingLevel"),
+                    "messageCount": int(session.get("messageCount") or 0),
+                    "modified": session.get("modified"),
+                    "events": events,
+                })
+        except (OSError, subprocess.SubprocessError, json.JSONDecodeError, TypeError, ValueError):
+            tasks = list(ACTIVITY_CACHE["tasks"])
+        ACTIVITY_CACHE.update({"at": now, "tasks": tasks})
+        return {"tasks": list(tasks), "generatedAt": datetime.now(timezone.utc).isoformat()}
+
+
+def activity_events(session_id):
+    topic = None
+    events = deque(maxlen=14)
+    previous_status = None
+    try:
+        with (SESSIONS / f"{session_id}.jsonl").open(errors="replace") as handle:
+            for line in handle:
+                try:
+                    entry = json.loads(line)
+                    entry_type = entry.get("type")
+                    message = entry.get("message") or {}
+                    timestamp = message.get("timestamp") or entry.get("timestamp")
+                    if entry_type == "message" and message.get("role") == "user":
+                        if topic is None:
+                            parts = message.get("content") or []
+                            text = " ".join(str(part.get("text", "")) for part in parts if isinstance(part, dict) and part.get("type") == "text")
+                            topic = safe_topic(text)
+                        events.append({"at": timestamp, "kind": "input", "label": "Task input received"})
+                    elif entry_type == "message" and message.get("role") == "assistant":
+                        tools = [str(part.get("name") or part.get("toolName") or "tool") for part in (message.get("content") or []) if isinstance(part, dict) and part.get("type") == "toolCall"]
+                        label = "Running " + ", ".join(tools[:3]) if tools else "Response updated"
+                        events.append({"at": timestamp, "kind": "work", "label": label, "tokens": int((message.get("usage") or {}).get("totalTokens") or 0)})
+                    elif entry_type == "message" and message.get("role") == "toolResult":
+                        events.append({"at": timestamp, "kind": "tool", "label": f"Completed {message.get('toolName') or 'tool'}"})
+                    elif entry_type == "model_change":
+                        events.append({"at": timestamp, "kind": "model", "label": f"Model: {entry.get('provider', '')}/{entry.get('modelId', '')}".strip("/")})
+                    elif entry_type == "agent_status":
+                        status = str((entry.get("status") or {}).get("taskState") or "")
+                        if status and status != previous_status:
+                            events.append({"at": timestamp, "kind": "status", "label": status.replace("_", " ").title()})
+                            previous_status = status
+                except (json.JSONDecodeError, TypeError, ValueError):
+                    continue
+    except OSError:
+        pass
+    return topic, list(events)
+
+
 def cpu_percent():
     global CPU_SAMPLE
     try:
@@ -364,6 +443,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(200, {"settings": settings_view(), "models": model_catalog(), "usage": usage_summary(), "sessions": session_catalog(), "telemetry": telemetry()})
         elif self.path == "/api/telemetry":
             self.send_json(200, {"telemetry": telemetry()})
+        elif self.path == "/api/activity":
+            self.send_json(200, background_activity())
         elif self.path == "/api/health":
             self.send_json(200, {"ok": True})
         else:

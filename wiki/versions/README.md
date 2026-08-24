@@ -6,6 +6,7 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0031](v0031.md) | 2026-08-24 | Added tabbed, resizable background activity overlay |
 | [v0030](v0030.md) | 2026-08-24 | Grouped configured Usage models into collapsible provider roll-ups |
 | [v0029](v0029.md) | 2026-08-24 | Automatically discovered authenticated Prime models for Usage |
 | [v0028](v0028.md) | 2026-08-23 | Configured OpenAI GPT-5.4; billing credits remain required |

@@ -3,6 +3,18 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-24 — v0031 — Add background activity overlay
+
+- Added an activity icon with active-task count and a floating overlay that is
+  draggable, resizable, minimizable, and reopenable.
+- Added one tab per parallel working Prime task and a three-second privacy-safe
+  event feed for status, model, tools, token progress, and timestamps.
+- Excluded prompts, assistant/tool output, thinking text, and secrets from the API.
+- Validation: live API returned one task with 14 sanitized events; browser opened
+  one tab and minimized the window successfully; full Spark validation passed.
+- Rollback: restore v0030 API/HTML/JavaScript and remove `activity.css`.
+- Snapshot: [v0031](versions/v0031.md)
+
 ## 2026-08-24 — v0030 — Group configured Usage models by provider
 
 - Filtered Usage to the configured/authenticated catalog; historical activity for

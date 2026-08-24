@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-24
-Wiki version: `v0030`
+Wiki version: `v0031`
 
 ## Project summary
 
@@ -126,6 +126,11 @@ portfolio evaluation, paper-trading research, and supporting code.
   models are collapsed by default into a provider row whose Today and Last 30
   days figures sum all child models; expanding reveals per-model rows. Providers
   with one configured model remain direct rows.
+- A header activity icon shows the count of working background Prime tasks. It
+  opens a floating, draggable, natively resizable, minimizable overlay. Parallel
+  tasks become tabs; each tab shows model/status/message count and a privacy-safe
+  event timeline (task received, tool running/completed, response update, token
+  count) without full prompts, model output, tool output, or secrets.
 - The Conversations view lists the 40 most recently modified Prime session files.
   Each row shows a sanitized, 96-character maximum topic derived from the first
   user message, then the timestamp of the latest chat, followed by model and opaque
