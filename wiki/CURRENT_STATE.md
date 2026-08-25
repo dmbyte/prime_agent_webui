@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-25
-Wiki version: `v0056`
+Wiki version: `v0057`
 
 ## Project summary
 
@@ -252,9 +252,10 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   PAM was retired: authenticated
   page/token requests returned 200, ttyd accepted `/terminal/ws`, spawned `prime-dgx`, and
   the live browser exposed an active terminal input. No password was handled.
-- The dedicated WebUI credential has not yet been created. Until the owner runs
-  `prime-web-password`, login fails closed with 503. Positive login must then be
-  confirmed by the owner because validation never handles the password.
+- The owner created the dedicated WebUI credential interactively. Its record is
+  mode 0600 inside a mode-0700 directory, the broker reports it configured, and
+  the owner's browser login returned 200. Validation never handled the password
+  or inspected the one-way record contents.
 - Public access is prohibited. The Spark has only RFC1918 address
   `172.16.253.231/24`, routes through `172.16.253.1`, and is behind NAT; the
   observed public address was `47.187.248.92`. No Cloudflare/Tailscale edge

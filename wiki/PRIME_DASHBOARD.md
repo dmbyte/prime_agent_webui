@@ -93,10 +93,11 @@ completed in 2.3 seconds, persisted a conversation, returned the exact response,
 and recorded 6,268 tokens. Model/private-listener/session-broker/HTTPS/header and
 20% memory-gate validation passed.
 
-Positive password entry is intentionally left to the owner. Before initial setup,
-login returns 503; after setup, invalid local-credential login returns 401. The
-private CA must be installed on each client before the browser trusts the
-certificate.
+The owner completed positive password entry: the browser login returned 200 and
+the broker reports the credential configured. Before initial setup, login returns
+503; after setup, invalid local-credential login returns 401. Validation never
+handled the password or read the one-way record. The private CA must be installed
+on each client before the browser trusts the certificate.
 
 The pre-v0056 PAM configuration is preserved root-only at:
 

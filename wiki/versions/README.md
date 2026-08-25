@@ -6,6 +6,7 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0057](v0057.md) | 2026-08-25 | Validated the owner-created dedicated WebUI credential and successful login |
 | [v0056](v0056.md) | 2026-08-25 | Replaced PAM with a dedicated salted-scrypt WebUI credential |
 | [v0055](v0055.md) | 2026-08-25 | Recovered the reviewed authentication stack after broker and PAM drift |
 | [v0054](v0054.md) | 2026-08-25 | Corrected the WebUI static asset installation path |

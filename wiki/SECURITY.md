@@ -95,6 +95,11 @@ keeps the broker unprivileged and fully confined without granting any process
 access to Linux password hashes. The PAM-free broker fails closed with 503 until
 the owner creates the initial credential interactively.
 
+The owner subsequently created the credential interactively. Its file is mode
+0600 under a mode-0700 owner directory, `/auth/status` reports it configured,
+and the owner's browser login returned 200. No password or credential-record
+contents were handled during validation; no Fail2ban source is currently banned.
+
 ## Recovery
 
 Pre-hardening files and checksums are stored root-only at:

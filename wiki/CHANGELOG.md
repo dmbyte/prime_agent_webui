@@ -3,6 +3,15 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-25 — v0057 — Validate the dedicated WebUI credential
+
+- The owner created the separate WebUI password through the no-echo interactive
+  tool; automation did not handle the password or inspect the one-way record.
+- Verified the credential record is mode 0600 inside a mode-0700 owner directory,
+  the broker reports it configured, and the owner's browser login returned 200.
+- Confirmed the auth broker and Nginx are healthy and no source is currently
+  banned; added immutable snapshot [v0057](versions/v0057.md).
+
 ## 2026-08-25 — v0056 — Replace PAM with dedicated local WebUI authentication
 
 - Retired PAM and the Linux account password from the WebUI after systemd's
