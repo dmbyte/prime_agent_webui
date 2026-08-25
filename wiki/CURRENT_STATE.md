@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-25
-Wiki version: `v0062`
+Wiki version: `v0064`
 
 ## Project summary
 
@@ -47,6 +47,11 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   monitor shows CPU/GPU/memory utilization and GPU board power on its first row,
   with CPU/GPU/system temperatures on the second. Its loopback-only API
   runs as `dbyte` under `prime-dashboard-api.service` on port 8765.
+  On desktop, the sidebar divider supports pointer and keyboard resizing from
+  260–700 px, persists the browser-local choice, and resets on double-click. The
+  divider is hidden in the stacked mobile layout.
+  The narrow-sidebar Archived checkbox and conversation contents remain within
+  the sidebar boundary.
 - Static HTML is installed in `/var/www/prime-agent/`; JavaScript and CSS are in
   `/var/www/prime-agent/assets/`. The tracked installer preserves this mapping.
 - vLLM: `0.27.1` ARM64/CUDA 12.9 image, two user services enabled at boot
@@ -94,6 +99,9 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 - The root-only pre-v0062 deletion recovery bundle is
   `/var/backups/prime-delete-v0062-20260825T174100-0500`; it preserves the prior
   API and source/installed JavaScript with checksums.
+- The root-only pre-v0063 sidebar recovery bundle is
+  `/var/backups/prime-sidebar-v0063-20260825T174200-0500`; it preserves the prior
+  source and installed HTML/JavaScript/CSS with checksums.
 
 ## Deployed architecture
 
@@ -253,6 +261,12 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   all configured/discovered providers and writes Prime's native `enabledModels`
   setting. Saves are allowlisted, origin/CSRF checked, atomic, and apply to new
   native tasks and advanced-console sessions.
+- Settings also starts two confirmed, serialized one-shot update services without
+  relaxing the dashboard API's network/home confinement. Prime Agent updates via
+  its bundled Node runtime and `prime-agent@latest`. WebUI updates require the
+  clean known private clone and fast-forward-only pull from `origin/main` HEAD,
+  validate, redeploy, and restart the API. Release selection/version comparison
+  remains a planned replacement for the temporary HEAD policy.
 - The active header's effort selector overrides the default for the next message
   in that conversation. Task and conversation metadata expose model, effort,
   routing mode/reason, and model context for auditability.

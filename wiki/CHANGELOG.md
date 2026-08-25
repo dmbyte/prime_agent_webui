@@ -3,6 +3,30 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-25 — v0064 — Add guarded software updates
+
+- Added confirmed Settings actions and status for updating Prime Agent through
+  its bundled Node/npm runtime and updating WebUI from private GitHub `main` HEAD.
+- Kept the dashboard network-confined; it starts only two named, locked one-shot
+  units. WebUI update requires the exact remote, clean tree, and fast-forward,
+  validates Python, redeploys tracked files, and restarts the API.
+- Fixed the Archived checkbox/label and conversation row overflow at narrow
+  sidebar widths.
+- All 19 local tests and Python/JavaScript/shell syntax checks pass. Added
+  ADR-0044 and immutable snapshot [v0064](versions/v0064.md); release discovery
+  and version comparison remain explicitly planned.
+
+## 2026-08-25 — v0063 — Add a resizable sidebar
+
+- Added a draggable desktop divider with a 260–700 px/65%-viewport envelope,
+  browser-local persistence, and double-click reset to 370 px.
+- Added accessible separator semantics and Left/Right/Home/End keyboard control;
+  retained the existing divider-free stacked mobile layout.
+- All 17 local tests, JavaScript syntax, whitespace checks, installed markers,
+  dashboard health, and private HTTPS behavior pass. Preserved a checksummed
+  root-only rollback bundle and added immutable snapshot
+  [v0063](versions/v0063.md).
+
 ## 2026-08-25 — v0062 — Repair Chats deletion
 
 - Diagnosed the delete conflict from the dashboard audit: Prime labels persisted

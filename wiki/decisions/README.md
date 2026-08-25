@@ -48,3 +48,4 @@ only historical evidence: when a decision changes, mark the old record
 - [ADR-0041: Count only actual login failures for reactive bans](0041-count-only-login-failures-for-bans.md)
 - [ADR-0042: Use a dedicated local WebUI password instead of PAM](0042-dedicated-local-webui-auth.md)
 - [ADR-0043: Route specialist WebUI tasks to Qwen deterministically](0043-deterministic-qwen-specialist-routing.md)
+- [ADR-0044: Use narrow one-shot services for software updates](0044-narrow-update-services.md)

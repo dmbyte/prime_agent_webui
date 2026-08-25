@@ -1,0 +1,10 @@
+[Unit]
+Description=Update Prime WebUI from private GitHub main
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/prime-update/update-webui.sh
+UMask=0077
+Nice=10

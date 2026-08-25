@@ -378,7 +378,40 @@ def admin_status():
         result = subprocess.run(["systemctl", "--user", "is-active", name], capture_output=True, text=True, timeout=4)
         services[name] = result.stdout.strip() or "unknown"
     disk = shutil.disk_usage(legacy.HOME)
-    return {"services": services, "disk": {"total": disk.total, "used": disk.used, "free": disk.free}, "uploads": {"used": legacy.upload_storage_bytes(), "limit": legacy.MAX_UPLOAD_STORAGE_BYTES, "files": len(upload_rows()), "retentionDays": int(metadata().get("retentionDays", 30))}, "tasks": {"running": sum(1 for row in task_snapshot() if row["status"] == "running"), "limit": MAX_NATIVE_TASKS}, "certificate": {"authorityDownload": "/prime-webui-ca.crt", "trustedAfterInstall": True}, "generatedAt": now_iso()}
+    return {"services": services, "updates": update_status(), "disk": {"total": disk.total, "used": disk.used, "free": disk.free}, "uploads": {"used": legacy.upload_storage_bytes(), "limit": legacy.MAX_UPLOAD_STORAGE_BYTES, "files": len(upload_rows()), "retentionDays": int(metadata().get("retentionDays", 30))}, "tasks": {"running": sum(1 for row in task_snapshot() if row["status"] == "running"), "limit": MAX_NATIVE_TASKS}, "certificate": {"authorityDownload": "/prime-webui-ca.crt", "trustedAfterInstall": True}, "generatedAt": now_iso()}
+
+
+def update_status():
+    rows = {}
+    for kind, unit in (("agent", "prime-update-agent.service"), ("webui", "prime-update-webui.service")):
+        result = subprocess.run(
+            ["systemctl", "--user", "show", unit, "--property=ActiveState,SubState,Result,ExecMainStatus"],
+            capture_output=True, text=True, timeout=5,
+        )
+        values = dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
+        rows[kind] = {
+            "active": values.get("ActiveState") in {"active", "activating"},
+            "state": values.get("SubState") or values.get("ActiveState") or "unknown",
+            "result": values.get("Result") or "unknown",
+            "exitCode": int(values.get("ExecMainStatus") or 0),
+        }
+    return rows
+
+
+def start_update(kind, confirmation):
+    units = {"agent": "prime-update-agent.service", "webui": "prime-update-webui.service"}
+    unit = units.get(str(kind))
+    if not unit or confirmation != f"update-{kind}":
+        raise ValueError("Explicit update confirmation is required")
+    status = update_status().get(kind, {})
+    if status.get("active"):
+        raise RuntimeError("That update is already running")
+    subprocess.run(["systemctl", "--user", "reset-failed", unit], capture_output=True, timeout=5, check=False)
+    result = subprocess.run(["systemctl", "--user", "start", "--no-block", unit], capture_output=True, timeout=5)
+    if result.returncode:
+        raise RuntimeError("The update service could not be started")
+    legacy.audit("update_started", kind=kind)
+    return {"started": True, "kind": kind, "unit": unit}
 
 
 def apply_retention(days):
@@ -471,7 +504,7 @@ class Handler(legacy.Handler):
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
-        v2 = {"/api/tasks/start", "/api/tasks/stop", "/api/conversations/update", "/api/conversations/duplicate", "/api/files/delete", "/api/admin/restart", "/api/admin/retention", "/api/files/upload"}
+        v2 = {"/api/tasks/start", "/api/tasks/stop", "/api/conversations/update", "/api/conversations/duplicate", "/api/files/delete", "/api/admin/restart", "/api/admin/retention", "/api/admin/update", "/api/files/upload"}
         if path not in v2:
             if not csrf_ok(self.headers):
                 self.send_json(403, {"error": "CSRF validation failed"})
@@ -523,6 +556,8 @@ class Handler(legacy.Handler):
                 if payload.get("confirm") != "delete-expired-uploads":
                     raise ValueError("Explicit retention confirmation is required")
                 self.send_json(200, apply_retention(payload.get("days")))
+            elif path == "/api/admin/update":
+                self.send_json(202, start_update(str(payload.get("kind", "")), payload.get("confirm")))
         except (ValueError, TypeError, json.JSONDecodeError) as error:
             self.send_json(400, {"error": str(error)})
         except RuntimeError as error:

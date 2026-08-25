@@ -3,6 +3,7 @@ import importlib.util
 import tempfile
 import unittest
 import zipfile
+from unittest import mock
 from pathlib import Path
 
 SPEC = importlib.util.spec_from_file_location("prime_dashboard_api_v2", Path(__file__).with_name("api_v2.py"))
@@ -11,6 +12,15 @@ SPEC.loader.exec_module(api)
 
 
 class DashboardV2Tests(unittest.TestCase):
+    def test_update_requires_exact_confirmation(self):
+        with self.assertRaisesRegex(ValueError, "confirmation"):
+            api.start_update("webui", "yes")
+
+    def test_running_update_cannot_be_started_twice(self):
+        with mock.patch.object(api, "update_status", return_value={"agent": {"active": True}}):
+            with self.assertRaisesRegex(RuntimeError, "already running"):
+                api.start_update("agent", "update-agent")
+
     def settings(self, provider="spark-nemotron", model="nemotron-3.5-lightning", qwen=True):
         enabled = ["spark-nemotron/nemotron-3.5-lightning"]
         if qwen:

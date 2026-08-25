@@ -1,0 +1,10 @@
+[Unit]
+Description=Update Prime Agent package
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/prime-update/update-prime-agent.sh
+UMask=0077
+Nice=10

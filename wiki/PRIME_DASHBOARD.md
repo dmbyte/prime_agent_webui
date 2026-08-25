@@ -44,10 +44,33 @@ The sidebar includes:
   restarts for the terminal and model services, upload-retention control, and the
   private CA download.
 - **Settings:** default model/thinking/context values, searchable configured
-  providers, provider switches, and sign-out.
+  providers, provider switches, guarded Prime Agent/WebUI updates, and sign-out.
 
 The live monitor preserves CPU/GPU/memory/power on its first row and CPU/GPU/
 system temperatures on the second.
+
+On desktop, drag the divider between the sidebar and chat to resize the sidebar.
+The browser remembers widths between 260 and 700 px, constrained to at most 65%
+of the viewport. Double-click resets to 370 px. The focused separator also accepts
+Left/Right in 20 px steps and Home/End for its limits. Mobile keeps the stacked
+layout and hides the divider.
+
+The Archived filter uses a content-width checkbox so its label stays visible at
+the minimum sidebar width; conversation rows are constrained to the same boundary.
+
+## Software updates
+
+Settings has two confirmed update controls. **Update Prime Agent** runs npm
+`prime-agent@latest` inside the existing bundled Node 22 runtime. **Update WebUI
+from GitHub** currently requires a clean `main` checkout at the exact private
+`dmbyte/prime_agent_webui` remote, fetches `origin/main`, permits only a
+fast-forward, compiles the Python entry points, redeploys tracked assets/services,
+and restarts the dashboard API. The UI polls running and last-result status.
+
+The long-running dashboard remains network-denied and home-read-only. It can only
+start the two named update units; those short-lived services hold separate locks
+and have the network/write access needed for npm or Git. Release discovery and
+installed-versus-release comparison are the next planned update-policy revision.
 
 ## Structured tasks
 
@@ -135,6 +158,11 @@ The pre-v0062 deletion API/source and installed UI asset are preserved root-only
 with checksums at:
 
 `/var/backups/prime-delete-v0062-20260825T174100-0500`
+
+The pre-v0063 source and installed sidebar assets are preserved root-only with
+checksums at:
+
+`/var/backups/prime-sidebar-v0063-20260825T174200-0500`
 
 The pre-v0052 root-only recovery bundle is:
 
