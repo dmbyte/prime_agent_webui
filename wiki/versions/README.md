@@ -6,6 +6,7 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0061](v0061.md) | 2026-08-25 | Restored collapsible provider Usage roll-ups with model detail |
 | [v0060](v0060.md) | 2026-08-25 | Added observable deterministic Qwen routing and active effort control |
 | [v0059](v0059.md) | 2026-08-25 | Removed Hermes Agent/WebUI and all identified active artifacts |
 | [v0058](v0058.md) | 2026-08-25 | Inventoried active LAN and loopback browser interfaces |

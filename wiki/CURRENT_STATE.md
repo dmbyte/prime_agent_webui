@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-25
-Wiki version: `v0060`
+Wiki version: `v0061`
 
 ## Project summary
 
@@ -88,6 +88,9 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 - The root-only pre-v0060 routing/UI recovery bundle is
   `/var/backups/prime-routing-v0060-20260825T173500-0500`; it contains the prior
   API, UI, policy, installed web root, and checksums.
+- The root-only pre-v0061 Usage UI recovery bundle is
+  `/var/backups/prime-usage-v0061-20260825T174000-0500`; it preserves both the
+  dashboard source and installed JavaScript/CSS with checksums.
 
 ## Deployed architecture
 
@@ -252,6 +255,8 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   routing mode/reason, and model context for auditability.
 - Usage combines tokens and recorded spend by provider/model in one table, with
   columns for the Spark's current local calendar day and a rolling 30-day window.
+  Every configured provider is collapsed by default with rolled-up tokens/spend;
+  expansion shows its model rows, and expansion state survives periodic refresh.
   Local Spark providers report $0 API spend. Native launches also append a task
   ledger so completion/elapsed/model/usage can be audited independently.
 - Native conversation control uses Prime's supported JSON CLI, not ttyd URL

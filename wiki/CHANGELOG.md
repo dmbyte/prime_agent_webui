@@ -3,6 +3,17 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-25 — v0061 — Restore provider-grouped Usage roll-ups
+
+- Replaced the native UI's regressed flat Usage model list with collapsible
+  groups for every configured provider, including OpenAI and OpenAI Codex.
+- Provider summaries roll up tokens and recorded spend for Today and Last 30
+  days; expansion exposes individual models and remains stable across refreshes.
+- JavaScript syntax, 14 local tests, whitespace checks, deployed asset markers,
+  service health, and private HTTPS authentication behavior pass. Preserved a
+  checksummed root-only rollback bundle and added immutable snapshot
+  [v0061](versions/v0061.md). ADR-0020 remains the governing decision.
+
 ## 2026-08-25 — v0060 — Make routing and active effort observable
 
 - Added an active-conversation header showing provider/model, editable effort,

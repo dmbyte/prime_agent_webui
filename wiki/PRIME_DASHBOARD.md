@@ -28,7 +28,10 @@ The sidebar includes:
   time; new, resume, rename, pin, archive/restore, fork/duplicate, Markdown export,
   recoverable delete, and bulk archive/delete.
 - **Usage:** exact Prime provider/model token and cost windows for today and 30
-  days. A separate append-only native-request ledger records task status, elapsed
+  days. Every configured provider is a collapsible group whose summary rolls up
+  all child-model tokens and spend; expanding it shows model-level values, and
+  open groups stay open across periodic refreshes. A separate append-only
+  native-request ledger records task status, elapsed
   time, model, usage/cost when Prime emits it, and the associated conversation.
 - **Files:** upload progress through HTTPS, size/type/quota metadata, explicit
   prompt selection, safe raster/PDF/text previews, and deletion. ZIP/TAR uploads
@@ -119,6 +122,11 @@ The pre-v0060 API/UI/policy and installed web root are preserved root-only with
 checksums at:
 
 `/var/backups/prime-routing-v0060-20260825T173500-0500`
+
+The pre-v0061 Usage source and installed assets are preserved root-only with
+checksums at:
+
+`/var/backups/prime-usage-v0061-20260825T174000-0500`
 
 The pre-v0052 root-only recovery bundle is:
 
