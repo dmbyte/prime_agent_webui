@@ -26,7 +26,10 @@ The sidebar includes:
 
 - **Chats:** searchable, optionally archived conversations with topic and latest
   time; new, resume, rename, pin, archive/restore, fork/duplicate, Markdown export,
-  recoverable delete, and bulk archive/delete.
+  recoverable delete, and bulk archive/delete. Idle, unattached chats can be
+  deleted even though Prime labels their persistent lifecycle `live`; actual
+  running, streaming, compacting, attached, queued, or unfinished work is blocked.
+  Individual and bulk failures are shown to the operator.
 - **Usage:** exact Prime provider/model token and cost windows for today and 30
   days. Every configured provider is a collapsible group whose summary rolls up
   all child-model tokens and spend; expanding it shows model-level values, and
@@ -127,6 +130,11 @@ The pre-v0061 Usage source and installed assets are preserved root-only with
 checksums at:
 
 `/var/backups/prime-usage-v0061-20260825T174000-0500`
+
+The pre-v0062 deletion API/source and installed UI asset are preserved root-only
+with checksums at:
+
+`/var/backups/prime-delete-v0062-20260825T174100-0500`
 
 The pre-v0052 root-only recovery bundle is:
 

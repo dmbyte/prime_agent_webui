@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-25
-Wiki version: `v0061`
+Wiki version: `v0062`
 
 ## Project summary
 
@@ -91,6 +91,9 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 - The root-only pre-v0061 Usage UI recovery bundle is
   `/var/backups/prime-usage-v0061-20260825T174000-0500`; it preserves both the
   dashboard source and installed JavaScript/CSS with checksums.
+- The root-only pre-v0062 deletion recovery bundle is
+  `/var/backups/prime-delete-v0062-20260825T174100-0500`; it preserves the prior
+  API and source/installed JavaScript with checksums.
 
 ## Deployed architecture
 
@@ -265,7 +268,9 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   time, and redacted downloadable logs are active.
 - Conversation search, rename, pin, archive/restore, duplicate/fork, export,
   recoverable deletion, and bulk archive/delete are available. Prime JSONL remains
-  the transcript source of truth.
+  the transcript source of truth. Deletion permits Prime conversations that are
+  idle and unattached, while actual active/streaming/compacting/queued/unfinished
+  work remains protected. UI failures are reported rather than silently ignored.
 - Files are streamed to private storage with 100 MiB/2 GiB limits, metadata,
   safe previews, explicit prompt selection, deletion, and a confirmed 1–365 day
   retention policy. Unsafe archive paths and links are rejected.

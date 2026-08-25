@@ -3,6 +3,20 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-25 — v0062 — Repair Chats deletion
+
+- Diagnosed the delete conflict from the dashboard audit: Prime labels persisted
+  idle conversations `lifecycle: live`, and the guard incorrectly treated that
+  as active execution.
+- Changed protection to actual activity signals while retaining strict IDs,
+  double-check-before-move, private timestamped recovery storage, and auditing.
+- Made individual failures visible; bulk deletion continues safely and reports
+  failed chats. Deleting the currently viewed chat clears the main view.
+- All 17 local and 14 applicable deployed tests pass. The deployed guard found
+  zero actually active conversations among 30 persisted files without deleting
+  any. Preserved a checksummed root-only rollback bundle, updated ADR-0029, and
+  added immutable snapshot [v0062](versions/v0062.md).
+
 ## 2026-08-25 — v0061 — Restore provider-grouped Usage roll-ups
 
 - Replaced the native UI's regressed flat Usage model list with collapsible

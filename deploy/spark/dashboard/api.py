@@ -362,10 +362,21 @@ def live_session_ids():
         )
         raw = result.stdout[result.stdout.find("{"):]
         rows = json.loads(raw).get("sessions") or []
-        return {
-            str(row.get("sessionId") or row.get("id")) for row in rows
-            if row.get("lifecycle") == "live"
-        }
+        active = set()
+        for row in rows:
+            actions = row.get("sessionActions") or {}
+            is_active = any((
+                bool(row.get("isSessionActive")),
+                bool(row.get("isStreaming")),
+                bool(row.get("isCompacting")),
+                int(row.get("attachedClients") or 0) > 0,
+                int(row.get("unfinishedActionCount") or 0) > 0,
+                int(actions.get("queuedCount") or 0) > 0,
+                str(row.get("activity") or "idle") != "idle",
+            ))
+            if is_active:
+                active.add(str(row.get("sessionId") or row.get("id")))
+        return active
     except (OSError, subprocess.SubprocessError, json.JSONDecodeError, TypeError, ValueError) as error:
         raise RuntimeError("Could not verify whether the conversation is active") from error
 

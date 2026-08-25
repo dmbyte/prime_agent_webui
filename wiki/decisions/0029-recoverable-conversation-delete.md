@@ -13,7 +13,9 @@ reverse and would erase the dashboard's only record of associated usage costs.
 
 Provide **Delete conversation** in a custom context menu. Require browser
 confirmation, origin/header checks, a strict ID, an existing transcript, and proof
-from Prime that the session is not live. Atomically move the JSONL file to a
+from Prime that the session has no actual running activity. Prime's persistent
+`lifecycle: live` label alone is insufficient: block active, streaming,
+compacting, attached, queued, or unfinished work. Atomically move the JSONL file to a
 private mode-0700 `session-trash` directory with a timestamped name. Continue
 including that directory in Usage calculations but exclude it from Conversations.
 
@@ -21,7 +23,7 @@ including that directory in Usage calculations but exclude it from Conversations
 
 Deletion is immediately reflected in the UI yet remains recoverable by moving the
 timestamped file back to `sessions/` under its original `<id>.jsonl` name. Live or
-idle-but-open daemon sessions cannot be deleted until closed. Storage is not
+otherwise busy daemon sessions cannot be deleted until idle. Storage is not
 automatically reclaimed; a future purge policy requires a separate decision.
 
 ## Rollback

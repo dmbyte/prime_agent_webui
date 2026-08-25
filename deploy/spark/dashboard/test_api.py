@@ -4,6 +4,7 @@ import io
 import os
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -17,11 +18,17 @@ class DashboardSecurityTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.original_uploads = api.UPLOADS
         self.original_limit = api.MAX_UPLOAD_STORAGE_BYTES
+        self.original_sessions = api.SESSIONS
+        self.original_trash = api.SESSION_TRASH
         api.UPLOADS = Path(self.temporary.name) / "uploads"
+        api.SESSIONS = Path(self.temporary.name) / "sessions"
+        api.SESSION_TRASH = Path(self.temporary.name) / "trash"
         api.MAX_UPLOAD_STORAGE_BYTES = 32
 
     def tearDown(self):
         api.UPLOADS = self.original_uploads
+        api.SESSIONS = self.original_sessions
+        api.SESSION_TRASH = self.original_trash
         api.MAX_UPLOAD_STORAGE_BYTES = self.original_limit
         self.temporary.cleanup()
 
@@ -46,6 +53,27 @@ class DashboardSecurityTests(unittest.TestCase):
         api.save_upload(io.BytesIO(b"a" * 20), 20, "one.bin")
         with self.assertRaisesRegex(ValueError, "2 GiB limit"):
             api.save_upload(io.BytesIO(b"b" * 20), 20, "two.bin")
+
+    def test_idle_live_conversation_is_not_treated_as_running(self):
+        payload = b'prefix {"sessions":[{"id":"idle-session","lifecycle":"live","activity":"idle","isSessionActive":false,"attachedClients":0,"unfinishedActionCount":0,"sessionActions":{"queuedCount":0}}]}'
+        with mock.patch.object(api.subprocess, "run", return_value=mock.Mock(stdout=payload.decode())):
+            self.assertEqual(api.live_session_ids(), set())
+
+    def test_actual_conversation_activity_blocks_deletion(self):
+        payload = b'prefix {"sessions":[{"id":"busy-session","lifecycle":"live","activity":"idle","isSessionActive":true,"attachedClients":0,"unfinishedActionCount":0,"sessionActions":{"queuedCount":0}}]}'
+        with mock.patch.object(api.subprocess, "run", return_value=mock.Mock(stdout=payload.decode())):
+            self.assertEqual(api.live_session_ids(), {"busy-session"})
+
+    def test_idle_conversation_moves_to_recovery_storage(self):
+        session_id = "idle-session-1234"
+        api.SESSIONS.mkdir()
+        source = api.SESSIONS / f"{session_id}.jsonl"
+        source.write_text('{"type":"session"}\n')
+        with mock.patch.object(api, "live_session_ids", return_value=set()):
+            result = api.delete_conversation(session_id)
+        self.assertFalse(source.exists())
+        self.assertEqual(len(list(api.SESSION_TRASH.glob(f"{session_id}.*.jsonl"))), 1)
+        self.assertTrue(result["recoverable"])
 
 
 if __name__ == "__main__":
