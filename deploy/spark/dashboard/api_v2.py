@@ -26,6 +26,7 @@ SPEC.loader.exec_module(legacy)
 META = legacy.HOME / ".prime/agent/webui-metadata.json"
 LEDGER = legacy.HOME / ".prime/agent/webui-usage-ledger.jsonl"
 TASK_LOGS = legacy.HOME / ".prime/agent/webui-task-logs"
+UPDATE_STATUS_DIR = legacy.HOME / ".prime/agent/update-status"
 MAX_NATIVE_TASKS = 4
 MAX_TASK_SECONDS = 30 * 60
 TASKS = {}
@@ -385,16 +386,18 @@ def update_status():
     rows = {}
     for kind, unit in (("agent", "prime-update-agent.service"), ("webui", "prime-update-webui.service")):
         result = subprocess.run(
-            ["systemctl", "--user", "show", unit, "--property=ActiveState,SubState,Result,ExecMainStatus,ExecMainStartTimestamp"],
+            ["systemctl", "--user", "show", unit, "--property=ActiveState,SubState"],
             capture_output=True, text=True, timeout=5,
         )
         values = dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
+        persisted = legacy.read_json(UPDATE_STATUS_DIR / f"{kind}.json", {})
         rows[kind] = {
             "active": values.get("ActiveState") in {"active", "activating"},
-            "ran": bool(values.get("ExecMainStartTimestamp")),
+            "ran": bool(persisted.get("ran")),
             "state": values.get("SubState") or values.get("ActiveState") or "unknown",
-            "result": values.get("Result") or "unknown",
-            "exitCode": int(values.get("ExecMainStatus") or 0),
+            "result": persisted.get("result") or "unknown",
+            "exitCode": int(persisted.get("exitCode") or 0),
+            "updatedAt": persisted.get("updatedAt"),
         }
     return rows
 
