@@ -10,7 +10,7 @@ RestartSec=3
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
-ReadWritePaths=%h/.prime/agent
+ReadWritePaths=%h/.prime/agent %h/prime-dgx-agent/uploads
 
 [Install]
 WantedBy=default.target

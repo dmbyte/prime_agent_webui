@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-24
-Wiki version: `v0043`
+Wiki version: `v0044`
 
 ## Project summary
 
@@ -169,6 +169,13 @@ portfolio evaluation, paper-trading research, and supporting code.
   recorded tokens and spend remain included in Usage. Each rendered row carries
   its exact full session ID, so selection and deletion target that row directly
   rather than inferring identity from its list position.
+- A paperclip and drag-and-drop tray above the terminal accepts files up to 100
+  MiB each. The loopback API streams them into mode-0700
+  `~/prime-dgx-agent/uploads/YYYY-MM-DD/` folders as mode-0600 files, with a 2
+  GiB total quota, safe stored names, random prefixes, and SHA-256 calculation.
+  The UI exposes **Copy path** so the operator can explicitly reference a file in
+  the intended prompt. Uploading alone never sends an agent/session command or
+  interrupts running work.
 
 ## Known gaps
 

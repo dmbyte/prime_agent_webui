@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 import json
 import glob
+import hashlib
 import os
 import re
 import subprocess
 import tempfile
 import threading
 import time
+import urllib.parse
+import uuid
 from collections import defaultdict, deque
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -16,6 +19,7 @@ HOME = Path.home()
 SETTINGS = HOME / ".prime/agent/settings.json"
 SESSIONS = HOME / ".prime/agent/sessions"
 SESSION_TRASH = HOME / ".prime/agent/session-trash"
+UPLOADS = HOME / "prime-dgx-agent/uploads"
 MODEL_CONFIG = HOME / ".prime/agent/models.json"
 OPENAI_ENV = HOME / ".config/prime-agent/openai.env"
 PLANNED_MODELS = [{"provider": "openai", "model": "gpt-5.4"}]
@@ -39,6 +43,8 @@ ACTIVITY_LOCK = threading.Lock()
 ACTIVITY_CACHE = {"at": 0, "tasks": []}
 PRIME_BIN = HOME / ".local/share/prime-agent-node/current/bin"
 PRIME_AGENT = PRIME_BIN / "prime-agent"
+MAX_UPLOAD_BYTES = 100 * 1024 * 1024
+MAX_UPLOAD_STORAGE_BYTES = 2 * 1024 * 1024 * 1024
 
 
 def read_json(path, default):
@@ -343,6 +349,71 @@ def delete_conversation(session_id):
     return {"deleted": True, "recoverable": True, "id": session_id}
 
 
+def upload_storage_bytes():
+    total = 0
+    try:
+        for path in UPLOADS.rglob("*"):
+            if path.is_file():
+                total += path.stat().st_size
+    except OSError:
+        pass
+    return total
+
+
+def safe_upload_name(value):
+    name = Path(urllib.parse.unquote(value)).name
+    name = re.sub(r"[\x00-\x1f\x7f/\\]+", "_", name).strip(" .")
+    name = re.sub(r"\s+", " ", name)
+    if not name:
+        name = "upload"
+    suffix = Path(name).suffix[:20]
+    stem_limit = max(1, 120 - len(suffix))
+    return f"{Path(name).stem[:stem_limit]}{suffix}"
+
+
+def save_upload(stream, content_length, encoded_name):
+    if content_length < 1:
+        raise ValueError("The selected file is empty")
+    if content_length > MAX_UPLOAD_BYTES:
+        raise ValueError("Files must be 100 MiB or smaller")
+    if upload_storage_bytes() + content_length > MAX_UPLOAD_STORAGE_BYTES:
+        raise ValueError("The private upload area has reached its 2 GiB limit")
+    filename = safe_upload_name(encoded_name)
+    day = datetime.now().astimezone().strftime("%Y-%m-%d")
+    directory = UPLOADS / day
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(UPLOADS, 0o700)
+    os.chmod(directory, 0o700)
+    fd, temporary = tempfile.mkstemp(prefix=".upload-", dir=directory)
+    digest = hashlib.sha256()
+    remaining = content_length
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "wb") as handle:
+            while remaining:
+                chunk = stream.read(min(1024 * 1024, remaining))
+                if not chunk:
+                    raise ValueError("Upload ended before the complete file arrived")
+                handle.write(chunk)
+                digest.update(chunk)
+                remaining -= len(chunk)
+            handle.flush()
+            os.fsync(handle.fileno())
+        target = directory / f"{uuid.uuid4().hex[:12]}-{filename}"
+        os.replace(temporary, target)
+        return {
+            "name": filename,
+            "path": str(target),
+            "sizeBytes": content_length,
+            "sha256": digest.hexdigest(),
+        }
+    finally:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+
+
 def background_activity():
     now = time.monotonic()
     with ACTIVITY_LOCK:
@@ -535,7 +606,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(404, {"error": "Not found"})
 
     def do_POST(self):
-        if self.path not in {"/api/settings", "/api/activity/stop", "/api/conversations/delete"}:
+        allowed = {"/api/settings", "/api/activity/stop", "/api/conversations/delete", "/api/files/upload"}
+        if self.path not in allowed:
             self.send_json(404, {"error": "Not found"})
             return
         if self.headers.get("Origin") not in ALLOWED_ORIGINS or self.headers.get("X-Prime-Dashboard") != "1":
@@ -543,6 +615,12 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             length = int(self.headers.get("Content-Length", "0"))
+            if self.path == "/api/files/upload":
+                encoded_name = self.headers.get("X-Prime-Filename", "")
+                if not encoded_name or len(encoded_name) > 512:
+                    raise ValueError("A valid filename is required")
+                self.send_json(201, {"file": save_upload(self.rfile, length, encoded_name)})
+                return
             if length > 8192:
                 raise ValueError("Request too large")
             payload = json.loads(self.rfile.read(length))

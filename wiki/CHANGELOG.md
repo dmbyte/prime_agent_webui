@@ -3,6 +3,19 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-24 — v0044 — Private dashboard file uploads
+
+- Added a paperclip/file picker and drag-and-drop tray above the conversation.
+- Streamed uploads into private mode-0700 storage with mode-0600 files, safe
+  stored names, random prefixes, SHA-256, a 100 MiB per-file cap, and 2 GiB quota.
+- Added **Copy path** for explicit use in prompts; uploading sends no attach,
+  resume, or agent message and cannot interrupt a running task.
+- Preserved PAM, private-network ACLs, origin checks, and loopback API binding.
+- Validated a live upload's size, checksum, and permissions; rejected an invalid
+  origin, confirmed the PAM challenge and loaded Nginx streaming configuration,
+  removed the test file, and passed the full Prime gate.
+- Added ADR-0032 and snapshot [v0044](versions/v0044.md).
+
 ## 2026-08-24 — v0043 — Raise Nemotron context with 20% RAM reserve
 
 - Raised Nemotron's served and advertised context from 65,536 to 81,920 tokens.

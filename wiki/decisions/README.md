@@ -36,3 +36,4 @@ only historical evidence: when a decision changes, mark the old record
 - [ADR-0029: Use recoverable conversation deletion](0029-recoverable-conversation-delete.md)
 - [ADR-0030: Wait for the private address before starting Nginx](0030-wait-for-nginx-private-address.md)
 - [ADR-0031: Increase Nemotron context with a fixed KV cache](0031-increase-nemotron-context-with-fixed-kv-cache.md)
+- [ADR-0032: Store dashboard uploads privately without implicit agent messages](0032-private-dashboard-file-uploads.md)

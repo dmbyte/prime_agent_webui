@@ -121,6 +121,9 @@ reverse proxy it compared the external HTTPS origin with its internal loopback
 host and rejected every valid WebSocket. End-to-end validation observed a ttyd
 WebSocket connection, a spawned Prime process, and an active browser terminal.
 Dashboard controls and accounting semantics are detailed in `PRIME_DASHBOARD.md`.
+The API proxy permits request bodies up to 100 MiB and disables request buffering
+for streamed file uploads; all other upload limits and private storage rules are
+enforced by the loopback dashboard API.
 
 ## Remaining commissioning work
 

@@ -113,6 +113,21 @@ syntax rule and names an existing session. It forwards that as Prime's native
 with exit 64 and never falls through to a new Prime conversation. The current UI
 never constructs either form.
 
+## File uploads
+
+The workspace upload tray accepts the browser file picker or drag and drop. Each
+file is streamed through PAM-authenticated private HTTPS to
+`~/prime-dgx-agent/uploads/YYYY-MM-DD/`; the API never buffers a whole file in
+memory. Files are limited to 100 MiB individually and 2 GiB in aggregate. Upload
+directories are mode 0700 and files mode 0600. Supplied names are reduced to a
+safe basename and stored with a random prefix; SHA-256 is computed during upload.
+
+After upload, **Copy path** places the exact local Spark path on the clipboard.
+Paste that path into the desired Prime prompt. This explicit step is deliberate:
+an upload does not generate an attach command, send a message, select a session,
+or steer/interrupt a running agent. Files persist until a separately reviewed
+retention or deletion policy is implemented.
+
 ## Architecture and security
 
 - Static assets: `/var/www/prime-agent/`
@@ -124,7 +139,8 @@ never constructs either form.
   `prime-web.service`; never stored in deployment source, dashboard responses, or wiki
 
 The API runs as `dbyte`, has `NoNewPrivileges`, a private temporary directory,
-read-only system protection, and write access under `~/.prime/agent`. Settings
+read-only system protection, and narrowly scoped write access under
+`~/.prime/agent` plus `~/prime-dgx-agent/uploads`. Settings
 POSTs require an approved HTTPS Origin and a dashboard-specific header; only
 known provider/model pairs, thinking levels, and bounded compaction values are
 accepted. Settings are atomically written mode 0600. Nginx protects assets, API,
@@ -132,7 +148,10 @@ and terminal uniformly.
 
 ## Validation and rollback
 
-API health/state/settings passed. The current catalog parsed 36 session files.
+API health/state/settings passed. A live upload matched its source size and
+SHA-256 and had the documented 0700/0600 permissions. An invalid origin returned
+403, unauthenticated HTTPS returned 401, Nginx loaded the 100 MiB streaming
+directives, and the temporary validation file was removed. The current catalog parsed 36 session files.
 Browser verification showed Conversations as the active default, a New conversation button,
 metadata-only rows, all seven live telemetry readings, the remaining tabs, and an
 active terminal. Click-to-resume returned an active terminal without emitting its
