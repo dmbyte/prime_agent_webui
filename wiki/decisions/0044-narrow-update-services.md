@@ -29,3 +29,5 @@ The update jobs have network and home-write access, but the long-running WebUI
 API does not. Updates are explicit, serialized by per-update locks, auditable,
 and status-visible. Package or upstream incompatibility remains possible, so
 pre-change root-only snapshots and repository history remain the recovery path.
+Each updater atomically writes an owner-only result record so Settings can retain
+never-run/running/success/failure truth across service reloads and reboots.

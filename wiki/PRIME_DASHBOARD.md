@@ -71,6 +71,9 @@ The long-running dashboard remains network-denied and home-read-only. It can onl
 start the two named update units; those short-lived services hold separate locks
 and have the network/write access needed for npm or Git. Release discovery and
 installed-versus-release comparison are the next planned update-policy revision.
+Each job writes an atomic mode-0600 result beneath
+`~/.prime/agent/update-status/`, allowing Settings to distinguish never-run from
+success/failure across service reloads and reboots.
 The deployed WebUI unit and authenticated-control API path were each exercised
 successfully against GitHub HEAD. The Prime updater was not run during setup, so
 Prime remains at 0.8.0 until the owner selects its button.

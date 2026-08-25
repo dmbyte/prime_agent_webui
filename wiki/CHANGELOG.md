@@ -18,6 +18,9 @@ snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 - Exercised both the WebUI one-shot directly and the real dashboard update API;
   both reached private GitHub HEAD, redeployed, restarted cleanly, and reported
   success. Sixteen applicable deployed tests pass. Prime Agent update was not run.
+- Added atomic owner-only update result records after systemd proved it discards
+  completed one-shot timestamps during unit reload. The deployed WebUI record
+  reports success; the untouched Prime updater correctly reports never run.
 
 ## 2026-08-25 — v0063 — Add a resizable sidebar
 
