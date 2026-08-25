@@ -3,6 +3,29 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-25 — v0059 — Remove Hermes completely from active service
+
+- Disabled and removed Hermes WebUI and gateway services, the 22 GB runtime/data
+  tree, launcher, Hermes model/package caches, and identified Hermes-named
+  project/setup paths.
+- Removed disabled legacy SGLang/TRT-LLM units and their configuration, plus the
+  unused 25.5 GB SGLang image. About 44 GB of filesystem use was reclaimed.
+- Verified no active Hermes service, process, listener, container/image, cache,
+  or installation path remains; port 8787 is closed. Prime, its WebUI, and both
+  vLLM endpoints remain healthy.
+- Preserved the previously created root-only WebUI recovery copy and historical
+  baseline/wiki records; added immutable snapshot [v0059](versions/v0059.md).
+
+## 2026-08-25 — v0058 — Inventory running browser interfaces
+
+- Enumerated live TCP listeners, system/user services, containers, Nginx routes,
+  HTTP responses, page titles, and process command lines.
+- Verified Prime is the only LAN/VPN-reachable WebUI. Hermes, NVIDIA DGX
+  Dashboard, and CUPS are separate loopback-only interfaces; ttyd is an
+  authenticated embedded Prime component.
+- Distinguished the auth/dashboard/vLLM APIs and Prime kernel-worker ports from
+  browser interfaces; added immutable snapshot [v0058](versions/v0058.md).
+
 ## 2026-08-25 — v0057 — Validate the dedicated WebUI credential
 
 - The owner created the separate WebUI password through the no-echo interactive

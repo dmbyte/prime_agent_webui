@@ -11,7 +11,7 @@ new CIDR firewall policy, so UFW remains inactive and no host allowlist was
 introduced. Router and perimeter port forwarding must remain disabled.
 
 Only SSH (22) and Prime HTTPS (8443) listen beyond loopback. ttyd (7681), the
-local session broker (8764), dashboard API (8765), Hermes WebUI (8787), Nemotron (30000), and Qwen (30001)
+local session broker (8764), dashboard API (8765), Nemotron (30000), and Qwen (30001)
 are loopback-only. The default HTTP site and port 80 are disabled. The former
 NFS home export, NFS server, and rpcbind listeners are disabled.
 
@@ -99,6 +99,14 @@ The owner subsequently created the credential interactively. Its file is mode
 0600 under a mode-0700 owner directory, `/auth/status` reports it configured,
 and the owner's browser login returned 200. No password or credential-record
 contents were handled during validation; no Fail2ban source is currently banned.
+
+Hermes Agent and WebUI were later removed completely from the active system:
+gateway/WebUI services, runtime/data, launchers, two disabled legacy model units,
+the 25.5 GB SGLang image, Hermes model/package caches, and identified Hermes-
+named project/setup paths. Port 8787 is closed and no active Hermes service,
+process, image, listener, cache, or installation path remains. Prime and both
+commissioned vLLM endpoints remained healthy. The root-only WebUI recovery copy
+and older baseline/history records remain protected rollback evidence.
 
 ## Recovery
 

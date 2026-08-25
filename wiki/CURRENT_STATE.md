@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-25
-Wiki version: `v0057`
+Wiki version: `v0059`
 
 ## Project summary
 
@@ -47,8 +47,25 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 - Static HTML is installed in `/var/www/prime-agent/`; JavaScript and CSS are in
   `/var/www/prime-agent/assets/`. The tracked installer preserves this mapping.
 - vLLM: `0.27.1` ARM64/CUDA 12.9 image, two user services enabled at boot
-- Hermes WebUI remains installed and active but is not the orchestration core.
-  It is now bound to `127.0.0.1:8787`.
+- Hermes Agent and Hermes WebUI are no longer installed. The gateway, WebUI,
+  runtime/data tree, launchers, legacy model units, SGLang image/directory,
+  Hermes model/package caches, and identified Hermes-named project/setup paths
+  were removed. Port 8787 is closed.
+
+## Running Web interfaces
+
+- Prime WebUI is the only browser interface reachable from the LAN/VPN, through
+  private HTTPS on `172.16.253.231:8443`.
+- NVIDIA DGX Dashboard is active on loopback-only `127.0.0.1:11000`; its root
+  page identifies itself as `DGX Dashboard`.
+- CUPS provides its standard printer-administration UI on loopback-only
+  `127.0.0.1:631`.
+- ttyd serves Prime's Advanced console on loopback-only `127.0.0.1:7681` and is
+  exposed only as the authenticated `/terminal/` component of Prime WebUI, not
+  as a separate LAN listener.
+- Ports 8764/8765 and 30000/30001 are authentication/dashboard/model APIs rather
+  than independent WebUIs. The remaining dynamic Python ports belong to Prime
+  kernel workers, not browser interfaces.
 
 ## Pre-change recovery state
 
@@ -83,9 +100,8 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   the dashboard and wiki never receive its value. Authentication/configuration
   succeeded, but the first request was refused because the API account has no
   credits remaining. GPT-5.6 Sol remains a separate `openai-codex`/ChatGPT route.
-- Hermes Agent is optional as an outer messaging/personal-assistant gateway when
-  its channels and integrations are valuable; it is not the source of truth or
-  autonomous decision authority.
+- Hermes is not installed. Historical framework analysis still describes it as
+  an alternative gateway, but it has no current runtime role.
 
 ## Domain boundaries
 
@@ -106,7 +122,7 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 - After the 81,920-token Nemotron warm-up and tests, Linux reported 39.1 GiB
   available memory (32.15%). The validation gate now requires at least 20% of
   usable RAM, about 24.3 GiB on this Spark.
-- Both inference ports and Hermes WebUI bind only to `127.0.0.1`.
+- Both inference ports bind only to `127.0.0.1`.
 - NVFP4 is the checkpoint format. Nemotron's published GB10 recipe uses W4A16
   Marlin rather than native FP4 tensor-core execution.
 
@@ -114,7 +130,7 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 
 - Nginx is the only Prime browser listener available to the LAN, on the explicit
   private address and port 8443. Port 80 and the default site are disabled.
-  ttyd, the dashboard API, Hermes WebUI, and both inference engines bind only to
+  ttyd, the dashboard API, and both inference engines bind only to
   loopback. SSH remains available on port 22.
 - The existing Nginx private-source allow rules remain. Per owner direction, no
   host-level CIDR firewall policy was added; UFW remains inactive.

@@ -6,6 +6,8 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0059](v0059.md) | 2026-08-25 | Removed Hermes Agent/WebUI and all identified active artifacts |
+| [v0058](v0058.md) | 2026-08-25 | Inventoried active LAN and loopback browser interfaces |
 | [v0057](v0057.md) | 2026-08-25 | Validated the owner-created dedicated WebUI credential and successful login |
 | [v0056](v0056.md) | 2026-08-25 | Replaced PAM with a dedicated salted-scrypt WebUI credential |
 | [v0055](v0055.md) | 2026-08-25 | Recovered the reviewed authentication stack after broker and PAM drift |

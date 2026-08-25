@@ -9,7 +9,8 @@ WebUI configuration:
   `prime-web-password`.
 - The distribution Nginx default site is disabled; no plaintext port 80 listener
   is permitted.
-- Hermes WebUI is retained but its systemd override binds it to loopback only.
+- Hermes Agent, its WebUI, gateway, legacy model services, caches, and active
+  installation data are removed.
 - The unused `/home/dbyte` NFS export is disabled, along with NFS server and
   rpcbind activation. The previous export configuration is retained only in the
   root-only rollback bundle.
