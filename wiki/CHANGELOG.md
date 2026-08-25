@@ -12,6 +12,9 @@ snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 - Added mismatch deletion and active-alias regressions. All 21 local tests and
   syntax/whitespace checks pass. Preserved a checksummed root-only rollback bundle,
   updated ADR-0029, and added immutable snapshot [v0065](versions/v0065.md).
+- The GitHub HEAD updater deployed v0065 successfully. All 22 visible Spark rows,
+  including nine mismatches, resolved without deleting user conversations; 18
+  applicable deployed tests and all dashboard/model services passed.
 
 ## 2026-08-25 — v0064 — Add guarded software updates
 

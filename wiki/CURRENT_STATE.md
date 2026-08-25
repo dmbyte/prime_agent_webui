@@ -299,6 +299,8 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   work remains protected. UI failures are reported rather than silently ignored.
   Storage operations resolve both the transcript filename ID and Prime's internal
   session ID; 9 of 30 files had differing values when this was deployed.
+  Deployed validation resolved all 22 visible catalog rows, including all nine
+  mismatches, without deleting user data; 18 applicable deployed tests passed.
 - Files are streamed to private storage with 100 MiB/2 GiB limits, metadata,
   safe previews, explicit prompt selection, deletion, and a confirmed 1–365 day
   retention policy. Unsafe archive paths and links are rejected.

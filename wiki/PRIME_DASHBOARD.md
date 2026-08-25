@@ -33,6 +33,8 @@ The sidebar includes:
   Prime transcript filenames and internal session IDs can differ; opening,
   export, active-work protection, and recoverable deletion resolve either alias
   while recovery retains the real filename.
+  Deployment validation resolved all 22 visible rows (nine mismatches) without
+  deleting user conversations.
 - **Usage:** exact Prime provider/model token and cost windows for today and 30
   days. Every configured provider is a collapsible group whose summary rolls up
   all child-model tokens and spend; expanding it shows model-level values, and
