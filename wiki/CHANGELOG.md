@@ -3,6 +3,111 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-25 — v0051 — Harden Prime without CIDR firewall changes
+
+- Created a checksummed, root-only pre-hardening recovery bundle at
+  `/var/backups/prime-security-20260825T151200-0500`.
+- Restricted PAM to `prime-web`, added Nginx throttling/security headers and
+  fail2ban, and retained existing Nginx source rules without adding UFW or a new
+  CIDR firewall policy.
+- Disabled the default HTTP site, NFS export, NFS/rpcbind services, and wildcard
+  Hermes listener; verified all internal Prime services are loopback-only.
+- Bounded API concurrency and request types; corrected upload quota/deletion
+  races, validation, malformed-session parsing, audit logging, and model IDs.
+- Added compatible systemd confinement and local security regression checks. An
+  initially incompatible ttyd address-family restriction caused a wildcard bind;
+  it was removed and the restored loopback bind was verified.
+- Backed up and redacted one transcript containing two credential-shaped OpenAI
+  key occurrences; no matching active/trash session files remain. External key
+  revocation is still required if that key is active.
+- Installed all 19 pending security updates. Application tests, service checks,
+  listener checks, headers, fail2ban, NFS shutdown, and the dual-model validation
+  gate passed.
+- Added [security posture](SECURITY.md), ADR-0039, and immutable snapshot
+  [v0051](versions/v0051.md).
+
+## 2026-08-24 — v0050 — Adapt supplied v14 controls and cooling
+
+- Inspected the supplied lower, upper, button, and spacer STL reference meshes.
+- Rebuilt the actuator around the reference 10.6 x 8.3 x 5.6 mm envelope and put
+  the adjacent LED window through the button face.
+- Removed the microSD access cutout at the owner's request.
+- Replaced the former vent fields with long floor slots, a honeycomb lid, and
+  narrow vertical exhausts around all four upper walls.
+- Retained the iUniker-specific case envelope, hardware stack, port bays,
+  fasteners, and PETG clearances.
+- Regenerated all outputs and passed the installed X2D/PETG slice check with no
+  supports, warnings, or filament changes; estimated plate time is 2 h 41 m 9 s.
+- Added ADR-0038 and immutable snapshot [v0050](versions/v0050.md).
+
+## 2026-08-24 — v0049 — Correct the Pi 5 native-control end
+
+- Applied the owner's correction that the native button is on the short microSD
+  end, near the USB-C corner, rather than near the middle of the connector side.
+- Moved the captive actuator opening to that end and added a 2.9 mm sight hole
+  for the immediately adjacent bi-colour status LED.
+- Exposed the button Y, LED Y, and common Z positions as fit parameters and added
+  them to the generated validation report.
+- Regenerated the STL, GLB, PNG, and validation outputs.
+- Passed the installed X2D/PETG slice check with no supports, warnings, or
+  filament changes; estimated three-part plate time is 2 h 29 m 48 s.
+- Added ADR-0037 and immutable snapshot [v0049](versions/v0049.md).
+
+## 2026-08-24 — v0048 — Encode photographed INV001 stack assumptions
+
+- Reviewed owner-supplied photographs of the installed iUniker INV001 HAT and
+  brass spacer.
+- Retained the 85 x 56.5 mm plan envelope and existing compact shell; the photos
+  support rather than contradict those dimensions.
+- Replaced the opaque vertical allowance with an explicit nominal 16 mm spacer,
+  1.6 mm HAT PCB, and 7.4 mm topside component/wiring/air allowance.
+- Added the stack values, 8 mm rim air gap, and photographic evidence limitation
+  to generated validation output and case documentation.
+- Regenerated all outputs and passed the installed X2D/PETG slice check with no
+  supports, warnings, or filament changes; estimated plate time is 2 h 29 m 45 s.
+- Added ADR-0036 and immutable snapshot [v0048](versions/v0048.md).
+
+## 2026-08-24 — v0047 — Correct INV001 length and compact the case
+
+- Applied the owner's confirmation that the INV001 is the same 85 mm length as
+  Raspberry Pi 5 instead of the earlier conservative 90 mm assumption.
+- Reduced the internal length from 102 to 95 mm and the external length from 107.6
+  to 100.6 mm while retaining connector clearance and ventilation.
+- Moved the lid towers outward to clear the now-centered Pi/HAT corners and nearby
+  mounting standoffs.
+- Regenerated all outputs; the three STLs remain one-body, watertight, winding-
+  consistent, and positive-volume.
+- Passed the complete X2D/PETG slice again with no supports, changes, or warnings;
+  the compact plate estimate is 2 h 29 m 46 s.
+- Added ADR-0035 and snapshot [v0047](versions/v0047.md).
+
+## 2026-08-24 — v0046 — Tune the Pi enclosure for X2D PETG Basic
+
+- Tuned walls, sliding clearance, and M3 pilots for a stock 0.4 mm X2D nozzle and
+  Bambu PETG Basic.
+- Split the 54 mm USB/Ethernet opening into three connector bays, preserving ribs
+  and limiting the longest wall bridge to less than 17 mm for support-free PETG.
+- Added an X2D-specific Bambu Studio setup, plate orientation, fit-coupon, and
+  post-processing guide using the built-in material preset.
+- Regenerated the STL, GLB, PNG, and validation outputs; all three printable parts
+  remain single-body, watertight, winding-consistent, and positive-volume.
+- Resolved Bambu's bundled profile inheritance and passed an actual Bambu Studio
+  02.08.02.61 slice with the X2D/PETG profiles, left/main nozzle only, no support,
+  no warnings, and no retained printer G-code.
+- Added ADR-0034 and snapshot [v0046](versions/v0046.md).
+
+## 2026-08-24 — v0045 — Add vented Pi 5 + iUniker NVMe case
+
+- Added a parametric Raspberry Pi 5 enclosure for the iUniker INV001 M.2 HAT+
+  with dense bottom, lid, and rear airflow paths.
+- Added primary connector openings, recessed M2.5 stack mounts, an M3-secured lid,
+  and a no-wiring printed actuator for the Pi 5 native power button.
+- Exported base, lid, and button STLs plus colored GLB and PNG previews.
+- Verified all three printable meshes are single-body, watertight,
+  winding-consistent, and positive-volume.
+- Documented the conservative unpublished-HAT envelope and required physical fit
+  check before final printing; added ADR-0033 and snapshot [v0045](versions/v0045.md).
+
 ## 2026-08-24 — v0044 — Private dashboard file uploads
 
 - Added a paperclip/file picker and drag-and-drop tray above the conversation.

@@ -6,6 +6,13 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0051](v0051.md) | 2026-08-25 | Hardened Prime without adding a CIDR firewall policy |
+| [v0050](v0050.md) | 2026-08-24 | Adapted v14 button/light geometry and perimeter cooling |
+| [v0049](v0049.md) | 2026-08-24 | Moved the native button and LED opening to the microSD end |
+| [v0048](v0048.md) | 2026-08-24 | Encoded the photo-supported nominal 16 mm INV001 stack |
+| [v0047](v0047.md) | 2026-08-24 | Corrected the INV001 to 85 mm and compacted the enclosure |
+| [v0046](v0046.md) | 2026-08-24 | Tuned the Pi enclosure for X2D and Bambu PETG Basic |
+| [v0045](v0045.md) | 2026-08-24 | Added a vented, parametric Pi 5 + iUniker INV001 printable case |
 | [v0044](v0044.md) | 2026-08-24 | Added private, bounded file uploads to the conversation workspace |
 | [v0043](v0043.md) | 2026-08-24 | Increased Nemotron context to 81,920 tokens without enlarging its KV cache |
 | [v0042](v0042.md) | 2026-08-24 | Made private dashboard startup tolerate delayed LAN address assignment |

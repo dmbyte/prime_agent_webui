@@ -4,13 +4,24 @@ After=network.target
 
 [Service]
 Type=simple
+Environment=PRIME_OPENAI_CONFIGURED=1
 ExecStart=/usr/bin/python3 %h/prime-dgx-dashboard/api.py
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
+ProtectHome=read-only
 ReadWritePaths=%h/.prime/agent %h/prime-dgx-agent/uploads
+InaccessiblePaths=%h/.config/prime-agent/openai.env
+UMask=0077
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+IPAddressDeny=any
+IPAddressAllow=localhost
 
 [Install]
 WantedBy=default.target

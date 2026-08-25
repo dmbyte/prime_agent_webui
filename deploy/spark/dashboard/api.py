@@ -4,7 +4,9 @@ import glob
 import hashlib
 import os
 import re
+import socket
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -41,10 +43,19 @@ MODEL_LOCK = threading.Lock()
 MODEL_CACHE = {"at": 0, "rows": []}
 ACTIVITY_LOCK = threading.Lock()
 ACTIVITY_CACHE = {"at": 0, "tasks": []}
+UPLOAD_LOCK = threading.Lock()
+DELETE_LOCK = threading.Lock()
 PRIME_BIN = HOME / ".local/share/prime-agent-node/current/bin"
 PRIME_AGENT = PRIME_BIN / "prime-agent"
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 MAX_UPLOAD_STORAGE_BYTES = 2 * 1024 * 1024 * 1024
+MAX_API_THREADS = 16
+SOCKET_TIMEOUT_SECONDS = 120
+
+
+def audit(event, **fields):
+    record = {"event": event, "at": datetime.now(timezone.utc).isoformat(), **fields}
+    print(json.dumps(record, separators=(",", ":"), default=str), file=sys.stderr, flush=True)
 
 
 def read_json(path, default):
@@ -138,10 +149,7 @@ def discovered_prime_models():
 
 
 def openai_env_configured():
-    try:
-        return any(line.startswith("OPENAI_API_KEY=") and len(line.partition("=")[2].strip()) >= 20 for line in OPENAI_ENV.read_text().splitlines())
-    except OSError:
-        return False
+    return os.environ.get("PRIME_OPENAI_CONFIGURED") == "1"
 
 
 def save_settings(payload):
@@ -270,7 +278,10 @@ def session_catalog():
             last_chat = None
             with path.open(errors="replace") as handle:
                 for line in handle:
-                    entry = json.loads(line)
+                    try:
+                        entry = json.loads(line)
+                    except (json.JSONDecodeError, TypeError, ValueError):
+                        continue
                     if entry.get("type") == "session":
                         session_id = str(entry.get("id") or session_id)
                         created = entry.get("timestamp")
@@ -336,16 +347,21 @@ def live_session_ids():
 def delete_conversation(session_id):
     if not re.fullmatch(r"[A-Za-z0-9_-]{8,80}", session_id):
         raise ValueError("Invalid conversation identifier")
-    if session_id in live_session_ids():
-        raise RuntimeError("Stop and close the active conversation before deleting it")
-    source = SESSIONS / f"{session_id}.jsonl"
-    if not source.is_file():
-        raise ValueError("Conversation no longer exists")
-    SESSION_TRASH.mkdir(mode=0o700, parents=True, exist_ok=True)
-    os.chmod(SESSION_TRASH, 0o700)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-    target = SESSION_TRASH / f"{session_id}.{stamp}.jsonl"
-    os.replace(source, target)
+    with DELETE_LOCK:
+        if session_id in live_session_ids():
+            raise RuntimeError("Stop and close the active conversation before deleting it")
+        source = SESSIONS / f"{session_id}.jsonl"
+        if not source.is_file():
+            raise ValueError("Conversation no longer exists")
+        # Recheck immediately before the atomic move to reduce the resume/delete race.
+        if session_id in live_session_ids():
+            raise RuntimeError("Conversation became active; deletion was cancelled")
+        SESSION_TRASH.mkdir(mode=0o700, parents=True, exist_ok=True)
+        os.chmod(SESSION_TRASH, 0o700)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        target = SESSION_TRASH / f"{session_id}.{stamp}.jsonl"
+        os.replace(source, target)
+    audit("conversation_deleted", session=session_id)
     return {"deleted": True, "recoverable": True, "id": session_id}
 
 
@@ -367,11 +383,13 @@ def safe_upload_name(value):
     if not name:
         name = "upload"
     suffix = Path(name).suffix[:20]
-    stem_limit = max(1, 120 - len(suffix))
-    return f"{Path(name).stem[:stem_limit]}{suffix}"
+    stem = Path(name).stem[: max(1, 120 - len(suffix))]
+    while len(f"{stem}{suffix}".encode("utf-8")) > 180 and len(stem) > 1:
+        stem = stem[:-1]
+    return f"{stem}{suffix}"
 
 
-def save_upload(stream, content_length, encoded_name):
+def _save_upload_locked(stream, content_length, encoded_name):
     if content_length < 1:
         raise ValueError("The selected file is empty")
     if content_length > MAX_UPLOAD_BYTES:
@@ -412,6 +430,15 @@ def save_upload(stream, content_length, encoded_name):
             os.unlink(temporary)
         except FileNotFoundError:
             pass
+
+
+def save_upload(stream, content_length, encoded_name):
+    # Hold the reservation for the complete stream so concurrent uploads cannot
+    # all pass the aggregate quota check against the same starting size.
+    with UPLOAD_LOCK:
+        result = _save_upload_locked(stream, content_length, encoded_name)
+    audit("file_uploaded", size=result["sizeBytes"], sha256=result["sha256"])
+    return result
 
 
 def background_activity():
@@ -472,6 +499,7 @@ def stop_activity(session_id):
         raise RuntimeError("Prime could not stop this task") from error
     with ACTIVITY_LOCK:
         ACTIVITY_CACHE.update({"at": 0, "tasks": []})
+    audit("task_stopped", session=session_id)
     return {"stopped": True, "id": session_id}
 
 
@@ -584,14 +612,25 @@ def telemetry():
 
 
 class Handler(BaseHTTPRequestHandler):
+    server_version = "PrimeDashboard"
+    sys_version = ""
+
+    def setup(self):
+        self.request.settimeout(SOCKET_TIMEOUT_SECONDS)
+        super().setup()
+
     def send_json(self, status, value):
         body = json.dumps(value, separators=(",", ":")).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def do_GET(self):
         if self.path == "/api/state":
@@ -616,13 +655,17 @@ class Handler(BaseHTTPRequestHandler):
         try:
             length = int(self.headers.get("Content-Length", "0"))
             if self.path == "/api/files/upload":
+                if self.headers.get_content_type() != "application/octet-stream":
+                    raise ValueError("Upload content type must be application/octet-stream")
                 encoded_name = self.headers.get("X-Prime-Filename", "")
                 if not encoded_name or len(encoded_name) > 512:
                     raise ValueError("A valid filename is required")
                 self.send_json(201, {"file": save_upload(self.rfile, length, encoded_name)})
                 return
-            if length > 8192:
-                raise ValueError("Request too large")
+            if length < 1 or length > 8192:
+                raise ValueError("JSON request must be between 1 and 8,192 bytes")
+            if self.headers.get_content_type() != "application/json":
+                raise ValueError("Request content type must be application/json")
             payload = json.loads(self.rfile.read(length))
             if self.path == "/api/activity/stop":
                 self.send_json(200, stop_activity(str(payload.get("id", ""))))
@@ -631,13 +674,41 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self.send_json(200, {"settings": save_settings(payload)})
         except (ValueError, TypeError, json.JSONDecodeError) as error:
+            audit("request_rejected", path=self.path, reason=str(error), client=self.client_address[0])
             self.send_json(400, {"error": str(error)})
         except RuntimeError as error:
+            audit("request_conflict", path=self.path, reason=str(error), client=self.client_address[0])
             self.send_json(409, {"error": str(error)})
+        except (OSError, socket.timeout) as error:
+            audit("request_failed", path=self.path, reason=type(error).__name__, client=self.client_address[0])
+            self.send_json(500, {"error": "Request could not be completed"})
 
     def log_message(self, format, *args):
         return
 
 
+class BoundedThreadingHTTPServer(ThreadingHTTPServer):
+    daemon_threads = True
+    request_queue_size = 32
+
+    def __init__(self, server_address, handler):
+        self._slots = threading.BoundedSemaphore(MAX_API_THREADS)
+        super().__init__(server_address, handler)
+
+    def process_request(self, request, client_address):
+        self._slots.acquire()
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self._slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._slots.release()
+
+
 if __name__ == "__main__":
-    ThreadingHTTPServer(("127.0.0.1", 8765), Handler).serve_forever()
+    BoundedThreadingHTTPServer(("127.0.0.1", 8765), Handler).serve_forever()

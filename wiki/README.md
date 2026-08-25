@@ -21,15 +21,19 @@ verified current state and enough history to understand or reverse changes.
   validation, and rollback.
 - [Prime dashboard](PRIME_DASHBOARD.md) — sidebar controls, token accounting,
   provider spend, security, and data semantics.
+- [Security posture](SECURITY.md) — active controls, exposed services, recovery,
+  verification, and accepted residual risks.
+- [Printable Pi 5 + iUniker NVMe case](../cad/pi5-iuniker-inv001-case/README.md)
+  — parametric source, STL parts, preview, print settings, and fit-check guide.
 - [Decision records](decisions/README.md) — durable rationale and tradeoffs.
 - [Version snapshots](versions/README.md) — immutable historical states and
   restoration guidance.
 
 ## Status
 
-- Current wiki version: `v0044`
-- Last verified: 2026-08-24
-- Project phase: conversation-first monitored Prime dashboard backed up to private GitHub
+- Current wiki version: `v0051`
+- Last verified: 2026-08-25
+- Project phase: hardened conversation-first Prime dashboard with X2D-tuned CAD artifact
 
 ## Truth and precedence
 

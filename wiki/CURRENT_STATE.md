@@ -1,13 +1,15 @@
 # Current State
 
-Last verified: 2026-08-24
-Wiki version: `v0044`
+Last verified: 2026-08-25
+Wiki version: `v0051`
 
 ## Project summary
 
 The Spark now runs Prime Agent as the local orchestration core with two
 concurrently resident NVFP4 models. The operating policy covers 3D-print design,
-portfolio evaluation, paper-trading research, and supporting code.
+portfolio evaluation, paper-trading research, and supporting code. The repository
+now also contains its first generated, kernel-validated 3D-print design: a vented
+case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 
 ## Repository state
 
@@ -15,6 +17,8 @@ portfolio evaluation, paper-trading research, and supporting code.
 - Version control: Git `main`, private GitHub repository
   `https://github.com/dmbyte/prime_agent_webui`, tracking `origin/main`
 - Reviewable deployment source: `deploy/spark/`
+- Parametric CAD source and generated parts:
+  `cad/pi5-iuniker-inv001-case/`
 - Target Spark: SSH verified as `dbyte@172.16.253.231`; passwordless sudo works
 - Prime Agent: `0.8.0`, installed for `dbyte`; launcher `prime-dgx`
 - Browser interface: ttyd 1.7.4 backend on `127.0.0.1:7681`, fronted by Nginx
@@ -37,6 +41,7 @@ portfolio evaluation, paper-trading research, and supporting code.
   runs as `dbyte` under `prime-dashboard-api.service` on port 8765.
 - vLLM: `0.27.1` ARM64/CUDA 12.9 image, two user services enabled at boot
 - Hermes WebUI remains installed and active but is not the orchestration core.
+  It is now bound to `127.0.0.1:8787`.
 
 ## Pre-change recovery state
 
@@ -48,6 +53,9 @@ portfolio evaluation, paper-trading research, and supporting code.
 - All manifest checksums passed.
 - The baseline predates Prime installation and the dual-model changes and is the
   authoritative recovery source. It is stored on the same physical Spark.
+- The pre-hardening recovery bundle is root-only at
+  `/var/backups/prime-security-20260825T151200-0500`; it contains the affected
+  configuration and checksums plus the original transcript sanitized in v0051.
 
 ## Deployed architecture
 
@@ -89,10 +97,37 @@ portfolio evaluation, paper-trading research, and supporting code.
 - After the 81,920-token Nemotron warm-up and tests, Linux reported 39.1 GiB
   available memory (32.15%). The validation gate now requires at least 20% of
   usable RAM, about 24.3 GiB on this Spark.
-- Both inference ports bind only to `127.0.0.1`. Hermes WebUI still listens on
-  all interfaces at port 8787; that pre-existing exposure is unchanged.
+- Both inference ports and Hermes WebUI bind only to `127.0.0.1`.
 - NVFP4 is the checkpoint format. Nemotron's published GB10 recipe uses W4A16
   Marlin rather than native FP4 tensor-core execution.
+
+## Security posture
+
+- Nginx is the only Prime browser listener available to the LAN, on the explicit
+  private address and port 8443. Port 80 and the default site are disabled.
+  ttyd, the dashboard API, Hermes WebUI, and both inference engines bind only to
+  loopback. SSH remains available on port 22.
+- The existing Nginx private-source allow rules remain. Per owner direction, no
+  host-level CIDR firewall policy was added; UFW remains inactive.
+- PAM accepts only members of `prime-web`; `dbyte` is a member. Nginx delays and
+  rate-limits failures. Fail2ban reacts after 15 failures in 10 minutes with a
+  one-hour nftables ban; this is abuse control, not a CIDR allowlist.
+- Nginx suppresses version details and sends CSP, no-sniff, referrer,
+  permissions, opener/resource isolation, and no-store headers.
+- The API bounds request concurrency, size, and content types; serializes upload
+  quota and deletion operations; validates UTF-8 filename bytes; skips individual
+  malformed JSONL records; and emits structured security logs without prompts.
+- NFS export of `/home/dbyte`, `nfs-server`, and rpcbind services/socket are
+  disabled. No NFS exports remain.
+- User services have restrictive umasks and compatible systemd confinement. The
+  API cannot read the OpenAI credential file and receives only a non-secret
+  configuration flag.
+- All 19 pending Ubuntu security updates present on 2026-08-25 were installed.
+- One transcript with two credential-shaped key occurrences was copied to the
+  root-only recovery bundle and redacted. No matching strings remain in active or
+  trashed sessions. The key must still be revoked at OpenAI if it remains active.
+- Full controls, validation, residual risks, and recovery are in
+  `wiki/SECURITY.md`.
 
 ## Durable project memory
 
@@ -100,6 +135,44 @@ portfolio evaluation, paper-trading research, and supporting code.
 - `wiki/AGENT_STACK.md` and `wiki/AGENT_FRAMEWORK.md` contain detailed supporting
   analysis; v0005 and ADR-0005 take precedence where recommendations differ.
 - ADR-0005 is the active architecture decision.
+- The Pi 5/iUniker enclosure source, printable STLs, assembly preview, dimensions,
+  print settings, and mandatory physical fit procedure are in
+  `cad/pi5-iuniker-inv001-case/`; ADR-0033 records its mechanical strategy.
+
+## Current CAD artifact
+
+- The enclosure is a rounded two-piece shell measuring 100.6 x 71.6 x 42.4 mm,
+  tuned for Bambu PETG Basic on an X2D with a stock 0.4 mm main nozzle.
+- It provides long bottom intakes, a honeycomb lid exhaust, vertical exhaust
+  slots around all four upper walls, all primary Pi 5 port openings except
+  microSD, recessed M2.5 board mounting, and four M3 lid screws.
+- Its 2.8 mm walls equal seven nominal nozzle widths, the lid has 0.35 mm sliding
+  clearance per side, and the M3 pilots are 2.7 mm. Separate Ethernet/USB bays
+  replace the former long opening, keeping the largest wall bridge below 17 mm.
+- A separate captive printed plunger operates the Pi 5 native power button without
+  wiring an additional switch. It passes through the short end near the USB-C
+  corner and uses the supplied v14 reference's 10.6 x 8.3 x 5.6 mm envelope with
+  an offset oval LED window through its face. The end has no microSD cutout at the
+  owner's request. Control positions remain physical-fit parameters because
+  Raspberry Pi labels component geometry approximate.
+- Base, lid, and button STLs each validate as a single watertight,
+  winding-consistent positive-volume body. A colored exploded GLB and PNG preview
+  are generated with the parts.
+- The owner confirmed that this INV001 board has the same 85 mm length as the Pi
+  5. The compact model now uses an 85 x 56.5 mm plan envelope inside a 95 x 66 mm
+  cavity. Owner-supplied photos support the standard Pi mounting pattern and a
+  nominal 16 mm brass HAT spacer; because the caliper display was off, the value
+  remains a nominal assumption rather than an exact measurement. The explicit
+  stack envelope leaves 8 mm of air below the base rim. Board width, exact stacked
+  height, and native-button alignment still require physical measurement before a
+  final-material print.
+- The X2D guide uses the left/main hotend, built-in Bambu PETG Basic preset, 0.20
+  mm Standard process as its starting point, four walls, 25% gyroid, five top and
+  bottom layers, and no supports or active chamber heat.
+- Bambu Studio 02.08.02.61 successfully sliced the compact three-part plate with
+  resolved factory X2D/PETG profiles: left/main nozzle only, zero support features,
+  zero filament changes, no warnings, and an estimated 2 h 41 m 9 s print time.
+  Temporary G-code was discarded; the retained JSON report records the settings.
 
 ## Operations
 
@@ -179,12 +252,8 @@ portfolio evaluation, paper-trading research, and supporting code.
 
 ## Known gaps
 
-- A potential OpenAI API credential was found in plaintext Prime session history
-  during validation. It is not reproduced in the repository or wiki and is not
-  exposed by the dashboard. The credential must be revoked/rotated; removal or
-  redaction of the sensitive session remains pending explicit user direction.
-- The earlier conversation-history key remains sensitive and should still be
-  revoked if that specific key was not the rotated credential now in use.
+- The credential formerly present in conversation history has been redacted from
+  the Spark, but it should still be revoked at OpenAI if it remains active.
 - Installed Prime source establishes that OpenAI API-key authentication uses
   provider `openai`, environment variable `OPENAI_API_KEY`, and default model
   `gpt-5.4`. Its `gpt-5.6-sol` model belongs to provider `openai-codex` through
@@ -213,6 +282,9 @@ portfolio evaluation, paper-trading research, and supporting code.
   the same physical Spark and is not a substitute for an off-device disk backup.
 - Prime's local routing policy and infrastructure gate are implemented. The
   frozen domain prompt suite and OpenAI credential/route remain incomplete.
-- CAD, market-data, portfolio, paper-broker, and risk-gateway tools are undefined.
+- The first CAD generator and X2D/PETG slice validation are implemented, but the
+  iUniker case has not yet been physically printed and fit-tested. Market-data,
+  portfolio, paper-broker, and risk-gateway tools remain undefined.
 - No financial strategy has been specified or validated.
-- Development, testing, release, and rollback procedures remain undefined.
+- Local application security regression checks are included. GitHub Actions and
+  broader release promotion/rollback automation remain undefined.
