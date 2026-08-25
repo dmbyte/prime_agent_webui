@@ -1,0 +1,464 @@
+#!/usr/bin/env python3
+import base64
+import hashlib
+import importlib.util
+import json
+import mimetypes
+import os
+import re
+import shutil
+import signal
+import subprocess
+import threading
+import time
+import urllib.parse
+import uuid
+import zipfile
+import tarfile
+from datetime import datetime, timezone
+from http.cookies import SimpleCookie
+from pathlib import Path
+
+SPEC = importlib.util.spec_from_file_location("prime_dashboard_legacy", Path(__file__).with_name("api.py"))
+legacy = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(legacy)
+
+META = legacy.HOME / ".prime/agent/webui-metadata.json"
+LEDGER = legacy.HOME / ".prime/agent/webui-usage-ledger.jsonl"
+TASK_LOGS = legacy.HOME / ".prime/agent/webui-task-logs"
+MAX_NATIVE_TASKS = 4
+MAX_TASK_SECONDS = 30 * 60
+TASKS = {}
+TASK_LOCK = threading.Lock()
+META_LOCK = threading.Lock()
+
+
+def now_iso():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def valid_id(value):
+    return bool(re.fullmatch(r"[A-Za-z0-9_-]{8,80}", str(value)))
+
+
+def metadata():
+    return legacy.read_json(META, {"conversations": {}, "retentionDays": 30})
+
+
+def save_metadata(data):
+    with META_LOCK:
+        legacy.atomic_json(META, data)
+
+
+def conversation_catalog(query="", include_archived=False):
+    rows = legacy.session_catalog()
+    data = metadata().get("conversations", {})
+    result = []
+    query = query.casefold().strip()
+    for row in rows:
+        extra = data.get(row["id"], {})
+        row.update({"pinned": bool(extra.get("pinned")), "archived": bool(extra.get("archived"))})
+        if extra.get("title"):
+            row["topic"] = str(extra["title"])[:96]
+        if row["archived"] and not include_archived:
+            continue
+        if query and query not in f"{row['topic']} {row['id']} {row.get('model', '')}".casefold():
+            continue
+        result.append(row)
+    pinned = [row for row in result if row["pinned"]]
+    normal = [row for row in result if not row["pinned"]]
+    pinned.sort(key=lambda row: legacy.parse_timestamp(row.get("modified")), reverse=True)
+    normal.sort(key=lambda row: legacy.parse_timestamp(row.get("modified")), reverse=True)
+    return pinned + normal
+
+
+def message_text(parts):
+    values = []
+    for part in parts or []:
+        if not isinstance(part, dict):
+            continue
+        if part.get("type") in {"text", "reasoning"} and part.get("text"):
+            values.append(str(part["text"]))
+    return "\n".join(values)
+
+
+def conversation_messages(session_id):
+    if not valid_id(session_id):
+        raise ValueError("Invalid conversation identifier")
+    path = legacy.SESSIONS / f"{session_id}.jsonl"
+    if not path.is_file():
+        raise ValueError("Conversation not found")
+    rows = []
+    with path.open(errors="replace") as handle:
+        for line in handle:
+            try:
+                entry = json.loads(line)
+                if entry.get("type") != "message":
+                    continue
+                message = entry.get("message") or {}
+                role = str(message.get("role") or "")
+                if role not in {"user", "assistant", "toolResult"}:
+                    continue
+                parts = message.get("content") or []
+                text = message_text(parts)
+                tools = [str(part.get("name") or part.get("toolName")) for part in parts if isinstance(part, dict) and part.get("type") == "toolCall"]
+                if not text and not tools and role != "toolResult":
+                    continue
+                usage = message.get("usage") or {}
+                rows.append({
+                    "id": str(message.get("id") or entry.get("id") or uuid.uuid4().hex),
+                    "role": "tool" if role == "toolResult" else role,
+                    "text": text or (f"Completed {message.get('toolName', 'tool')}" if role == "toolResult" else ""),
+                    "tools": tools,
+                    "timestamp": message.get("timestamp") or entry.get("timestamp"),
+                    "usage": {"input": usage.get("input", 0), "output": usage.get("output", 0), "cacheRead": usage.get("cacheRead", 0), "total": usage.get("totalTokens", 0)},
+                })
+            except (json.JSONDecodeError, TypeError, ValueError):
+                continue
+    return rows[-400:]
+
+
+def prime_env():
+    env = os.environ.copy()
+    env["PATH"] = f"{legacy.PRIME_BIN}:{env.get('PATH', '')}"
+    return env
+
+
+def task_snapshot():
+    with TASK_LOCK:
+        rows = []
+        for task_id, task in TASKS.items():
+            row = {key: value for key, value in task.items() if key not in {"process"}}
+            if row.get("status") == "running":
+                row["elapsedSeconds"] = round(time.time() - row["startedEpoch"], 1)
+            rows.append(row)
+        return sorted(rows, key=lambda row: row["started"], reverse=True)[:50]
+
+
+def append_ledger(task, status, output=""):
+    record = {"at": now_iso(), "taskId": task["id"], "sessionId": task.get("sessionId"), "provider": task.get("provider"), "model": task.get("model"), "status": status, "elapsedSeconds": round(time.time() - task["startedEpoch"], 2)}
+    for line in reversed(output.splitlines()):
+        try:
+            value = json.loads(line)
+            usage = value.get("usage") or (value.get("message") or {}).get("usage") or {}
+            if usage:
+                record["usage"] = {key: usage.get(key, 0) for key in ("input", "output", "cacheRead", "cacheWrite", "totalTokens")}
+                record["cost"] = (usage.get("cost") or {}).get("total", 0)
+                break
+        except (json.JSONDecodeError, AttributeError):
+            continue
+    LEDGER.parent.mkdir(parents=True, exist_ok=True)
+    with LEDGER.open("a") as handle:
+        handle.write(json.dumps(record, separators=(",", ":")) + "\n")
+    os.chmod(LEDGER, 0o600)
+
+
+def ledger_summary():
+    rows = []
+    try:
+        with LEDGER.open(errors="replace") as handle:
+            for line in handle:
+                try:
+                    rows.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+    except OSError:
+        pass
+    return {"nativeRequests": len(rows), "recent": rows[-50:]}
+
+
+def monitor_task(task_id, before):
+    with TASK_LOCK:
+        task = TASKS[task_id]
+        process = task["process"]
+    try:
+        output, _ = process.communicate(timeout=MAX_TASK_SECONDS)
+        status = "completed" if process.returncode == 0 else "failed"
+    except subprocess.TimeoutExpired:
+        os.killpg(process.pid, signal.SIGTERM)
+        output, _ = process.communicate(timeout=10)
+        status = "timed_out"
+    after = {path.stem for path in legacy.SESSIONS.glob("*.jsonl")}
+    created = sorted(after - before, key=lambda value: (legacy.SESSIONS / f"{value}.jsonl").stat().st_mtime, reverse=True)
+    with TASK_LOCK:
+        task = TASKS[task_id]
+        if not task.get("sessionId") and created:
+            task["sessionId"] = created[0]
+        task.update({"status": status, "finished": now_iso(), "elapsedSeconds": round(time.time() - task["startedEpoch"], 1)})
+        log_path = TASK_LOGS / f"{task_id}.log"
+        TASK_LOGS.mkdir(mode=0o700, parents=True, exist_ok=True)
+        sanitized = re.sub(r"(?i)sk-(?:proj-)?[A-Za-z0-9_-]{20,}", "[REDACTED_API_KEY]", output[-200000:])
+        sanitized = re.sub(r"(?i)(authorization\s*[:=]\s*bearer\s+)[^\s\"']+", r"\1[REDACTED]", sanitized)
+        log_path.write_text(sanitized)
+        os.chmod(log_path, 0o600)
+        task["logAvailable"] = True
+        append_ledger(task, status, output)
+    legacy.audit("native_task_finished", task=task_id, session=task.get("sessionId"), status=status)
+
+
+def launch_task(message, session_id=None, fork=False):
+    message = str(message).strip()
+    if not message or len(message) > 100000:
+        raise ValueError("Message must contain between 1 and 100,000 characters")
+    if session_id and not valid_id(session_id):
+        raise ValueError("Invalid conversation identifier")
+    with TASK_LOCK:
+        active = sum(1 for row in TASKS.values() if row["status"] == "running")
+        if active >= MAX_NATIVE_TASKS:
+            raise RuntimeError("Four native tasks are already running")
+    settings = legacy.settings_view()
+    command = [str(legacy.PRIME_AGENT), "--cwd", str(legacy.HOME / "prime-dgx-agent"), "--mode", "json", "--print", "--provider", settings["provider"], "--model", settings["model"], "--thinking", settings["thinking"]]
+    if session_id:
+        command.extend(["--fork" if fork else "--resume", session_id])
+    command.extend(["--", message])
+    before = {path.stem for path in legacy.SESSIONS.glob("*.jsonl")}
+    task_id = uuid.uuid4().hex
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=legacy.HOME / "prime-dgx-agent", env=prime_env(), start_new_session=True)
+    task = {"id": task_id, "sessionId": session_id if not fork else None, "topic": legacy.safe_topic(message) or "Native task", "provider": settings["provider"], "model": settings["model"], "status": "running", "started": now_iso(), "startedEpoch": time.time(), "pid": process.pid, "process": process, "logAvailable": False}
+    with TASK_LOCK:
+        TASKS[task_id] = task
+    threading.Thread(target=monitor_task, args=(task_id, before), daemon=True).start()
+    legacy.audit("native_task_started", task=task_id, session=session_id)
+    return {key: value for key, value in task.items() if key != "process"}
+
+
+def stop_native_task(task_id):
+    with TASK_LOCK:
+        task = TASKS.get(task_id)
+        if not task or task["status"] != "running":
+            raise ValueError("Task is no longer running")
+        process = task["process"]
+    os.killpg(process.pid, signal.SIGTERM)
+    return {"stopping": True, "id": task_id}
+
+
+def update_conversation(session_id, action, value=None):
+    if not valid_id(session_id) or not (legacy.SESSIONS / f"{session_id}.jsonl").is_file():
+        raise ValueError("Conversation not found")
+    data = metadata()
+    row = data.setdefault("conversations", {}).setdefault(session_id, {})
+    if action == "pin":
+        row["pinned"] = bool(value)
+    elif action == "archive":
+        row["archived"] = bool(value)
+    elif action == "rename":
+        title = re.sub(r"\s+", " ", str(value)).strip()[:96]
+        if not title:
+            raise ValueError("Title is required")
+        subprocess.run([str(legacy.PRIME_AGENT), "rename", session_id, title, "--json"], timeout=12, check=False, capture_output=True, env=prime_env())
+        row["title"] = title
+    else:
+        raise ValueError("Unsupported conversation action")
+    save_metadata(data)
+    return {"id": session_id, **row}
+
+
+def upload_rows():
+    rows = []
+    if not legacy.UPLOADS.exists():
+        return rows
+    for path in legacy.UPLOADS.rglob("*"):
+        try:
+            if not path.is_file() or path.name.startswith("."):
+                continue
+            relative = path.relative_to(legacy.UPLOADS).as_posix()
+            stat = path.stat()
+            rows.append({"id": base64.urlsafe_b64encode(relative.encode()).decode().rstrip("="), "name": path.name.split("-", 1)[-1], "path": str(path), "sizeBytes": stat.st_size, "modified": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(), "type": mimetypes.guess_type(path.name)[0] or "application/octet-stream"})
+        except OSError:
+            continue
+    return sorted(rows, key=lambda row: row["modified"], reverse=True)
+
+
+def upload_path(file_id):
+    try:
+        relative = base64.urlsafe_b64decode(file_id + "=" * (-len(file_id) % 4)).decode()
+    except Exception as error:
+        raise ValueError("Invalid file identifier") from error
+    path = (legacy.UPLOADS / relative).resolve()
+    if legacy.UPLOADS.resolve() not in path.parents or not path.is_file():
+        raise ValueError("File not found")
+    return path
+
+
+def inspect_archive(path):
+    names = []
+    if zipfile.is_zipfile(path):
+        with zipfile.ZipFile(path) as archive:
+            for info in archive.infolist()[:2000]:
+                names.append(info.filename)
+                if info.is_dir():
+                    continue
+                if (info.external_attr >> 16) & 0o170000 == 0o120000:
+                    raise ValueError("Archives containing symbolic links are not accepted")
+    elif tarfile.is_tarfile(path):
+        with tarfile.open(path) as archive:
+            for info in archive.getmembers()[:2000]:
+                names.append(info.name)
+                if info.issym() or info.islnk():
+                    raise ValueError("Archives containing links are not accepted")
+    for name in names:
+        candidate = Path(name)
+        if candidate.is_absolute() or ".." in candidate.parts:
+            raise ValueError("Archive contains an unsafe path")
+    return len(names)
+
+
+def admin_status():
+    services = {}
+    for name in ("prime-auth", "prime-dashboard-api", "prime-web", "vllm-nemotron35", "vllm-qwen36"):
+        result = subprocess.run(["systemctl", "--user", "is-active", name], capture_output=True, text=True, timeout=4)
+        services[name] = result.stdout.strip() or "unknown"
+    disk = shutil.disk_usage(legacy.HOME)
+    return {"services": services, "disk": {"total": disk.total, "used": disk.used, "free": disk.free}, "uploads": {"used": legacy.upload_storage_bytes(), "limit": legacy.MAX_UPLOAD_STORAGE_BYTES, "files": len(upload_rows()), "retentionDays": int(metadata().get("retentionDays", 30))}, "tasks": {"running": sum(1 for row in task_snapshot() if row["status"] == "running"), "limit": MAX_NATIVE_TASKS}, "certificate": {"authorityDownload": "/prime-webui-ca.crt", "trustedAfterInstall": True}, "generatedAt": now_iso()}
+
+
+def apply_retention(days):
+    days = int(days)
+    if not 1 <= days <= 365:
+        raise ValueError("Retention must be between 1 and 365 days")
+    data = metadata()
+    data["retentionDays"] = days
+    save_metadata(data)
+    cutoff = time.time() - days * 86400
+    removed = 0
+    for row in upload_rows():
+        path = upload_path(row["id"])
+        if path.stat().st_mtime < cutoff:
+            path.unlink()
+            removed += 1
+    legacy.audit("upload_retention_applied", days=days, removed=removed)
+    return {"retentionDays": days, "removed": removed}
+
+
+def csrf_ok(headers):
+    parsed = SimpleCookie()
+    try:
+        parsed.load(headers.get("Cookie", ""))
+    except Exception:
+        return False
+    cookie = parsed.get("prime_csrf")
+    header = headers.get("X-Prime-CSRF", "")
+    return bool(cookie and header and hmac_compare(cookie.value, header))
+
+
+def hmac_compare(left, right):
+    import hmac
+    return hmac.compare_digest(left, right)
+
+
+class Handler(legacy.Handler):
+    def send_bytes(self, status, body, content_type, filename=None):
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        if filename:
+            self.send_header("Content-Disposition", f'attachment; filename="{re.sub(r"[^A-Za-z0-9_.-]", "_", filename)}"')
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        parsed = urllib.parse.urlparse(self.path)
+        query = urllib.parse.parse_qs(parsed.query)
+        path = parsed.path
+        try:
+            if path == "/api/state":
+                self.send_json(200, {"settings": legacy.settings_view(), "models": legacy.model_catalog(), "usage": legacy.usage_summary(), "requestLedger": ledger_summary(), "sessions": conversation_catalog(query.get("q", [""])[0], query.get("archived", ["0"])[0] == "1"), "telemetry": legacy.telemetry(), "nativeTasks": task_snapshot()})
+            elif path == "/api/conversations/messages":
+                self.send_json(200, {"messages": conversation_messages(query.get("id", [""])[0])})
+            elif path == "/api/conversations/export":
+                session_id = query.get("id", [""])[0]
+                rows = conversation_messages(session_id)
+                text = "\n\n".join(f"## {row['role'].title()}\n\n{row['text']}" for row in rows).encode()
+                self.send_bytes(200, text, "text/markdown; charset=utf-8", f"prime-{session_id}.md")
+            elif path == "/api/tasks":
+                self.send_json(200, {"tasks": task_snapshot(), "prime": legacy.background_activity()})
+            elif path == "/api/tasks/log":
+                task_id = query.get("id", [""])[0]
+                log = TASK_LOGS / f"{task_id}.log"
+                if not re.fullmatch(r"[a-f0-9]{32}", task_id) or not log.is_file():
+                    raise ValueError("Task log not found")
+                self.send_bytes(200, log.read_bytes(), "text/plain; charset=utf-8", f"task-{task_id}.log")
+            elif path == "/api/files":
+                self.send_json(200, {"files": upload_rows(), "usedBytes": legacy.upload_storage_bytes(), "limitBytes": legacy.MAX_UPLOAD_STORAGE_BYTES})
+            elif path == "/api/files/content":
+                file = upload_path(query.get("id", [""])[0])
+                if file.stat().st_size > 10 * 1024 * 1024:
+                    raise ValueError("Preview is limited to 10 MiB")
+                guessed = mimetypes.guess_type(file.name)[0] or "application/octet-stream"
+                safe_types = {"image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf", "text/plain", "text/csv", "application/json"}
+                content_type = guessed if guessed in safe_types else "application/octet-stream"
+                self.send_bytes(200, file.read_bytes(), content_type)
+            elif path == "/api/admin":
+                self.send_json(200, admin_status())
+            else:
+                super().do_GET()
+        except ValueError as error:
+            self.send_json(400, {"error": str(error)})
+        except OSError:
+            self.send_json(500, {"error": "Request could not be completed"})
+
+    def do_POST(self):
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
+        v2 = {"/api/tasks/start", "/api/tasks/stop", "/api/conversations/update", "/api/conversations/duplicate", "/api/files/delete", "/api/admin/restart", "/api/admin/retention", "/api/files/upload"}
+        if path not in v2:
+            if not csrf_ok(self.headers):
+                self.send_json(403, {"error": "CSRF validation failed"})
+                return
+            return super().do_POST()
+        if self.headers.get("Origin") not in legacy.ALLOWED_ORIGINS or not csrf_ok(self.headers):
+            self.send_json(403, {"error": "Request validation failed"})
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if path == "/api/files/upload":
+                encoded_name = self.headers.get("X-Prime-Filename", "")
+                if self.headers.get_content_type() != "application/octet-stream" or not encoded_name:
+                    raise ValueError("Invalid upload request")
+                result = legacy.save_upload(self.rfile, length, encoded_name)
+                saved = Path(result["path"])
+                try:
+                    result["archiveEntries"] = inspect_archive(saved)
+                except ValueError:
+                    saved.unlink(missing_ok=True)
+                    raise
+                self.send_json(201, {"file": result})
+                return
+            if length < 2 or length > 110000 or self.headers.get_content_type() != "application/json":
+                raise ValueError("Invalid JSON request")
+            payload = json.loads(self.rfile.read(length))
+            if path == "/api/tasks/start":
+                self.send_json(202, {"task": launch_task(payload.get("message"), payload.get("sessionId"))})
+            elif path == "/api/tasks/stop":
+                self.send_json(200, stop_native_task(str(payload.get("id", ""))))
+            elif path == "/api/conversations/update":
+                self.send_json(200, update_conversation(str(payload.get("id", "")), str(payload.get("action", "")), payload.get("value")))
+            elif path == "/api/conversations/duplicate":
+                self.send_json(202, {"task": launch_task("Continue this fork with a concise recap of the inherited context.", str(payload.get("id", "")), True)})
+            elif path == "/api/files/delete":
+                file = upload_path(str(payload.get("id", "")))
+                file.unlink()
+                self.send_json(200, {"deleted": True})
+            elif path == "/api/admin/restart":
+                service = str(payload.get("service", ""))
+                allowed = {"prime-web", "vllm-nemotron35", "vllm-qwen36"}
+                if service not in allowed or payload.get("confirm") != service:
+                    raise ValueError("Explicit service confirmation is required")
+                result = subprocess.run(["systemctl", "--user", "restart", service], timeout=30, capture_output=True)
+                if result.returncode:
+                    raise RuntimeError("Service restart failed")
+                self.send_json(200, {"restarted": service})
+            elif path == "/api/admin/retention":
+                if payload.get("confirm") != "delete-expired-uploads":
+                    raise ValueError("Explicit retention confirmation is required")
+                self.send_json(200, apply_retention(payload.get("days")))
+        except (ValueError, TypeError, json.JSONDecodeError) as error:
+            self.send_json(400, {"error": str(error)})
+        except RuntimeError as error:
+            self.send_json(409, {"error": str(error)})
+
+
+if __name__ == "__main__":
+    legacy.BoundedThreadingHTTPServer(("127.0.0.1", 8765), Handler).serve_forever()

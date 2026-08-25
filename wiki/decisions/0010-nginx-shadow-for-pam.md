@@ -1,6 +1,6 @@
 # ADR-0010: Permit Nginx to retrieve PAM account information
 
-- Status: accepted with explicit user approval
+- Status: superseded by ADR-0040
 - Date: 2026-08-23
 
 ## Decision

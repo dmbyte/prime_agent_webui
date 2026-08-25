@@ -15,14 +15,14 @@ if ! curl --fail --silent --max-time 10 http://127.0.0.1:7681/terminal/ >/dev/nu
 fi
 
 auth_status="$(curl --insecure --silent --output /dev/null --write-out '%{http_code}' --max-time 10 https://127.0.0.1:8443/)"
-if [[ "${auth_status}" != "401" ]]; then
-  echo "FAIL: authenticated HTTPS endpoint returned ${auth_status}, expected 401 without credentials" >&2
+if [[ "${auth_status}" != "302" ]]; then
+  echo "FAIL: authenticated HTTPS endpoint returned ${auth_status}, expected login redirect without a session" >&2
   fail=1
 fi
 
 lan_auth_status="$(curl --insecure --silent --output /dev/null --write-out '%{http_code}' --max-time 10 https://172.16.253.231:8443/)"
-if [[ "${lan_auth_status}" != "401" ]]; then
-  echo "FAIL: LAN PAM endpoint returned ${lan_auth_status}, expected 401 without credentials" >&2
+if [[ "${lan_auth_status}" != "302" ]]; then
+  echo "FAIL: LAN session endpoint returned ${lan_auth_status}, expected login redirect without a session" >&2
   fail=1
 fi
 
@@ -33,10 +33,16 @@ else
   fail=1
 fi
 
-if ss -ltn | awk '$4 ~ /(^|:)(8765|8787)$/ && $4 !~ /^127\.0\.0\.1:/ {exit 1}'; then
+if ss -ltn | awk '$4 ~ /(^|:)(8764|8765|8787)$/ && $4 !~ /^127\.0\.0\.1:/ {exit 1}'; then
   :
 else
   echo "FAIL: a dashboard service is not loopback-only" >&2
+  fail=1
+fi
+
+broker_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 10 http://127.0.0.1:8764/auth/check)"
+if [[ "${broker_status}" != "401" ]]; then
+  echo "FAIL: session broker returned ${broker_status}, expected 401 without a session" >&2
   fail=1
 fi
 

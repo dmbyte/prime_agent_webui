@@ -6,6 +6,7 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0052](v0052.md) | 2026-08-25 | Added native chat, isolated tasks, PAM sessions, and private-CA TLS |
 | [v0051](v0051.md) | 2026-08-25 | Hardened Prime without adding a CIDR firewall policy |
 | [v0050](v0050.md) | 2026-08-24 | Adapted v14 button/light geometry and perimeter cooling |
 | [v0049](v0049.md) | 2026-08-24 | Moved the native button and LED opening to the microSD end |

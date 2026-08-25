@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-25
-Wiki version: `v0051`
+Wiki version: `v0052`
 
 ## Project summary
 
@@ -21,21 +21,24 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   `cad/pi5-iuniker-inv001-case/`
 - Target Spark: SSH verified as `dbyte@172.16.253.231`; passwordless sudo works
 - Prime Agent: `0.8.0`, installed for `dbyte`; launcher `prime-dgx`
-- Browser interface: ttyd 1.7.4 backend on `127.0.0.1:7681`, fronted by Nginx
-  1.24 on `127.0.0.1:8443` and `172.16.253.231:8443` with TLS and PAM.
+- Browser interface: native Prime chat API on `127.0.0.1:8765`, optional ttyd
+  1.7.4 console on `127.0.0.1:7681`, and isolated PAM session broker on
+  `127.0.0.1:8764`, fronted by Nginx 1.24 on loopback and
+  `172.16.253.231:8443` with private-CA TLS.
   Nginx allows loopback, RFC1918, and `100.64.0.0/10` VPN sources and denies all
   other source ranges. The backend remains private to the Spark. An Nginx
   systemd pre-start check waits up to 120 seconds for the explicit private LAN
   address before validating the configuration, avoiding the boot-time bind race
   observed on 2026-08-24 while failing closed if the address never appears.
-- With explicit user approval, `www-data` is a supplementary member of `shadow`
-  (GID 42), allowing the Nginx PAM module to retrieve authentication data.
-  Nginx was restarted and all inspected workers inherited groups `33 42`.
+- Nginx no longer authenticates through PAM directly and is no longer a member
+  of `shadow`. Secure session cookies use 30-minute idle and 12-hour absolute
+  limits; state changes require CSRF and Origin validation.
 - WebSocket origin enforcement is performed by Nginx against the approved HTTPS
   origins. ttyd's incompatible backend `--check-origin` option is disabled because
   a reverse proxy hides the external origin/host relationship from ttyd.
-- The authenticated root page is a dashboard with an embedded Prime terminal and
-  a default Conversations view plus Parameters and Usage tabs. A compact live
+- The authenticated root page is a native conversation UI with Chats, Usage,
+  Files, Admin, and Settings tabs; the terminal is an optional advanced dialog.
+  A compact live
   monitor shows CPU/GPU/memory utilization and GPU board power on its first row,
   with CPU/GPU/system temperatures on the second. Its loopback-only API
   runs as `dbyte` under `prime-dashboard-api.service` on port 8765.
@@ -56,6 +59,8 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 - The pre-hardening recovery bundle is root-only at
   `/var/backups/prime-security-20260825T151200-0500`; it contains the affected
   configuration and checksums plus the original transcript sanitized in v0051.
+- The root-only pre-v0052 WebUI recovery bundle is
+  `/var/backups/prime-webui-v0052-20260825T153014-0500`.
 
 ## Deployed architecture
 
@@ -109,9 +114,10 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   loopback. SSH remains available on port 22.
 - The existing Nginx private-source allow rules remain. Per owner direction, no
   host-level CIDR firewall policy was added; UFW remains inactive.
-- PAM accepts only members of `prime-web`; `dbyte` is a member. Nginx delays and
-  rate-limits failures. Fail2ban reacts after 15 failures in 10 minutes with a
-  one-hour nftables ban; this is abuse control, not a CIDR allowlist.
+- PAM accepts only members of `prime-web`; `dbyte` is a member. An isolated
+  loopback broker validates PAM and issues secure sessions; Nginx has no shadow
+  access. Nginx delays/rate-limits failures and Fail2ban reacts after 15 failures
+  in 10 minutes with a one-hour nftables ban.
 - Nginx suppresses version details and sends CSP, no-sniff, referrer,
   permissions, opener/resource isolation, and no-store headers.
 - The API bounds request concurrency, size, and content types; serializes upload
@@ -122,6 +128,12 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 - User services have restrictive umasks and compatible systemd confinement. The
   API cannot read the OpenAI credential file and receives only a non-secret
   configuration flag.
+- A private CA now signs the server certificate for the Spark IP, hostname, and
+  loopback names. Clients must install `/prime-webui-ca.crt` once to trust it.
+- Native tasks use independent process groups, four-task admission control,
+  30-minute limits, explicit stop, structured logs, and an append-only usage
+  ledger. Native chat, safe Markdown, file catalog/previews/retention, operations
+  status, and expanded conversation management are live.
 - All 19 pending Ubuntu security updates present on 2026-08-25 were installed.
 - One transcript with two credential-shaped key occurrences was copied to the
   root-only recovery bundle and redacted. No matching strings remain in active or
@@ -179,76 +191,32 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 - Launch Prime with `prime-dgx`; Nemotron is the default and Qwen is available
   as `spark-qwen/qwen3.6-35b-a3b` for exact child routing.
 - LAN and routed private-VPN clients open `https://172.16.253.231:8443` and
-  authenticate as `dbyte` with the Spark system password. The certificate is
-  self-signed, so clients receive a trust warning until a private-CA certificate
-  is installed. No SSH tunnel is required.
+  authenticate as `dbyte` with the Spark system password. Install the downloadable
+  Prime private CA on each client to eliminate the trust warning. No SSH tunnel
+  is required.
 - Run `~/prime-dgx-agent/validate.sh` before and after runtime changes.
-- Detailed settings, browser access, hashes, tests, and rollback are in
-  `wiki/PRIME_DEPLOYMENT.md`.
+- Detailed WebUI operation and rollback are in `wiki/PRIME_DASHBOARD.md`.
 - Dashboard settings control the default model, thinking level, compaction reserve,
   recent-context retention, and enabled providers. A searchable switch list shows
   all configured/discovered providers and writes Prime's native `enabledModels`
-  setting. The default-model list follows enabled providers; the current default
-  cannot be disabled until another enabled default is selected. Saves are
-  allowlisted, origin checked, atomic, and apply to new terminal sessions.
+  setting. Saves are allowlisted, origin/CSRF checked, atomic, and apply to new
+  native tasks and advanced-console sessions.
 - Usage combines tokens and recorded spend by provider/model in one table, with
   columns for the Spark's current local calendar day and a rolling 30-day window.
-  Local Spark providers correctly report $0 API spend.
-- Usage unions the intended/configured catalog with recorded activity, so
-  Nemotron, Qwen, and OpenAI GPT-5.4 always have rows. Qwen currently shows zero
-  usage. GPT-5.4 is configured and selectable under Parameters but will remain at
-  zero until OpenAI billing credits are added and a request succeeds.
-- The Usage catalog automatically runs Prime's authenticated model discovery and
-  refreshes it at most once per minute; the screen itself refreshes every 30
-  seconds. After ChatGPT `/login`, it discovered 13 `openai-codex` models plus
-  direct OpenAI and the two Spark models (16 total), including GPT-5.6 Sol.
-- Usage renders configured/authenticated models only. Providers with multiple
-  models are collapsed by default into a provider row whose Today and Last 30
-  days figures sum all child models; expanding reveals per-model rows. Providers
-  with one configured model remain direct rows.
-- A header activity icon shows the count of working background Prime tasks. It
-  opens a top-right floating, draggable, natively resizable, minimizable overlay. Parallel
-  tasks become tabs; each tab shows model/status/message count and a privacy-safe
-  event timeline (task received, tool running/completed, response update, token
-  count) without full prompts, model output, tool output, or secrets.
-- The overlay header shows a minus while expanded and changes to a plus while
-  minimized; its tooltip, accessible label, and `aria-expanded` state change with it.
-- The activity overlay is event-feed-only and its JavaScript contains no attach
-  command, attach URL, live-console iframe, or automatic attachment behavior.
-  Explicit session attachment remains available through `prime-web-launch` only
-  when a strict existing session ID is accompanied by the deliberate
-  `--explicit` marker. This prevents stale cached two-argument UI requests from
-  attaching or starting Prime while preserving intentional attachment capability.
-- A control bar above the main conversation terminal appears while tasks are
-  active. It follows a selected active conversation and provides a task selector
-  when parallel work exists, plus a confirmation-gated **Stop task** button. The
-  activity overlay has no stop control. The API still accepts only strict IDs that
-  are currently active, invokes Prime's native single-agent stop command, and
-  leaves saved conversation history available without stopping other agents or
-  the Prime supervisor.
-- The Conversations view lists the 40 most recently modified Prime session files.
-  Each row shows a sanitized, 96-character maximum topic derived from the first
-  user message, then the timestamp of the latest chat, followed by model and opaque
-  ID. It does not return full prompts, summaries, or assistant messages. Clicking
-  a row resumes that Prime conversation in the embedded terminal; New conversation
-  starts the fixed default launcher.
-- Sessions whose sanitized first-user topic is exactly `attach` are treated as UI
-  command artifacts and excluded before the 40-row limit. Their JSONL files are
-  retained; genuine older conversations fill the vacated list positions.
-- Right-clicking a conversation opens a custom menu with **Delete conversation**.
-  After confirmation, an inactive transcript is atomically moved to private mode-
-  0700 recovery storage at `~/.prime/agent/session-trash/`; active/live sessions
-  are rejected. Deleted conversations disappear from the catalog, while their
-  recorded tokens and spend remain included in Usage. Each rendered row carries
-  its exact full session ID, so selection and deletion target that row directly
-  rather than inferring identity from its list position.
-- A paperclip and drag-and-drop tray above the terminal accepts files up to 100
-  MiB each. The loopback API streams them into mode-0700
-  `~/prime-dgx-agent/uploads/YYYY-MM-DD/` folders as mode-0600 files, with a 2
-  GiB total quota, safe stored names, random prefixes, and SHA-256 calculation.
-  The UI exposes **Copy path** so the operator can explicitly reference a file in
-  the intended prompt. Uploading alone never sends an agent/session command or
-  interrupts running work.
+  Local Spark providers report $0 API spend. Native launches also append a task
+  ledger so completion/elapsed/model/usage can be audited independently.
+- Native conversation control uses Prime's supported JSON CLI, not ttyd URL
+  arguments. Up to four process-group-isolated tasks run for at most 30 minutes;
+  message polling, safe Markdown, explicit stop, parallel activity tabs, elapsed
+  time, and redacted downloadable logs are active.
+- Conversation search, rename, pin, archive/restore, duplicate/fork, export,
+  recoverable deletion, and bulk archive/delete are available. Prime JSONL remains
+  the transcript source of truth.
+- Files are streamed to private storage with 100 MiB/2 GiB limits, metadata,
+  safe previews, explicit prompt selection, deletion, and a confirmed 1–365 day
+  retention policy. Unsafe archive paths and links are rejected.
+- Admin displays services, disk/upload/task status, guarded model/terminal
+  restarts, retention, and the private-CA download.
 
 ## Known gaps
 
@@ -268,9 +236,9 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 - Positive PAM login and the full browser session are verified: authenticated
   page/token requests returned 200, ttyd accepted `/terminal/ws`, spawned `prime-dgx`, and
   the live browser exposed an active terminal input. No password was handled.
-- Security consequence: an Nginx compromise can now read system password hashes
-  for offline attack. Removing `www-data` from `shadow` revokes that access but
-  also breaks the current PAM design.
+- Positive password login through the new session broker must be confirmed by the
+  owner because validation never handles the owner's password. Invalid login,
+  unauthenticated redirects, cookie endpoints, and PAM helper execution pass.
 - Public access is prohibited. The Spark has only RFC1918 address
   `172.16.253.231/24`, routes through `172.16.253.1`, and is behind NAT; the
   observed public address was `47.187.248.92`. No Cloudflare/Tailscale edge

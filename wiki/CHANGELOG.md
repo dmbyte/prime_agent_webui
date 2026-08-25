@@ -3,6 +3,27 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-25 — v0052 — Native session-authenticated Prime WebUI
+
+- Replaced Nginx PAM Basic Auth with a loopback PAM session broker, 30-minute
+  idle/12-hour absolute sessions, logout, CSRF, and Origin enforcement; removed
+  `www-data` from `shadow`.
+- Issued a private-CA server certificate with Spark IP/hostname SANs and exposed
+  only its public CA for client installation.
+- Replaced terminal-first chat with native Prime JSON tasks, four-task admission,
+  process-group stop, 30-minute timeout, safe Markdown/message polling, parallel
+  activity, redacted logs, and a native-request ledger. Kept ttyd as Advanced.
+- Added search, rename, pin, archive/restore, fork, export, recoverable delete,
+  and bulk archive/delete conversation management.
+- Added file metadata/selection/previews/deletion/retention and unsafe archive
+  traversal/link rejection; added service/storage/task administration and guarded
+  restarts.
+- A live Nemotron native task completed in 2.3 seconds, persisted its conversation,
+  and recorded 6,268 tokens. Seven tests and the complete Spark validation pass.
+- Created root-only rollback bundle
+  `/var/backups/prime-webui-v0052-20260825T153014-0500`; added ADR-0040 and
+  immutable snapshot [v0052](versions/v0052.md).
+
 ## 2026-08-25 — v0051 — Harden Prime without CIDR firewall changes
 
 - Created a checksummed, root-only pre-hardening recovery bundle at

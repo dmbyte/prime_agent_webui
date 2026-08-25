@@ -31,9 +31,9 @@ verified current state and enough history to understand or reverse changes.
 
 ## Status
 
-- Current wiki version: `v0051`
+- Current wiki version: `v0052`
 - Last verified: 2026-08-25
-- Project phase: hardened conversation-first Prime dashboard with X2D-tuned CAD artifact
+- Project phase: session-authenticated native Prime WebUI with structured tasks
 
 ## Truth and precedence
 
