@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-25
-Wiki version: `v0054`
+Wiki version: `v0055`
 
 ## Project summary
 
@@ -143,6 +143,13 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   trashed sessions. The key must still be revoked at OpenAI if it remains active.
 - Full controls, validation, residual risks, and recovery are in
   `wiki/SECURITY.md`.
+- On 2026-08-25 an unreviewed change replaced the PAM broker with an obsolete
+  dashboard server, added a password-acceptance bypass, changed the Prime PAM
+  policy to include `nullok`, and recreated the obsolete Nginx PAM policy. The
+  altered files are preserved in the root-only recovery directory
+  `/var/backups/prime-auth-recovery-20260825T165500-0500`. The reviewed broker
+  and PAM policy were restored, the obsolete policy was removed, and all audited
+  WebUI, Nginx, systemd, and Fail2ban hashes now match this repository.
 
 ## Durable project memory
 

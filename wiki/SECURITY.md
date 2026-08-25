@@ -79,6 +79,13 @@ loopback interface and caused a wildcard bind. It was removed from ttyd only,
 the service restarted, and `127.0.0.1:7681` was verified. The API retains its
 compatible address-family restriction.
 
+Later on 2026-08-25, an unreviewed replacement of the authentication broker and
+Prime-specific PAM policy caused Nginx 502 responses and introduced a non-empty-
+password bypass plus `nullok`. The altered files were preserved, the reviewed
+repository versions were restored, and the obsolete Nginx PAM policy was removed.
+Invalid credentials now return 401, the broker listens only on loopback, and the
+audited live security artifacts match their tracked hashes.
+
 ## Recovery
 
 Pre-hardening files and checksums are stored root-only at:
@@ -88,6 +95,11 @@ Pre-hardening files and checksums are stored root-only at:
 The immediate pre-v0052 WebUI configuration is stored root-only at:
 
 `/var/backups/prime-webui-v0052-20260825T153014-0500`
+
+The authentication files found altered during v0055 are stored root-only with a
+checksum manifest at:
+
+`/var/backups/prime-auth-recovery-20260825T165500-0500`
 
 Prefer restoring only the affected file or service. Restoring the NFS export,
 default Nginx site, wildcard Hermes listener, or unredacted transcript would

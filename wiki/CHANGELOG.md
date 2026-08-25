@@ -3,6 +3,21 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-25 — v0055 — Recover altered authentication stack
+
+- Diagnosed Nginx 502 responses as a failed authentication helper: its reviewed
+  broker had been replaced by an obsolete dashboard server that collided on port
+  8765 and contained a non-empty-password authentication bypass.
+- Found Prime-specific PAM drift adding `nullok` and an obsolete recreated Nginx
+  PAM policy; verified that system-wide common PAM files were unchanged.
+- Preserved all altered files and checksums in root-only recovery directory
+  `/var/backups/prime-auth-recovery-20260825T165500-0500`, restored the reviewed
+  broker and PAM policy, and removed the backed-up obsolete policy.
+- Validated loopback-only auth on 8764, invalid-password rejection, login redirect
+  and page responses, Nginx syntax, empty ban list, both model health endpoints,
+  and byte-for-byte agreement for audited WebUI/security artifacts.
+- Added immutable snapshot [v0055](versions/v0055.md).
+
 ## 2026-08-25 — v0054 — Correct static asset deployment
 
 - Diagnosed a rendered but nonfunctional login form: its JavaScript/CSS URLs used

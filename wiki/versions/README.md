@@ -6,6 +6,7 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0055](v0055.md) | 2026-08-25 | Recovered the reviewed authentication stack after broker and PAM drift |
 | [v0054](v0054.md) | 2026-08-25 | Corrected the WebUI static asset installation path |
 | [v0053](v0053.md) | 2026-08-25 | Prevented expired-session polling from triggering client bans |
 | [v0052](v0052.md) | 2026-08-25 | Added native chat, isolated tasks, PAM sessions, and private-CA TLS |
