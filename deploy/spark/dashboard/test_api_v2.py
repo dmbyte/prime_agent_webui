@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import importlib.util
+import json
 import tempfile
 import unittest
 import zipfile
@@ -33,6 +34,26 @@ class DashboardV2Tests(unittest.TestCase):
     def test_initial_admin_cache_cannot_be_deleted(self):
         with self.assertRaisesRegex(ValueError, "initial administrator"):
             api.purge_user_cache("dbyte")
+
+    def test_user_cache_purge_includes_persisted_logs_and_usage(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            sessions = root / "sessions"; uploads = root / "uploads"; logs = root / "logs"
+            sessions.mkdir(); uploads.mkdir(); logs.mkdir()
+            (sessions / "session-alice.jsonl").write_text("{}\n")
+            (uploads / "alice" ).mkdir()
+            (uploads / "alice/file.txt").write_text("private")
+            (logs / "task-alice.log").write_text("private log")
+            meta_path = root / "metadata.json"
+            meta_path.write_text(json.dumps({"conversations": {"session-alice": {"owner": "alice"}}, "files": {"alice/file.txt": {"owner": "alice"}}, "tasks": {"task-alice": {"owner": "alice"}}}))
+            ledger = root / "ledger.jsonl"
+            ledger.write_text(json.dumps({"owner": "alice", "taskId": "task-alice"}) + "\n" + json.dumps({"owner": "bob", "taskId": "task-bob"}) + "\n")
+            with mock.patch.object(api, "META", meta_path), mock.patch.object(api, "LEDGER", ledger), mock.patch.object(api, "TASK_LOGS", logs), mock.patch.object(api, "USER_TRASH", root / "trash"), mock.patch.object(api.legacy, "SESSIONS", sessions), mock.patch.object(api.legacy, "UPLOADS", uploads), mock.patch.object(api.legacy, "audit"):
+                result = api.purge_user_cache("alice")
+            self.assertEqual((result["sessions"], result["files"], result["logs"], result["usageRecords"]), (1, 1, 1, 1))
+            self.assertFalse((logs / "task-alice.log").exists())
+            self.assertNotIn("alice", ledger.read_text())
+            self.assertIn("bob", ledger.read_text())
 
     def settings(self, provider="spark-nemotron", model="nemotron-3.5-lightning", qwen=True):
         enabled = ["spark-nemotron/nemotron-3.5-lightning"]

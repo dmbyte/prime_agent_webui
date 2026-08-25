@@ -6,6 +6,7 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0067](v0067.md) | 2026-08-25 | Completed recoverable cleanup of each user's persisted server data |
 | [v0066](v0066.md) | 2026-08-25 | Added isolated local WebUI users and administrative lifecycle controls |
 | [v0065](v0065.md) | 2026-08-25 | Resolved mismatched Prime transcript and internal session IDs |
 | [v0064](v0064.md) | 2026-08-25 | Added guarded Prime Agent and GitHub HEAD WebUI update controls |

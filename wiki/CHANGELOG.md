@@ -3,6 +3,17 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-25 — v0067 — Complete recoverable user-data cleanup
+
+- Extended per-user cleanup to persisted task ownership/logs and owned usage
+  ledger records, including records created before an API restart.
+- Cache deletion now revokes the affected user's sessions; account enable/disable
+  and role changes are separate Admin actions.
+- Replaced visible password prompts with masked, validation-enforced password
+  dialogs for account creation and resets.
+- All 25 local tests and JavaScript syntax checks pass. Updated ADR-0045 and added
+  immutable snapshot [v0067](versions/v0067.md).
+
 ## 2026-08-25 — v0066 — Add isolated user administration
 
 - Added local admin/user accounts with add, role/state change, password reset,

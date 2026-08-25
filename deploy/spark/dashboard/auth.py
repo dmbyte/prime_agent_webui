@@ -201,6 +201,8 @@ def manage_user(action, body, actor):
         if username == actor: raise ValueError("You cannot delete your own account")
         if username not in users: raise ValueError("User not found")
         del users[username]
+    elif action == "revoke":
+        if username not in users: raise ValueError("User not found")
     else: raise ValueError("Unsupported user action")
     if not any(row.get("role") == "admin" and row.get("enabled", True) for row in users.values()): raise ValueError("At least one enabled administrator is required")
     atomic_users(store)

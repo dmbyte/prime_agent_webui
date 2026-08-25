@@ -69,6 +69,11 @@ class CredentialTests(unittest.TestCase):
         auth.manage_user("reset", {"username": "alice", "password": "alice replacement password"}, "dbyte")
         self.assertNotIn("alice-token", auth.SESSIONS)
         self.assertTrue(auth.authenticate("alice", "alice replacement password"))
+        with auth.LOCK:
+            auth.SESSIONS["alice-token"] = {"user": "alice", "role": "user", "csrf": "x", "created": 0, "seen": 0, "expires": 1}
+        auth.manage_user("revoke", {"username": "alice"}, "dbyte")
+        self.assertNotIn("alice-token", auth.SESSIONS)
+        self.assertTrue(auth.authenticate("alice", "alice replacement password"))
         auth.manage_user("delete", {"username": "alice"}, "dbyte")
         self.assertFalse(auth.authenticate("alice", "alice replacement password"))
 

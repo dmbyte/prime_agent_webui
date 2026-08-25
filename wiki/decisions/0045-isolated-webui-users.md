@@ -24,5 +24,9 @@ last enabled admin cannot be removed.
 Users cannot browse or mutate each other's chats/files/tasks through the WebUI.
 Admin identity management is security-sensitive and remains CSRF/session checked.
 Password reset requires an administrator-supplied new password and revokes that
-user's sessions immediately. Recovery storage requires a separate deliberate
-purge decision for permanent deletion.
+user's sessions immediately. Cache deletion includes persisted task ownership,
+task logs, and owned usage-ledger records even after an API restart, and also
+revokes active sessions. Recovery storage requires a separate deliberate purge
+decision for permanent deletion. Isolation is enforced at the authenticated
+WebUI/API ownership boundary; administrators and the shared host account remain
+trusted infrastructure rather than mutually untrusted OS security domains.

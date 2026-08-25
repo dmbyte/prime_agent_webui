@@ -113,7 +113,12 @@ and Bearer authorization values. The main chat retains the stop button.
   browser-controlled header. Chats, uploads, tasks/logs, usage, and metadata are
   owner-filtered. Existing data defaults to `dbyte`; new data records its owner.
 - User/cache deletion moves owned server data to mode-0700 per-user recovery
-  storage. Password reset/change/delete revokes that user's active sessions.
+  storage, including chats, uploads, persisted task logs/ownership, and owned
+  usage-ledger records. Cache clearing, password reset/change, and deletion revoke
+  that user's active sessions. Password creation/reset uses masked dialog fields.
+- The deployed compatibility check retained the existing mode-0600 version-1
+  credential and recognized it as `dbyte`/admin without rewriting it. The first
+  successful management change performs the atomic version-2 store migration.
 - Conversation metadata is stored atomically in
   `~/.prime/agent/webui-metadata.json`; transcripts remain Prime's JSONL source
   of truth. Delete still moves inactive transcripts to private recovery storage.

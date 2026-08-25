@@ -33,6 +33,7 @@ MAX_TASK_SECONDS = 30 * 60
 TASKS = {}
 TASK_LOCK = threading.Lock()
 META_LOCK = threading.Lock()
+LEDGER_LOCK = threading.Lock()
 
 NEMOTRON_ROUTE = ("spark-nemotron", "nemotron-3.5-lightning")
 QWEN_ROUTE = ("spark-qwen", "qwen3.6-35b-a3b")
@@ -230,10 +231,11 @@ def append_ledger(task, status, output=""):
                 break
         except (json.JSONDecodeError, AttributeError):
             continue
-    LEDGER.parent.mkdir(parents=True, exist_ok=True)
-    with LEDGER.open("a") as handle:
-        handle.write(json.dumps(record, separators=(",", ":")) + "\n")
-    os.chmod(LEDGER, 0o600)
+    with LEDGER_LOCK:
+        LEDGER.parent.mkdir(parents=True, exist_ok=True)
+        with LEDGER.open("a") as handle:
+            handle.write(json.dumps(record, separators=(",", ":")) + "\n")
+        os.chmod(LEDGER, 0o600)
 
 
 def ledger_summary():
@@ -326,6 +328,10 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner="dbyt
     task = {"id": task_id, "sessionId": session_id if not fork else None, "owner": owner, "topic": legacy.safe_topic(message) or "Native task", **route, "thinking": thinking, "contextWindow": details.get("contextWindow"), "maxTokens": details.get("maxTokens"), "status": "running", "started": now_iso(), "startedEpoch": time.time(), "pid": process.pid, "process": process, "logAvailable": False}
     with TASK_LOCK:
         TASKS[task_id] = task
+    with META_LOCK:
+        data = metadata()
+        data.setdefault("tasks", {})[task_id] = {"owner": owner, "createdAt": task["started"]}
+        legacy.atomic_json(META, data)
     if task.get("sessionId"):
         store_task_route(task)
     threading.Thread(target=monitor_task, args=(task_id, before), daemon=True).start()
@@ -437,7 +443,8 @@ def purge_user_cache(username):
     for session_id in owned_sessions:
         data.get("conversations", {}).pop(session_id, None)
     with TASK_LOCK:
-        owned_tasks = [task_id for task_id, row in TASKS.items() if row.get("owner", "dbyte") == username]
+        owned_tasks = {task_id for task_id, row in TASKS.items() if row.get("owner", "dbyte") == username}
+    owned_tasks.update(task_id for task_id, row in data.get("tasks", {}).items() if row.get("owner", "dbyte") == username)
     for task_id in owned_tasks:
         source = TASK_LOGS / f"{task_id}.log"
         if source.is_file():
@@ -445,9 +452,32 @@ def purge_user_cache(username):
             target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             os.replace(source, target)
             moved_logs += 1
+        data.get("tasks", {}).pop(task_id, None)
+    moved_ledger = 0
+    with LEDGER_LOCK:
+        retained = []
+        removed = []
+        try:
+            for line in LEDGER.read_text(errors="replace").splitlines():
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    retained.append(line); continue
+                (removed if row.get("owner", "dbyte") == username else retained).append(line)
+        except OSError:
+            pass
+        if removed:
+            ledger_recovery = recovery / "usage-ledger.jsonl"
+            ledger_recovery.write_text("\n".join(removed) + "\n")
+            os.chmod(ledger_recovery, 0o600)
+            ledger_temp = LEDGER.with_name(f".{LEDGER.name}.{uuid.uuid4().hex}.tmp")
+            ledger_temp.write_text("\n".join(retained) + ("\n" if retained else ""))
+            os.chmod(ledger_temp, 0o600)
+            os.replace(ledger_temp, LEDGER)
+            moved_ledger = len(removed)
     save_metadata(data)
-    legacy.audit("user_cache_deleted", user=username, sessions=moved_sessions, files=moved_files, logs=moved_logs)
-    return {"user": username, "sessions": moved_sessions, "files": moved_files, "logs": moved_logs, "recoverable": True}
+    legacy.audit("user_cache_deleted", user=username, sessions=moved_sessions, files=moved_files, logs=moved_logs, ledger=moved_ledger)
+    return {"user": username, "sessions": moved_sessions, "files": moved_files, "logs": moved_logs, "usageRecords": moved_ledger, "recoverable": True}
 
 
 def inspect_archive(path):
