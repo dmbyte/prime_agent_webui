@@ -130,9 +130,10 @@ def message_text(parts):
 def conversation_messages(session_id):
     if not valid_id(session_id):
         raise ValueError("Invalid conversation identifier")
-    path = legacy.SESSIONS / f"{session_id}.jsonl"
-    if not path.is_file():
-        raise ValueError("Conversation not found")
+    try:
+        path = legacy.session_path(session_id)
+    except ValueError as error:
+        raise ValueError("Conversation not found") from error
     rows = []
     with path.open(errors="replace") as handle:
         for line in handle:

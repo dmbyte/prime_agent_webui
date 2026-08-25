@@ -30,6 +30,9 @@ The sidebar includes:
   deleted even though Prime labels their persistent lifecycle `live`; actual
   running, streaming, compacting, attached, queued, or unfinished work is blocked.
   Individual and bulk failures are shown to the operator.
+  Prime transcript filenames and internal session IDs can differ; opening,
+  export, active-work protection, and recoverable deletion resolve either alias
+  while recovery retains the real filename.
 - **Usage:** exact Prime provider/model token and cost windows for today and 30
   days. Every configured provider is a collapsible group whose summary rolls up
   all child-model tokens and spend; expanding it shows model-level values, and
@@ -174,6 +177,11 @@ The pre-v0064 API/UI, installed assets, clone commit, and Prime version are
 preserved root-only with checksums at:
 
 `/var/backups/prime-updates-v0064-20260825T174800-0500`
+
+The pre-v0065 conversation APIs and deployed Git commit are preserved root-only
+with checksums at:
+
+`/var/backups/prime-session-ids-v0065-20260825T175500-0500`
 
 The pre-v0052 root-only recovery bundle is:
 

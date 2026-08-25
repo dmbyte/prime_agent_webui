@@ -3,6 +3,16 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-25 — v0065 — Resolve conversation identifier mismatches
+
+- Confirmed 9 of 30 Spark transcripts use a filename ID different from their
+  internal Prime session ID, causing false not-found errors from sidebar deletion.
+- Added strict bounded resolution of either alias for deletion, opening, and
+  export; recovery keeps the true filename and active-work checks protect both.
+- Added mismatch deletion and active-alias regressions. All 21 local tests and
+  syntax/whitespace checks pass. Preserved a checksummed root-only rollback bundle,
+  updated ADR-0029, and added immutable snapshot [v0065](versions/v0065.md).
+
 ## 2026-08-25 — v0064 — Add guarded software updates
 
 - Added confirmed Settings actions and status for updating Prime Agent through

@@ -18,6 +18,8 @@ from Prime that the session has no actual running activity. Prime's persistent
 compacting, attached, queued, or unfinished work. Atomically move the JSONL file to a
 private mode-0700 `session-trash` directory with a timestamped name. Continue
 including that directory in Usage calculations but exclude it from Conversations.
+Resolve either the transcript filename ID or the internal JSONL session ID, map
+both aliases into active-work protection, and retain the real filename in recovery.
 
 ## Consequences
 

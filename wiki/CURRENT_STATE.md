@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-25
-Wiki version: `v0064`
+Wiki version: `v0065`
 
 ## Project summary
 
@@ -106,6 +106,9 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   `/var/backups/prime-updates-v0064-20260825T174800-0500`; it preserves prior
   source/installed UI and API files, WebUI clone commit, Prime version, and
   checksums.
+- The root-only pre-v0065 conversation-ID recovery bundle is
+  `/var/backups/prime-session-ids-v0065-20260825T175500-0500`; it preserves the
+  prior APIs, deployed Git commit, and checksums.
 
 ## Deployed architecture
 
@@ -294,6 +297,8 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   the transcript source of truth. Deletion permits Prime conversations that are
   idle and unattached, while actual active/streaming/compacting/queued/unfinished
   work remains protected. UI failures are reported rather than silently ignored.
+  Storage operations resolve both the transcript filename ID and Prime's internal
+  session ID; 9 of 30 files had differing values when this was deployed.
 - Files are streamed to private storage with 100 MiB/2 GiB limits, metadata,
   safe previews, explicit prompt selection, deletion, and a confirmed 1–365 day
   retention policy. Unsafe archive paths and links are rejected.

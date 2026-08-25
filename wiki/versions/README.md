@@ -6,6 +6,7 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0065](v0065.md) | 2026-08-25 | Resolved mismatched Prime transcript and internal session IDs |
 | [v0064](v0064.md) | 2026-08-25 | Added guarded Prime Agent and GitHub HEAD WebUI update controls |
 | [v0063](v0063.md) | 2026-08-25 | Added a persistent, accessible resizable sidebar |
 | [v0062](v0062.md) | 2026-08-25 | Repaired recoverable deletion for idle Prime conversations |

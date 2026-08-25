@@ -75,6 +75,23 @@ class DashboardSecurityTests(unittest.TestCase):
         self.assertEqual(len(list(api.SESSION_TRASH.glob(f"{session_id}.*.jsonl"))), 1)
         self.assertTrue(result["recoverable"])
 
+    def test_internal_id_resolves_different_storage_filename(self):
+        storage_id = "storage-session-1234"
+        internal_id = "internal-session-5678"
+        api.SESSIONS.mkdir()
+        source = api.SESSIONS / f"{storage_id}.jsonl"
+        source.write_text(f'{{"type":"session","id":"{internal_id}"}}\n')
+        self.assertEqual(api.session_path(internal_id), source)
+        with mock.patch.object(api, "live_session_ids", return_value=set()):
+            result = api.delete_conversation(internal_id)
+        self.assertEqual(result["storageId"], storage_id)
+        self.assertEqual(len(list(api.SESSION_TRASH.glob(f"{storage_id}.*.jsonl"))), 1)
+
+    def test_active_storage_alias_is_protected(self):
+        payload = b'prefix {"sessions":[{"id":"internal-session","sessionFile":"/tmp/storage-session.jsonl","activity":"working"}]}'
+        with mock.patch.object(api.subprocess, "run", return_value=mock.Mock(stdout=payload.decode())):
+            self.assertEqual(api.live_session_ids(), {"internal-session", "storage-session"})
+
 
 if __name__ == "__main__":
     unittest.main()
