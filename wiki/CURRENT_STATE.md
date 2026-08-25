@@ -45,7 +45,8 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   Password creation/reset uses masked inputs with the same 12-character minimum.
   Deployment preserved the on-disk version-1 credential mode 0600; the broker
   exposes it virtually as the sole `dbyte` admin until the first management write
-  performs the atomic version-2 migration. Negative login remained 401.
+  performs the atomic version-2 migration. Negative login remained 401. The v0067
+  deployment passed all 25 tests and exact Auth/API/UI hash comparison.
 - WebSocket origin enforcement is performed by Nginx against the approved HTTPS
   origins. ttyd's incompatible backend `--check-origin` option is disabled because
   a reverse proxy hides the external origin/host relationship from ttyd.

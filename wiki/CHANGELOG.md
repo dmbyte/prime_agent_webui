@@ -13,6 +13,9 @@ snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
   dialogs for account creation and resets.
 - All 25 local tests and JavaScript syntax checks pass. Updated ADR-0045 and added
   immutable snapshot [v0067](versions/v0067.md).
+- Deployed commit `84bd189`; all 25 deployed tests passed, Nginx validation
+  passed, Auth/API and both model services are active, negative login returns
+  401, and live Auth/API/UI hashes match the repository.
 
 ## 2026-08-25 — v0066 — Add isolated user administration
 
