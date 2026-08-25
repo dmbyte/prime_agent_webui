@@ -4,8 +4,10 @@ Last verified: 2026-08-25
 
 ## User experience
 
-Open `https://172.16.253.231:8443`. The login form verifies the `dbyte` system
-password through PAM and creates a Secure, HttpOnly, SameSite=Strict session.
+Open `https://172.16.253.231:8443`. The login form verifies the dedicated
+`dbyte` WebUI password against a salted-scrypt record and creates a Secure,
+HttpOnly, SameSite=Strict session. Set or rotate the password interactively as
+`dbyte` with `prime-web-password`; the password is never placed in shell history.
 Sessions have a 30-minute idle limit and 12-hour absolute limit; logout revokes
 the current in-memory session. State-changing requests require the matching CSRF
 cookie/header and an approved Origin.
@@ -70,7 +72,9 @@ and Bearer authorization values. The main chat retains the stop button.
 - Static asset URL root: `/var/www/prime-agent/assets/`; use the tracked
   `install-static.sh` so login and application scripts are not misplaced.
 - Native API: `~/prime-dgx-dashboard/api_v2.py`, loopback port 8765
-- PAM session broker: `~/prime-dgx-dashboard/auth.py`, loopback port 8764
+- Local session broker: `~/prime-dgx-dashboard/auth.py`, loopback port 8764
+- Password tool: `/usr/local/bin/prime-web-password`
+- Credential record: `~/.config/prime-agent/web-auth.json`, mode 0600
 - Advanced console: ttyd, loopback port 7681
 - Models: loopback ports 30000 and 30001
 - Nginx: private address/loopback port 8443
@@ -78,8 +82,8 @@ and Bearer authorization values. The main chat retains the stop button.
   `/prime-webui-ca.crt`
 
 The API's writable scope is `~/.prime/agent` and `~/prime-dgx-agent`; the auth
-broker is read-only and unprivileged. PAM invokes Ubuntu's set-group
-`unix_chkpwd` helper, so neither Nginx nor the broker process can read `shadow`.
+broker is read-only and unprivileged. It reads only the one-way credential record
+and does not use PAM, the Linux account password, or `shadow`.
 
 ## Validation and recovery
 
@@ -89,9 +93,14 @@ completed in 2.3 seconds, persisted a conversation, returned the exact response,
 and recorded 6,268 tokens. Model/private-listener/session-broker/HTTPS/header and
 20% memory-gate validation passed.
 
-Positive password entry is intentionally left to the owner; invalid PAM login
-returns 401. The private CA must be installed on each client before the browser
-will trust the new certificate.
+Positive password entry is intentionally left to the owner. Before initial setup,
+login returns 503; after setup, invalid local-credential login returns 401. The
+private CA must be installed on each client before the browser trusts the
+certificate.
+
+The pre-v0056 PAM configuration is preserved root-only at:
+
+`/var/backups/prime-local-auth-v0056-20260825T170500-0500`
 
 The pre-v0052 root-only recovery bundle is:
 

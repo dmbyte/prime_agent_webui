@@ -11,24 +11,27 @@ new CIDR firewall policy, so UFW remains inactive and no host allowlist was
 introduced. Router and perimeter port forwarding must remain disabled.
 
 Only SSH (22) and Prime HTTPS (8443) listen beyond loopback. ttyd (7681), the
-PAM broker (8764), dashboard API (8765), Hermes WebUI (8787), Nemotron (30000), and Qwen (30001)
+local session broker (8764), dashboard API (8765), Hermes WebUI (8787), Nemotron (30000), and Qwen (30001)
 are loopback-only. The default HTTP site and port 80 are disabled. The former
 NFS home export, NFS server, and rpcbind listeners are disabled.
 
 ## Authentication and abuse controls
 
-PAM accepts only local accounts in the `prime-web` group; `dbyte` is the intended
-interactive member. A loopback-only Python broker invokes Ubuntu PAM and issues
-random Secure, HttpOnly, SameSite=Strict sessions with 30-minute idle and 12-hour
-absolute limits. Nginx delays failed authentication, limits requests and
+The WebUI does not use PAM or the Linux account password. A loopback-only Python
+broker verifies the dedicated `dbyte` WebUI password against an owner-only salted-
+scrypt record and issues random Secure, HttpOnly, SameSite=Strict sessions with
+30-minute idle and 12-hour absolute limits. The credential loader rejects links,
+wrong ownership, permissive modes, malformed data, and unexpected KDF parameters.
+Nginx delays failed authentication, limits requests and
 connections, and emits security headers. Fail2ban monitors only 401 responses to
 `POST /auth/login` and, after 15 failures in 10 minutes, bans the source for one
 hour via nftables. Expired-session 401 responses from background API polling are
 excluded. This reactive rule does not define or narrow trusted CIDRs.
 
-Nginx has been removed from `shadow`. The broker runs as `dbyte` and cannot read
-password hashes; PAM delegates the comparison to Ubuntu's narrowly scoped
-set-group `unix_chkpwd` helper.
+Nginx and the broker have no `shadow` access. The broker runs as `dbyte` under
+filesystem, network, syscall, and process confinement. Password hashing is
+serialized to bound memory use, uses scrypt N=32768/r=8/p=1 with a random 16-byte
+salt, and compares the result in constant time.
 
 The server certificate is signed by a dedicated private CA with SANs for the
 Spark IP, hostname, localhost, and loopback. Clients must install the downloadable
@@ -86,6 +89,12 @@ repository versions were restored, and the obsolete Nginx PAM policy was removed
 Invalid credentials now return 401, the broker listens only on loopback, and the
 audited live security artifacts match their tracked hashes.
 
+PAM was retired from the WebUI in v0056 after its user-service confinement proved
+incompatible with Ubuntu's set-group password helper. A dedicated local password
+keeps the broker unprivileged and fully confined without granting any process
+access to Linux password hashes. The PAM-free broker fails closed with 503 until
+the owner creates the initial credential interactively.
+
 ## Recovery
 
 Pre-hardening files and checksums are stored root-only at:
@@ -100,6 +109,11 @@ The authentication files found altered during v0055 are stored root-only with a
 checksum manifest at:
 
 `/var/backups/prime-auth-recovery-20260825T165500-0500`
+
+The immediate pre-v0056 PAM broker, unit, policy, and login page are stored
+root-only with checksums at:
+
+`/var/backups/prime-local-auth-v0056-20260825T170500-0500`
 
 Prefer restoring only the affected file or service. Restoring the NFS export,
 default Nginx site, wildcard Hermes listener, or unredacted transcript would

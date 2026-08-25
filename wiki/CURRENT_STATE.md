@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-25
-Wiki version: `v0055`
+Wiki version: `v0056`
 
 ## Project summary
 
@@ -22,7 +22,7 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 - Target Spark: SSH verified as `dbyte@172.16.253.231`; passwordless sudo works
 - Prime Agent: `0.8.0`, installed for `dbyte`; launcher `prime-dgx`
 - Browser interface: native Prime chat API on `127.0.0.1:8765`, optional ttyd
-  1.7.4 console on `127.0.0.1:7681`, and isolated PAM session broker on
+  1.7.4 console on `127.0.0.1:7681`, and isolated local session broker on
   `127.0.0.1:8764`, fronted by Nginx 1.24 on loopback and
   `172.16.253.231:8443` with private-CA TLS.
   Nginx allows loopback, RFC1918, and `100.64.0.0/10` VPN sources and denies all
@@ -30,8 +30,10 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   systemd pre-start check waits up to 120 seconds for the explicit private LAN
   address before validating the configuration, avoiding the boot-time bind race
   observed on 2026-08-24 while failing closed if the address never appears.
-- Nginx no longer authenticates through PAM directly and is no longer a member
-  of `shadow`. Secure session cookies use 30-minute idle and 12-hour absolute
+- The WebUI no longer uses PAM or the Linux account password. Its unprivileged
+  broker verifies a dedicated salted-scrypt credential stored mode 0600 outside
+  the repository; Nginx has no `shadow` access. Secure session cookies use
+  30-minute idle and 12-hour absolute
   limits; state changes require CSRF and Origin validation.
 - WebSocket origin enforcement is performed by Nginx against the approved HTTPS
   origins. ttyd's incompatible backend `--check-origin` option is disabled because
@@ -116,9 +118,10 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   loopback. SSH remains available on port 22.
 - The existing Nginx private-source allow rules remain. Per owner direction, no
   host-level CIDR firewall policy was added; UFW remains inactive.
-- PAM accepts only members of `prime-web`; `dbyte` is a member. An isolated
-  loopback broker validates PAM and issues secure sessions; Nginx has no shadow
-  access. Nginx delays/rate-limits failures. Fail2ban counts only actual 401
+- An isolated loopback broker verifies the dedicated `dbyte` WebUI credential
+  and issues secure sessions. The credential file is owner-only, rejects links
+  and permissive modes, and uses scrypt with a random salt. Nginx delays/rate-
+  limits failures. Fail2ban counts only actual 401
   responses from `POST /auth/login`, then reacts after 15 failures in 10 minutes
   with a one-hour nftables ban. Expired-session API polling is not counted.
 - Nginx suppresses version details and sends CSP, no-sniff, referrer,
@@ -149,7 +152,8 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   altered files are preserved in the root-only recovery directory
   `/var/backups/prime-auth-recovery-20260825T165500-0500`. The reviewed broker
   and PAM policy were restored, the obsolete policy was removed, and all audited
-  WebUI, Nginx, systemd, and Fail2ban hashes now match this repository.
+  WebUI, Nginx, systemd, and Fail2ban hashes matched this repository. PAM was
+  subsequently retired from the WebUI in v0056.
 
 ## Durable project memory
 
@@ -201,7 +205,8 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 - Launch Prime with `prime-dgx`; Nemotron is the default and Qwen is available
   as `spark-qwen/qwen3.6-35b-a3b` for exact child routing.
 - LAN and routed private-VPN clients open `https://172.16.253.231:8443` and
-  authenticate as `dbyte` with the Spark system password. Install the downloadable
+  authenticate as `dbyte` with the dedicated WebUI password. Create or rotate it
+  interactively as `dbyte` with `prime-web-password`. Install the downloadable
   Prime private CA on each client to eliminate the trust warning. No SSH tunnel
   is required.
 - Run `~/prime-dgx-agent/validate.sh` before and after runtime changes.
@@ -243,12 +248,13 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 - No throughput/latency benchmark or long concurrent soak has run.
 - Spend is only as complete as Prime session records and provider/model pricing
   metadata; it excludes subscriptions, taxes, credits, and calls outside Prime.
-- Positive PAM login and the full browser session are verified: authenticated
+- The earlier positive PAM login and full browser session were verified before
+  PAM was retired: authenticated
   page/token requests returned 200, ttyd accepted `/terminal/ws`, spawned `prime-dgx`, and
   the live browser exposed an active terminal input. No password was handled.
-- Positive password login through the new session broker must be confirmed by the
-  owner because validation never handles the owner's password. Invalid login,
-  unauthenticated redirects, cookie endpoints, and PAM helper execution pass.
+- The dedicated WebUI credential has not yet been created. Until the owner runs
+  `prime-web-password`, login fails closed with 503. Positive login must then be
+  confirmed by the owner because validation never handles the password.
 - Public access is prohibited. The Spark has only RFC1918 address
   `172.16.253.231/24`, routes through `172.16.253.1`, and is behind NAT; the
   observed public address was `47.187.248.92`. No Cloudflare/Tailscale edge

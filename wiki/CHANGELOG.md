@@ -3,6 +3,23 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-25 — v0056 — Replace PAM with dedicated local WebUI authentication
+
+- Retired PAM and the Linux account password from the WebUI after systemd's
+  intentional no-new-privileges confinement prevented Ubuntu's set-group helper
+  from reading the account record.
+- Added a dedicated password tool that prompts without echo, enforces 12–1024
+  UTF-8 bytes, derives a salted scrypt record, and atomically stores it mode 0600
+  outside the repository.
+- Updated the loopback broker to validate the strict credential record, serialize
+  memory-hard derivation, compare in constant time, and fail closed with 503 until
+  initial setup. Existing session, CSRF, rate-limit, and Fail2ban controls remain.
+- Preserved the pre-v0056 files under
+  `/var/backups/prime-local-auth-v0056-20260825T170500-0500`; six tests, Python
+  compilation, service/listener checks, Nginx validation, and unconfigured-state
+  checks pass.
+- Added ADR-0042 and immutable snapshot [v0056](versions/v0056.md).
+
 ## 2026-08-25 — v0055 — Recover altered authentication stack
 
 - Diagnosed Nginx 502 responses as a failed authentication helper: its reviewed

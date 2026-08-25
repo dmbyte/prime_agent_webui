@@ -46,3 +46,4 @@ only historical evidence: when a decision changes, mark the old record
 - [ADR-0039: Harden Prime without adding a CIDR firewall policy](0039-security-hardening-without-cidr-firewall.md)
 - [ADR-0040: Use a native session-authenticated Prime WebUI](0040-native-session-authenticated-webui.md)
 - [ADR-0041: Count only actual login failures for reactive bans](0041-count-only-login-failures-for-bans.md)
+- [ADR-0042: Use a dedicated local WebUI password instead of PAM](0042-dedicated-local-webui-auth.md)

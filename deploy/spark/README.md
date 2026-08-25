@@ -17,9 +17,13 @@ JavaScript and CSS belong in `/var/www/prime-agent/assets/`; placing assets in
 the web root leaves the login page visible but nonfunctional.
 
 `prime-web.service` provides a browser terminal on Spark loopback port 7681.
-Nginx exposes it at `https://172.16.253.231:8443` with PAM authentication and
-allows only private LAN/VPN source ranges. The initial TLS certificate is
-self-signed. The ttyd backend remains loopback-only.
+Nginx exposes it at `https://172.16.253.231:8443` with session authentication
+and allows only private LAN/VPN source ranges. The session broker validates a
+dedicated WebUI password against a mode-0600 salted scrypt record; it does not
+use PAM or the Linux account password. Install `set_web_password.py` as
+`/usr/local/bin/prime-web-password`, then run `prime-web-password` interactively
+as `dbyte` to create or rotate the credential without placing it in shell history.
+The ttyd backend remains loopback-only.
 Nginx validates WebSocket origins against the approved HTTPS hostnames before
 proxying; ttyd's backend-origin check is disabled because it cannot see through
 the reverse proxy correctly.

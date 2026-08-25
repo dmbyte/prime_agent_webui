@@ -3,9 +3,10 @@
 The reviewed deployment applies these host controls in addition to the tracked
 WebUI configuration:
 
-- `prime-web` is the only PAM group authorized for the Prime HTTPS interface.
-  A loopback-only broker issues secure expiring sessions; Nginx has no PAM or
-  `shadow` access.
+- A loopback-only broker verifies a dedicated salted-scrypt WebUI credential and
+  issues secure expiring sessions; Nginx has no PAM or `shadow` access. The mode-
+  0600 credential is outside the repository and is set interactively with
+  `prime-web-password`.
 - The distribution Nginx default site is disabled; no plaintext port 80 listener
   is permitted.
 - Hermes WebUI is retained but its systemd override binds it to loopback only.
@@ -20,5 +21,5 @@ WebUI configuration:
 
 The root-only rollback bundle created before deployment is documented in the
 corresponding wiki version. Restore individual files from that bundle, reload
-systemd/Nginx/PAM as appropriate, and verify listeners before re-enabling any
+systemd/Nginx as appropriate, and verify listeners before re-enabling any
 network service.

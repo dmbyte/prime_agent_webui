@@ -1,10 +1,11 @@
 [Unit]
-Description=Prime WebUI isolated PAM session broker
+Description=Prime WebUI isolated local session broker
 After=network.target
 
 [Service]
 Type=simple
 Environment=PRIME_AUTH_USER=dbyte
+Environment=PRIME_AUTH_CREDENTIAL=/home/dbyte/.config/prime-agent/web-auth.json
 ExecStart=/usr/bin/python3 %h/prime-dgx-dashboard/auth.py
 Restart=on-failure
 RestartSec=3
