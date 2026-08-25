@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-25
-Wiki version: `v0052`
+Wiki version: `v0053`
 
 ## Project summary
 
@@ -116,8 +116,9 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   host-level CIDR firewall policy was added; UFW remains inactive.
 - PAM accepts only members of `prime-web`; `dbyte` is a member. An isolated
   loopback broker validates PAM and issues secure sessions; Nginx has no shadow
-  access. Nginx delays/rate-limits failures and Fail2ban reacts after 15 failures
-  in 10 minutes with a one-hour nftables ban.
+  access. Nginx delays/rate-limits failures. Fail2ban counts only actual 401
+  responses from `POST /auth/login`, then reacts after 15 failures in 10 minutes
+  with a one-hour nftables ban. Expired-session API polling is not counted.
 - Nginx suppresses version details and sends CSP, no-sniff, referrer,
   permissions, opener/resource isolation, and no-store headers.
 - The API bounds request concurrency, size, and content types; serializes upload

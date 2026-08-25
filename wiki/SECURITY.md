@@ -21,9 +21,10 @@ PAM accepts only local accounts in the `prime-web` group; `dbyte` is the intende
 interactive member. A loopback-only Python broker invokes Ubuntu PAM and issues
 random Secure, HttpOnly, SameSite=Strict sessions with 30-minute idle and 12-hour
 absolute limits. Nginx delays failed authentication, limits requests and
-connections, and emits security headers. Fail2ban monitors 401 responses and,
-after 15 failures in 10 minutes, bans the source for one hour via nftables. This
-reactive rule does not define or narrow trusted CIDRs.
+connections, and emits security headers. Fail2ban monitors only 401 responses to
+`POST /auth/login` and, after 15 failures in 10 minutes, bans the source for one
+hour via nftables. Expired-session 401 responses from background API polling are
+excluded. This reactive rule does not define or narrow trusted CIDRs.
 
 Nginx has been removed from `shadow`. The broker runs as `dbyte` and cannot read
 password hashes; PAM delegates the comparison to Ubuntu's narrowly scoped

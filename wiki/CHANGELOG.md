@@ -3,6 +3,17 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-25 — v0053 — Restrict bans to real login failures
+
+- Diagnosed the apparently offline WebUI as a Fail2ban false positive: the stale
+  v0051 page generated repeated expired-session API 401 responses and the owner's
+  `172.16.253.114` client entered the nftables ban set.
+- Narrowed the filter to 401 responses from `POST /auth/login` only; retained the
+  15-failure/10-minute/one-hour reactive policy and added no CIDR policy.
+- Validated the filter, restarted Fail2ban, removed the stale ban, confirmed an
+  empty ban set, and verified HTTPS from the client returns the login response.
+- Added ADR-0041 and immutable snapshot [v0053](versions/v0053.md).
+
 ## 2026-08-25 — v0052 — Native session-authenticated Prime WebUI
 
 - Replaced Nginx PAM Basic Auth with a loopback PAM session broker, 30-minute

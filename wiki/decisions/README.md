@@ -45,3 +45,4 @@ only historical evidence: when a decision changes, mark the old record
 - [ADR-0038: Adapt the v14 button and perimeter ventilation pattern](0038-adopt-v14-button-and-vent-pattern.md)
 - [ADR-0039: Harden Prime without adding a CIDR firewall policy](0039-security-hardening-without-cidr-firewall.md)
 - [ADR-0040: Use a native session-authenticated Prime WebUI](0040-native-session-authenticated-webui.md)
+- [ADR-0041: Count only actual login failures for reactive bans](0041-count-only-login-failures-for-bans.md)
