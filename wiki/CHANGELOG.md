@@ -3,6 +3,24 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-25 — v0060 — Make routing and active effort observable
+
+- Added an active-conversation header showing provider/model, editable effort,
+  route, and context; the selected effort applies to and persists with the next
+  task in that conversation.
+- Added deterministic Qwen specialist routing for visual/document, 3D/CAD,
+  finance/trading, and deep-review prompts, with explicit model overrides,
+  visible disabled-Qwen fallback, and preservation of manually selected defaults.
+- Strengthened Prime policy to require an actual Qwen child for specialist
+  subtasks in mixed Nemotron work and prohibit unperformed delegation claims.
+- Added four routing regressions; all 14 dashboard/auth/security tests, Python
+  compilation, JavaScript syntax, and whitespace checks pass locally. Eleven
+  deployed Python tests, service/model health, HTTPS boundary, installed assets,
+  and on-host route probes pass; 41.1 GB (31.5%) RAM remained available.
+- Preserved the prior API/UI/policy and web root in a checksummed root-only
+  rollback bundle; added ADR-0043 and immutable snapshot
+  [v0060](versions/v0060.md).
+
 ## 2026-08-25 — v0059 — Remove Hermes completely from active service
 
 - Disabled and removed Hermes WebUI and gateway services, the 22 GB runtime/data

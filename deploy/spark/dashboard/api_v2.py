@@ -32,6 +32,44 @@ TASKS = {}
 TASK_LOCK = threading.Lock()
 META_LOCK = threading.Lock()
 
+NEMOTRON_ROUTE = ("spark-nemotron", "nemotron-3.5-lightning")
+QWEN_ROUTE = ("spark-qwen", "qwen3.6-35b-a3b")
+QWEN_SPECIALIST_PATTERNS = (
+    r"\b(image|photo|screenshot|diagram|chart|graph|png|jpe?g|webp|pdf)\b",
+    r"\b(3d[ -]?print|cad|stl|step|mesh|slicer|printability|manufactur(?:e|ing)|clearance|enclosure|geometry|thermal|cfd)\b",
+    r"\b(portfolio|stock|equity|earnings|valuation|day[ -]?trad(?:e|ing)|trade setup|technical analysis|options|risk[- ]adjusted|drawdown|correlation|position sizing|financial statement|balance sheet|cash flow)\b",
+    r"\b(code review|security review|architecture review|independent review|second opinion|adversarial review|critique|refactor|debug)\b",
+)
+
+
+def model_details(provider, model):
+    return next((row for row in legacy.model_catalog() if row["provider"] == provider and row["model"] == model), {})
+
+
+def route_task(message, settings=None):
+    settings = settings or legacy.settings_view()
+    selected = (settings["provider"], settings["model"])
+    enabled = set(settings.get("enabledModels") or [])
+    qwen_enabled = "/".join(QWEN_ROUTE) in enabled
+    value = str(message).casefold()
+    explicit_qwen = bool(re.search(r"(?:\b(?:use|route|delegate|send)\b.{0,24}\bqwen\b|\bqwen\b.{0,24}\b(?:subagent|model)\b|/qwen\b)", value))
+    explicit_nemotron = bool(re.search(r"(?:\b(?:use|route|keep)\b.{0,24}\bnemotron\b|/nemotron\b)", value))
+    specialist = next((pattern for pattern in QWEN_SPECIALIST_PATTERNS if re.search(pattern, value)), None)
+    if explicit_nemotron:
+        provider, model = NEMOTRON_ROUTE
+        return {"provider": provider, "model": model, "routingMode": "explicit", "routeReason": "User explicitly requested Nemotron."}
+    if explicit_qwen:
+        if qwen_enabled:
+            provider, model = QWEN_ROUTE
+            return {"provider": provider, "model": model, "routingMode": "explicit", "routeReason": "User explicitly requested Qwen."}
+        return {"provider": selected[0], "model": selected[1], "routingMode": "fallback", "routeReason": "Qwen was requested but is disabled; using the selected default."}
+    if selected == NEMOTRON_ROUTE and specialist:
+        if qwen_enabled:
+            provider, model = QWEN_ROUTE
+            return {"provider": provider, "model": model, "routingMode": "automatic", "routeReason": "Qwen specialist route matched this task."}
+        return {"provider": selected[0], "model": selected[1], "routingMode": "fallback", "routeReason": "A Qwen specialist route matched, but Qwen is disabled."}
+    return {"provider": selected[0], "model": selected[1], "routingMode": "default", "routeReason": "Using the selected default model."}
+
 
 def now_iso():
     return datetime.now(timezone.utc).isoformat()
@@ -58,6 +96,12 @@ def conversation_catalog(query="", include_archived=False):
     for row in rows:
         extra = data.get(row["id"], {})
         row.update({"pinned": bool(extra.get("pinned")), "archived": bool(extra.get("archived"))})
+        if extra.get("thinking"):
+            row["thinking"] = extra["thinking"]
+        if extra.get("routeProvider") == row.get("provider") and extra.get("routeModel") == row.get("model"):
+            row.update({"routingMode": extra.get("routingMode"), "routeReason": extra.get("routeReason")})
+        details = model_details(row.get("provider"), row.get("model"))
+        row.update({"contextWindow": details.get("contextWindow"), "maxTokens": details.get("maxTokens")})
         if extra.get("title"):
             row["topic"] = str(extra["title"])[:96]
         if row["archived"] and not include_archived:
@@ -193,10 +237,26 @@ def monitor_task(task_id, before):
         os.chmod(log_path, 0o600)
         task["logAvailable"] = True
         append_ledger(task, status, output)
+        if task.get("sessionId"):
+            store_task_route(task)
     legacy.audit("native_task_finished", task=task_id, session=task.get("sessionId"), status=status)
 
 
-def launch_task(message, session_id=None, fork=False):
+def store_task_route(task):
+    with META_LOCK:
+        data = metadata()
+        row = data.setdefault("conversations", {}).setdefault(task["sessionId"], {})
+        row.update({
+            "thinking": task.get("thinking"),
+            "routeProvider": task.get("provider"),
+            "routeModel": task.get("model"),
+            "routingMode": task.get("routingMode"),
+            "routeReason": task.get("routeReason"),
+        })
+        legacy.atomic_json(META, data)
+
+
+def launch_task(message, session_id=None, fork=False, thinking=None):
     message = str(message).strip()
     if not message or len(message) > 100000:
         raise ValueError("Message must contain between 1 and 100,000 characters")
@@ -207,16 +267,25 @@ def launch_task(message, session_id=None, fork=False):
         if active >= MAX_NATIVE_TASKS:
             raise RuntimeError("Four native tasks are already running")
     settings = legacy.settings_view()
-    command = [str(legacy.PRIME_AGENT), "--cwd", str(legacy.HOME / "prime-dgx-agent"), "--mode", "json", "--print", "--provider", settings["provider"], "--model", settings["model"], "--thinking", settings["thinking"]]
+    if thinking is None and session_id:
+        thinking = metadata().get("conversations", {}).get(session_id, {}).get("thinking")
+    thinking = str(thinking or settings["thinking"])
+    if thinking not in legacy.THINKING:
+        raise ValueError("Unsupported thinking level")
+    route = route_task(message, settings)
+    details = model_details(route["provider"], route["model"])
+    command = [str(legacy.PRIME_AGENT), "--cwd", str(legacy.HOME / "prime-dgx-agent"), "--mode", "json", "--print", "--provider", route["provider"], "--model", route["model"], "--thinking", thinking]
     if session_id:
         command.extend(["--fork" if fork else "--resume", session_id])
     command.extend(["--", message])
     before = {path.stem for path in legacy.SESSIONS.glob("*.jsonl")}
     task_id = uuid.uuid4().hex
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=legacy.HOME / "prime-dgx-agent", env=prime_env(), start_new_session=True)
-    task = {"id": task_id, "sessionId": session_id if not fork else None, "topic": legacy.safe_topic(message) or "Native task", "provider": settings["provider"], "model": settings["model"], "status": "running", "started": now_iso(), "startedEpoch": time.time(), "pid": process.pid, "process": process, "logAvailable": False}
+    task = {"id": task_id, "sessionId": session_id if not fork else None, "topic": legacy.safe_topic(message) or "Native task", **route, "thinking": thinking, "contextWindow": details.get("contextWindow"), "maxTokens": details.get("maxTokens"), "status": "running", "started": now_iso(), "startedEpoch": time.time(), "pid": process.pid, "process": process, "logAvailable": False}
     with TASK_LOCK:
         TASKS[task_id] = task
+    if task.get("sessionId"):
+        store_task_route(task)
     threading.Thread(target=monitor_task, args=(task_id, before), daemon=True).start()
     legacy.audit("native_task_started", task=task_id, session=session_id)
     return {key: value for key, value in task.items() if key != "process"}
@@ -430,7 +499,7 @@ class Handler(legacy.Handler):
                 raise ValueError("Invalid JSON request")
             payload = json.loads(self.rfile.read(length))
             if path == "/api/tasks/start":
-                self.send_json(202, {"task": launch_task(payload.get("message"), payload.get("sessionId"))})
+                self.send_json(202, {"task": launch_task(payload.get("message"), payload.get("sessionId"), thinking=payload.get("thinking"))})
             elif path == "/api/tasks/stop":
                 self.send_json(200, stop_native_task(str(payload.get("id", ""))))
             elif path == "/api/conversations/update":

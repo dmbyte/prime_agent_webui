@@ -6,6 +6,7 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0060](v0060.md) | 2026-08-25 | Added observable deterministic Qwen routing and active effort control |
 | [v0059](v0059.md) | 2026-08-25 | Removed Hermes Agent/WebUI and all identified active artifacts |
 | [v0058](v0058.md) | 2026-08-25 | Inventoried active LAN and loopback browser interfaces |
 | [v0057](v0057.md) | 2026-08-25 | Validated the owner-created dedicated WebUI credential and successful login |

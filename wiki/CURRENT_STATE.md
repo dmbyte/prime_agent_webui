@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-25
-Wiki version: `v0059`
+Wiki version: `v0060`
 
 ## Project summary
 
@@ -40,6 +40,9 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   a reverse proxy hides the external origin/host relationship from ttyd.
 - The authenticated root page is a native conversation UI with Chats, Usage,
   Files, Admin, and Settings tabs; the terminal is an optional advanced dialog.
+  The active conversation header displays the effective model, editable effort,
+  routing mode/reason, and context capacity. Effort changes apply to the next
+  message in that conversation and persist when that task starts.
   A compact live
   monitor shows CPU/GPU/memory utilization and GPU board power on its first row,
   with CPU/GPU/system temperatures on the second. Its loopback-only API
@@ -82,6 +85,9 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   configuration and checksums plus the original transcript sanitized in v0051.
 - The root-only pre-v0052 WebUI recovery bundle is
   `/var/backups/prime-webui-v0052-20260825T153014-0500`.
+- The root-only pre-v0060 routing/UI recovery bundle is
+  `/var/backups/prime-routing-v0060-20260825T173500-0500`; it contains the prior
+  API, UI, policy, installed web root, and checksums.
 
 ## Deployed architecture
 
@@ -102,6 +108,12 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   credits remaining. GPT-5.6 Sol remains a separate `openai-codex`/ChatGPT route.
 - Hermes is not installed. Historical framework analysis still describes it as
   an alternative gateway, but it has no current runtime role.
+- When Nemotron is the selected default, native WebUI tasks with clear
+  image/document, 3D/CAD/manufacturing, portfolio/trading, or deep-review signals
+  route directly to Qwen. Explicit Qwen/Nemotron requests override the automatic
+  choice; disabled Qwen falls back visibly, and manually selected non-Nemotron
+  defaults are preserved. Mixed Nemotron tasks must actually invoke a Qwen child
+  for specialist subtasks rather than merely claim delegation.
 
 ## Domain boundaries
 
@@ -119,6 +131,9 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 
 - Both endpoints passed simultaneous health, text generation, and routing tests;
   Qwen also passed a data-URL image test.
+- After v0060 deployment, both model health endpoints, the dashboard service,
+  authenticated HTTPS boundary, installed assets, and deterministic specialist
+  routing passed. The Spark reported 41.1 GB available memory (31.5%).
 - After the 81,920-token Nemotron warm-up and tests, Linux reported 39.1 GiB
   available memory (32.15%). The validation gate now requires at least 20% of
   usable RAM, about 24.3 GiB on this Spark.
@@ -232,6 +247,9 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   all configured/discovered providers and writes Prime's native `enabledModels`
   setting. Saves are allowlisted, origin/CSRF checked, atomic, and apply to new
   native tasks and advanced-console sessions.
+- The active header's effort selector overrides the default for the next message
+  in that conversation. Task and conversation metadata expose model, effort,
+  routing mode/reason, and model context for auditability.
 - Usage combines tokens and recorded spend by provider/model in one table, with
   columns for the Spark's current local calendar day and a rolling 30-day window.
   Local Spark providers report $0 API spend. Native launches also append a task

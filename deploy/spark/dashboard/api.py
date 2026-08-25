@@ -94,6 +94,7 @@ def settings_view():
         "reserveTokens": compaction.get("reserveTokens", 8192),
         "keepRecentTokens": compaction.get("keepRecentTokens", 12000),
         "enabledProviders": sorted({value.split("/", 1)[0] for value in enabled_models if "/" in value}),
+        "enabledModels": sorted(enabled_models),
     }
 
 
@@ -110,13 +111,30 @@ def model_catalog():
                 continue
             model_id = model.get("id") or model.get("model") or model.get("name")
             if model_id:
-                catalog.append({"provider": provider, "model": str(model_id), "configured": True})
+                catalog.append({
+                    "provider": provider,
+                    "model": str(model_id),
+                    "name": model.get("name") or str(model_id),
+                    "contextWindow": model.get("contextWindow"),
+                    "maxTokens": model.get("maxTokens"),
+                    "reasoning": bool(model.get("reasoning")),
+                    "input": model.get("input") or ["text"],
+                    "configured": True,
+                })
     catalog.extend(discovered_prime_models())
     existing = {f"{row['provider']}/{row['model']}" for row in catalog}
     for row in PLANNED_MODELS:
         if f"{row['provider']}/{row['model']}" not in existing:
             catalog.append({**row, "configured": openai_env_configured()})
-    unique = {f"{row['provider']}/{row['model']}": row for row in catalog}
+    unique = {}
+    for row in catalog:
+        key = f"{row['provider']}/{row['model']}"
+        if key not in unique:
+            unique[key] = row
+            continue
+        # Preserve richer tracked metadata when Prime's discovery returns the
+        # same model with only its provider and identifier.
+        unique[key] = {**row, **{name: value for name, value in unique[key].items() if value not in (None, "", [])}}
     for key, row in unique.items():
         row["enabled"] = key in enabled_models
     return sorted(unique.values(), key=lambda row: (row["provider"], row["model"]))
@@ -272,6 +290,8 @@ def session_catalog():
         created = None
         provider = None
         model = None
+        thinking = None
+        service_tier = None
         try:
             stat = path.stat()
             topic = None
@@ -288,6 +308,10 @@ def session_catalog():
                     elif entry.get("type") == "model_change":
                         provider = entry.get("provider")
                         model = entry.get("modelId")
+                    elif entry.get("type") == "thinking_level_change":
+                        thinking = entry.get("thinkingLevel")
+                    elif entry.get("type") == "service_tier_change":
+                        service_tier = entry.get("serviceTier")
                     elif entry.get("type") == "message":
                         message = entry.get("message") or {}
                         last_chat = message.get("timestamp") or entry.get("timestamp") or last_chat
@@ -304,6 +328,8 @@ def session_catalog():
                 "modified": last_chat or datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
                 "provider": provider,
                 "model": model,
+                "thinking": thinking,
+                "serviceTier": service_tier,
                 "sizeBytes": stat.st_size,
             })
             if len(sessions) >= 40:

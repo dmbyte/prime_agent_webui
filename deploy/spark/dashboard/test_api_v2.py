@@ -11,6 +11,33 @@ SPEC.loader.exec_module(api)
 
 
 class DashboardV2Tests(unittest.TestCase):
+    def settings(self, provider="spark-nemotron", model="nemotron-3.5-lightning", qwen=True):
+        enabled = ["spark-nemotron/nemotron-3.5-lightning"]
+        if qwen:
+            enabled.append("spark-qwen/qwen3.6-35b-a3b")
+        return {"provider": provider, "model": model, "thinking": "low", "enabledModels": enabled}
+
+    def test_specialist_prompt_routes_to_qwen(self):
+        route = api.route_task("Review this STL for printability and clearances", self.settings())
+        self.assertEqual((route["provider"], route["model"]), api.QWEN_ROUTE)
+        self.assertEqual(route["routingMode"], "automatic")
+
+    def test_explicit_model_route_overrides_specialist_match(self):
+        route = api.route_task("Use Nemotron to review this portfolio", self.settings())
+        self.assertEqual((route["provider"], route["model"]), api.NEMOTRON_ROUTE)
+        self.assertEqual(route["routingMode"], "explicit")
+
+    def test_disabled_qwen_falls_back_visibly(self):
+        route = api.route_task("Use Qwen for this chart", self.settings(qwen=False))
+        self.assertEqual((route["provider"], route["model"]), api.NEMOTRON_ROUTE)
+        self.assertEqual(route["routingMode"], "fallback")
+
+    def test_manual_frontier_default_is_preserved(self):
+        settings = self.settings("openai", "gpt-5.4")
+        route = api.route_task("Review this portfolio", settings)
+        self.assertEqual((route["provider"], route["model"]), ("openai", "gpt-5.4"))
+        self.assertEqual(route["routingMode"], "default")
+
     def test_archive_traversal_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "unsafe.zip"

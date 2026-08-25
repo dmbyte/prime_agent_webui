@@ -17,6 +17,11 @@ polls persisted Prime JSONL messages while work runs and safely renders headings
 lists, and fenced code. The optional **Advanced console** opens ttyd in a dialog;
 normal chat actions never send attach commands to ttyd.
 
+The active conversation header shows the effective provider/model, effort,
+routing mode, and context capacity. Effort is selectable there and applies to
+the next message in that conversation; Settings remains the default for new
+conversations.
+
 The sidebar includes:
 
 - **Chats:** searchable, optionally archived conversations with topic and latest
@@ -46,6 +51,12 @@ a 30-minute wall-time limit and can be stopped by terminating its process group;
 Prime persists its normal conversation JSONL. New, resumed, and forked work use
 Prime's documented provider/model/thinking/session options rather than terminal
 URL arguments.
+
+When Nemotron is the default, deterministic local rules route clear
+image/document, 3D/CAD/manufacturing, portfolio/trading, and deep-review prompts
+to Qwen. Explicit Qwen/Nemotron requests take precedence. Disabled Qwen produces
+a visible fallback, while a manually selected non-Nemotron default is preserved.
+The task record and activity overlay expose the effective route and reason.
 
 The activity overlay combines native task state with live Prime agent state,
 shows elapsed time/model/status, supports parallel tabs, and provides completed
@@ -87,7 +98,8 @@ and does not use PAM, the Linux account password, or `shadow`.
 
 ## Validation and recovery
 
-Seven local and deployed security tests pass, including quota/path/privacy and
+Fourteen local dashboard/auth/security tests and eleven applicable deployed
+Python tests pass, including routing, quota/path/privacy, and
 unsafe-archive cases. A real Nemotron task launched through the native API,
 completed in 2.3 seconds, persisted a conversation, returned the exact response,
 and recorded 6,268 tokens. Model/private-listener/session-broker/HTTPS/header and
@@ -102,6 +114,11 @@ on each client before the browser trusts the certificate.
 The pre-v0056 PAM configuration is preserved root-only at:
 
 `/var/backups/prime-local-auth-v0056-20260825T170500-0500`
+
+The pre-v0060 API/UI/policy and installed web root are preserved root-only with
+checksums at:
+
+`/var/backups/prime-routing-v0060-20260825T173500-0500`
 
 The pre-v0052 root-only recovery bundle is:
 

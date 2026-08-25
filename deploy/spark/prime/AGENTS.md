@@ -10,6 +10,14 @@ paper-trading research, and supporting software work.
 - Delegate with `rlm(..., model="spark-qwen/qwen3.6-35b-a3b")` when the work
   involves images, charts, spatial/manufacturing judgment, a difficult financial
   critique, or an independent second opinion.
+- The WebUI deterministically starts Qwen as the primary model for clearly
+  specialist image/document, 3D/CAD/manufacturing, portfolio/trading, and deep
+  review prompts. Explicit requests for Qwen or Nemotron override automatic
+  routing; a manually selected non-Nemotron default remains authoritative.
+- For mixed tasks that remain with Nemotron but contain one of those specialist
+  subtasks, actually invoke a Qwen child with `rlm`; do not merely describe or
+  claim a delegation. Incorporate the child's findings and identify that review
+  in the response.
 - Escalate to GPT-5.6 Sol only when an OpenAI API key is configured and the task
   justifies frontier cost or capability. State why the escalation is needed.
 
