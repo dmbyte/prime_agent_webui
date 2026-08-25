@@ -60,6 +60,18 @@ class CredentialTests(unittest.TestCase):
         self.path.symlink_to(Path(self.temporary.name) / "missing")
         self.assertIsNone(auth.load_credential())
 
+    def test_migrates_legacy_admin_and_manages_isolated_users(self):
+        self.assertEqual(auth.load_users()["users"]["dbyte"]["role"], "admin")
+        auth.manage_user("add", {"username": "alice", "password": "alice secure password", "role": "user"}, "dbyte")
+        self.assertTrue(auth.authenticate("alice", "alice secure password"))
+        with auth.LOCK:
+            auth.SESSIONS["alice-token"] = {"user": "alice", "role": "user", "csrf": "x", "created": 0, "seen": 0, "expires": 1}
+        auth.manage_user("reset", {"username": "alice", "password": "alice replacement password"}, "dbyte")
+        self.assertNotIn("alice-token", auth.SESSIONS)
+        self.assertTrue(auth.authenticate("alice", "alice replacement password"))
+        auth.manage_user("delete", {"username": "alice"}, "dbyte")
+        self.assertFalse(auth.authenticate("alice", "alice replacement password"))
+
 
 if __name__ == "__main__":
     unittest.main()

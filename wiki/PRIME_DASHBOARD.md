@@ -47,7 +47,9 @@ The sidebar includes:
   mode 0600 beneath mode-0700 directories.
 - **Admin:** service state, storage and upload use, current task admission, guarded
   restarts for the terminal and model services, upload-retention control, and the
-  private CA download.
+  private CA download. Administrators also add/change/disable users, reset
+  passwords, revoke sessions, recoverably delete per-user server cache, and delete
+  accounts.
 - **Settings:** default model/thinking/context values, searchable configured
   providers, provider switches, guarded Prime Agent/WebUI updates, and sign-out.
 
@@ -107,6 +109,11 @@ and Bearer authorization values. The main chat retains the stop button.
 
 - Full conversation messages are returned only after session authentication;
   browser rendering uses DOM text nodes and never injects model HTML.
+- Authenticated identity/role comes from the loopback broker through Nginx, not a
+  browser-controlled header. Chats, uploads, tasks/logs, usage, and metadata are
+  owner-filtered. Existing data defaults to `dbyte`; new data records its owner.
+- User/cache deletion moves owned server data to mode-0700 per-user recovery
+  storage. Password reset/change/delete revokes that user's active sessions.
 - Conversation metadata is stored atomically in
   `~/.prime/agent/webui-metadata.json`; transcripts remain Prime's JSONL source
   of truth. Delete still moves inactive transcripts to private recovery storage.
@@ -184,6 +191,11 @@ The pre-v0065 conversation APIs and deployed Git commit are preserved root-only
 with checksums at:
 
 `/var/backups/prime-session-ids-v0065-20260825T175500-0500`
+
+The pre-v0066 single-user credential/auth/API/UI/Nginx state is preserved
+root-only with checksums at:
+
+`/var/backups/prime-users-v0066-20260825T180700-0500`
 
 The pre-v0052 root-only recovery bundle is:
 

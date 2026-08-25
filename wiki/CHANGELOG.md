@@ -3,6 +3,18 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-25 — v0066 — Add isolated user administration
+
+- Added local admin/user accounts with add, role/state change, password reset,
+  session revocation, recoverable server-cache deletion, and account deletion.
+- Propagated broker-verified identity/role through Nginx and enforced ownership
+  for chats, files, tasks/logs, usage, metadata, and all mutations. Existing data
+  belongs to `dbyte`; new data records explicit ownership.
+- Preserved scrypt and atomic mode-0600 credentials with version-1 migration,
+  protected the initial/last admin, and made deletion recoverable.
+- All 24 local tests and Python/JavaScript/shell syntax and whitespace checks pass.
+  Added ADR-0045 and immutable snapshot [v0066](versions/v0066.md).
+
 ## 2026-08-25 — v0065 — Resolve conversation identifier mismatches
 
 - Confirmed 9 of 30 Spark transcripts use a filename ID different from their

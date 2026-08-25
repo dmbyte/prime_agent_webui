@@ -21,6 +21,19 @@ class DashboardV2Tests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "already running"):
                 api.start_update("agent", "update-agent")
 
+    def test_conversation_catalog_is_filtered_by_owner(self):
+        rows = [
+            {"id": "session-alice", "topic": "Alice", "modified": "2026-01-01T00:00:00Z", "provider": "p", "model": "m"},
+            {"id": "session-bob-12", "topic": "Bob", "modified": "2026-01-01T00:00:00Z", "provider": "p", "model": "m"},
+        ]
+        meta = {"conversations": {"session-alice": {"owner": "alice"}, "session-bob-12": {"owner": "bob"}}}
+        with mock.patch.object(api.legacy, "session_catalog", return_value=rows), mock.patch.object(api, "metadata", return_value=meta), mock.patch.object(api.legacy, "session_path", side_effect=lambda value: Path(f"/tmp/{value}.jsonl")), mock.patch.object(api, "model_details", return_value={}):
+            self.assertEqual([row["id"] for row in api.conversation_catalog(user="alice")], ["session-alice"])
+
+    def test_initial_admin_cache_cannot_be_deleted(self):
+        with self.assertRaisesRegex(ValueError, "initial administrator"):
+            api.purge_user_cache("dbyte")
+
     def settings(self, provider="spark-nemotron", model="nemotron-3.5-lightning", qwen=True):
         enabled = ["spark-nemotron/nemotron-3.5-lightning"]
         if qwen:

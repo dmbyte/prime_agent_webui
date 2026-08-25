@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-25
-Wiki version: `v0065`
+Wiki version: `v0066`
 
 ## Project summary
 
@@ -35,6 +35,11 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   the repository; Nginx has no `shadow` access. Secure session cookies use
   30-minute idle and 12-hour absolute
   limits; state changes require CSRF and Origin validation.
+- The credential store now supports local `admin` and `user` roles. `dbyte` is
+  the initial admin and owner of all legacy data. Chats, files, tasks/logs, usage,
+  and metadata are isolated by the broker-authenticated owner. Admins can add,
+  change, reset, revoke, recoverably clear server data, and delete users; the
+  initial/last admin protections remain.
 - WebSocket origin enforcement is performed by Nginx against the approved HTTPS
   origins. ttyd's incompatible backend `--check-origin` option is disabled because
   a reverse proxy hides the external origin/host relationship from ttyd.
@@ -109,6 +114,10 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 - The root-only pre-v0065 conversation-ID recovery bundle is
   `/var/backups/prime-session-ids-v0065-20260825T175500-0500`; it preserves the
   prior APIs, deployed Git commit, and checksums.
+- The root-only pre-v0066 user-migration recovery bundle is
+  `/var/backups/prime-users-v0066-20260825T180700-0500`; it preserves the prior
+  one-way credential, auth/API/UI, auth unit, Nginx, metadata-absence state,
+  deployed Git commit, and checksums.
 
 ## Deployed architecture
 

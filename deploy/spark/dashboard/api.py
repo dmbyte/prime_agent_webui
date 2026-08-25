@@ -222,7 +222,7 @@ def parse_timestamp(value):
     return 0
 
 
-def usage_summary():
+def usage_summary(usage_paths=None):
     now = time.time()
     local_now = datetime.now().astimezone()
     today_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
@@ -230,7 +230,7 @@ def usage_summary():
     totals = {name: defaultdict(lambda: defaultdict(float)) for name in windows}
     latest_context = defaultdict(int)
     calls = 0
-    usage_paths = list(SESSIONS.glob("*.jsonl")) + list(SESSION_TRASH.glob("*.jsonl"))
+    usage_paths = list(usage_paths) if usage_paths is not None else list(SESSIONS.glob("*.jsonl")) + list(SESSION_TRASH.glob("*.jsonl"))
     for path in usage_paths:
         try:
             handle = path.open(errors="replace")

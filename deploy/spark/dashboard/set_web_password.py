@@ -41,16 +41,20 @@ def main():
         dklen=SCRYPT_BYTES,
         maxmem=SCRYPT_MAXMEM,
     )
-    value = {
-        "version": 1,
-        "username": username,
-        "kdf": "scrypt",
-        "n": SCRYPT_N,
-        "r": SCRYPT_R,
-        "p": SCRYPT_P,
-        "salt": base64.b64encode(salt).decode("ascii"),
-        "hash": base64.b64encode(digest).decode("ascii"),
-    }
+    record = {"role": "admin", "enabled": True, "n": SCRYPT_N, "r": SCRYPT_R, "p": SCRYPT_P, "salt": base64.b64encode(salt).decode("ascii"), "hash": base64.b64encode(digest).decode("ascii")}
+    try:
+        existing = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        existing = {}
+    if existing.get("version") == 2 and isinstance(existing.get("users"), dict):
+        previous = existing["users"].get(username, {})
+        record["createdAt"] = previous.get("createdAt") or int(__import__("time").time())
+        record["role"] = previous.get("role", "admin")
+        value = existing
+        value["users"][username] = record
+    else:
+        record["createdAt"] = int(__import__("time").time())
+        value = {"version": 2, "users": {username: record}}
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(path.parent, 0o700)
     descriptor, temporary = tempfile.mkstemp(prefix=".web-auth.", dir=path.parent)
