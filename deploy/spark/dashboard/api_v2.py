@@ -385,12 +385,13 @@ def update_status():
     rows = {}
     for kind, unit in (("agent", "prime-update-agent.service"), ("webui", "prime-update-webui.service")):
         result = subprocess.run(
-            ["systemctl", "--user", "show", unit, "--property=ActiveState,SubState,Result,ExecMainStatus"],
+            ["systemctl", "--user", "show", unit, "--property=ActiveState,SubState,Result,ExecMainStatus,ExecMainStartTimestamp"],
             capture_output=True, text=True, timeout=5,
         )
         values = dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
         rows[kind] = {
             "active": values.get("ActiveState") in {"active", "activating"},
+            "ran": bool(values.get("ExecMainStartTimestamp")),
             "state": values.get("SubState") or values.get("ActiveState") or "unknown",
             "result": values.get("Result") or "unknown",
             "exitCode": int(values.get("ExecMainStatus") or 0),

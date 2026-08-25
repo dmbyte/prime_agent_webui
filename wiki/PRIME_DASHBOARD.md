@@ -71,6 +71,9 @@ The long-running dashboard remains network-denied and home-read-only. It can onl
 start the two named update units; those short-lived services hold separate locks
 and have the network/write access needed for npm or Git. Release discovery and
 installed-versus-release comparison are the next planned update-policy revision.
+The deployed WebUI unit and authenticated-control API path were each exercised
+successfully against GitHub HEAD. The Prime updater was not run during setup, so
+Prime remains at 0.8.0 until the owner selects its button.
 
 ## Structured tasks
 
@@ -163,6 +166,11 @@ The pre-v0063 source and installed sidebar assets are preserved root-only with
 checksums at:
 
 `/var/backups/prime-sidebar-v0063-20260825T174200-0500`
+
+The pre-v0064 API/UI, installed assets, clone commit, and Prime version are
+preserved root-only with checksums at:
+
+`/var/backups/prime-updates-v0064-20260825T174800-0500`
 
 The pre-v0052 root-only recovery bundle is:
 

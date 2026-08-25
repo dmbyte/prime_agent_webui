@@ -15,6 +15,9 @@ snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 - All 19 local tests and Python/JavaScript/shell syntax checks pass. Added
   ADR-0044 and immutable snapshot [v0064](versions/v0064.md); release discovery
   and version comparison remain explicitly planned.
+- Exercised both the WebUI one-shot directly and the real dashboard update API;
+  both reached private GitHub HEAD, redeployed, restarted cleanly, and reported
+  success. Sixteen applicable deployed tests pass. Prime Agent update was not run.
 
 ## 2026-08-25 — v0063 — Add a resizable sidebar
 

@@ -102,6 +102,10 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 - The root-only pre-v0063 sidebar recovery bundle is
   `/var/backups/prime-sidebar-v0063-20260825T174200-0500`; it preserves the prior
   source and installed HTML/JavaScript/CSS with checksums.
+- The root-only pre-v0064 update-controls recovery bundle is
+  `/var/backups/prime-updates-v0064-20260825T174800-0500`; it preserves prior
+  source/installed UI and API files, WebUI clone commit, Prime version, and
+  checksums.
 
 ## Deployed architecture
 
@@ -267,6 +271,10 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   clean known private clone and fast-forward-only pull from `origin/main` HEAD,
   validate, redeploy, and restart the API. Release selection/version comparison
   remains a planned replacement for the temporary HEAD policy.
+  The WebUI updater and the dashboard's actual update API path both completed a
+  private GitHub HEAD update successfully; the clone and deployed UI matched the
+  resulting commit. The Prime package updater was installed but intentionally
+  not executed during validation.
 - The active header's effort selector overrides the default for the next message
   in that conversation. Task and conversation metadata expose model, effort,
   routing mode/reason, and model context for auditability.
