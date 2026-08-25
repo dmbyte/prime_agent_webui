@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-25
-Wiki version: `v0053`
+Wiki version: `v0054`
 
 ## Project summary
 
@@ -42,6 +42,8 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   monitor shows CPU/GPU/memory utilization and GPU board power on its first row,
   with CPU/GPU/system temperatures on the second. Its loopback-only API
   runs as `dbyte` under `prime-dashboard-api.service` on port 8765.
+- Static HTML is installed in `/var/www/prime-agent/`; JavaScript and CSS are in
+  `/var/www/prime-agent/assets/`. The tracked installer preserves this mapping.
 - vLLM: `0.27.1` ARM64/CUDA 12.9 image, two user services enabled at boot
 - Hermes WebUI remains installed and active but is not the orchestration core.
   It is now bound to `127.0.0.1:8787`.

@@ -11,6 +11,11 @@ explicit multimodal/deep specialist.
 Launch the configured workspace with `prime-dgx`. Prime is pinned at the
 installed version until an update is deliberately reviewed and validated.
 
+Install dashboard static files with
+`deploy/spark/dashboard/install-static.sh`. HTML belongs in the web root while
+JavaScript and CSS belong in `/var/www/prime-agent/assets/`; placing assets in
+the web root leaves the login page visible but nonfunctional.
+
 `prime-web.service` provides a browser terminal on Spark loopback port 7681.
 Nginx exposes it at `https://172.16.253.231:8443` with PAM authentication and
 allows only private LAN/VPN source ranges. The initial TLS certificate is

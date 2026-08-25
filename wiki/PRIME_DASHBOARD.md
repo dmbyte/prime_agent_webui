@@ -67,6 +67,8 @@ and Bearer authorization values. The main chat retains the stop button.
 ## Deployment
 
 - Static UI: `/var/www/prime-agent/`
+- Static asset URL root: `/var/www/prime-agent/assets/`; use the tracked
+  `install-static.sh` so login and application scripts are not misplaced.
 - Native API: `~/prime-dgx-dashboard/api_v2.py`, loopback port 8765
 - PAM session broker: `~/prime-dgx-dashboard/auth.py`, loopback port 8764
 - Advanced console: ttyd, loopback port 7681

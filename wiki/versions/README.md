@@ -6,6 +6,7 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0054](v0054.md) | 2026-08-25 | Corrected the WebUI static asset installation path |
 | [v0053](v0053.md) | 2026-08-25 | Prevented expired-session polling from triggering client bans |
 | [v0052](v0052.md) | 2026-08-25 | Added native chat, isolated tasks, PAM sessions, and private-CA TLS |
 | [v0051](v0051.md) | 2026-08-25 | Hardened Prime without adding a CIDR firewall policy |

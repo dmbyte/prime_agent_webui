@@ -3,6 +3,15 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-25 — v0054 — Correct static asset deployment
+
+- Diagnosed a rendered but nonfunctional login form: its JavaScript/CSS URLs used
+  `/assets/`, while deployment had placed the files in the web root.
+- Installed all login/native UI JavaScript and CSS under
+  `/var/www/prime-agent/assets/`; login assets now return 200 and Nginx validates.
+- Added a tracked static installer to preserve the HTML/root and asset/subfolder
+  mapping; added immutable snapshot [v0054](versions/v0054.md).
+
 ## 2026-08-25 — v0053 — Restrict bans to real login failures
 
 - Diagnosed the apparently offline WebUI as a Fail2ban false positive: the stale
