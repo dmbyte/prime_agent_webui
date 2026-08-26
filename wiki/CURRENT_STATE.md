@@ -1,7 +1,7 @@
 # Current State
 
-Last verified: 2026-08-25
-Wiki version: `v0074`
+Last verified: 2026-08-26
+Wiki version: `v0075`
 
 ## Project summary
 
@@ -114,6 +114,13 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   Deployment at commit `a0d82b4` passed all 28 tests and live browser inspection:
   Settings reported Agent `0.8.0` / latest `v0.8.0` and WebUI `.1+a0d82b4` /
   latest `.1`, correctly marking both up to date.
+  New submissions are now echoed optimistically into the active dialogue before
+  the API responds. While Prime runs, its bounded JSON event stream supplies a
+  live assistant card with safe status/tool events, elapsed time, and draft answer
+  text; private reasoning is never sent to the browser. The composer exposes
+  **Message**, `/steer`, `/follow-up`, and `/stop`. Steering uses Prime 0.8.0's
+  supported `send --steer`/`--follow-up` interface, is restricted to the owning
+  active task, and becomes available only after Prime publishes its agent ID.
 - Static HTML is installed in `/var/www/prime-agent/`; JavaScript and CSS are in
   `/var/www/prime-agent/assets/`. The tracked installer preserves this mapping.
 - vLLM: `0.27.1` ARM64/CUDA 12.9 image, two user services enabled at boot
@@ -186,6 +193,9 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 - The root-only pre-v0071 skill-inventory recovery bundle is
   `/var/backups/prime-skill-v0071-20260826T000000-0500`; it preserves the prior
   global Prime skill tree and a checksum manifest. The new skill is additive.
+- The root-only pre-v0075 live-dialogue recovery bundle is
+  `/var/backups/prime-live-dialogue-v0075-20260826T134500-0500`; it preserves the
+  prior tracked and installed API/UI assets with checksums.
 
 ## Deployed architecture
 

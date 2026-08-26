@@ -13,6 +13,35 @@ SPEC.loader.exec_module(api)
 
 
 class DashboardV2Tests(unittest.TestCase):
+    def test_live_task_events_publish_safe_progress_without_reasoning(self):
+        task_id = "a" * 32
+        api.TASKS[task_id] = {"id": task_id, "owner": "alice", "status": "running", "started": "2026-01-01T00:00:00Z", "startedEpoch": api.time.time(), "progressEvents": [], "sessionId": None}
+        try:
+            api.apply_task_event(task_id, {"type": "session", "id": "session-live-1234"})
+            api.apply_task_event(task_id, {"type": "message_update", "message": {"role": "assistant", "content": [{"type": "thinking", "thinking": "private chain"}, {"type": "text", "text": "Visible draft"}, {"type": "toolCall", "name": "search"}]}})
+            row = api.task_snapshot("alice")[0]
+            self.assertEqual(row["agentSessionId"], "session-live-1234")
+            self.assertEqual(row["liveResponse"], "Visible draft")
+            self.assertNotIn("private chain", json.dumps(row))
+            self.assertEqual(row["progress"], "Using search")
+        finally:
+            api.TASKS.pop(task_id, None)
+
+    def test_steering_is_owner_scoped_and_uses_prime_send(self):
+        task_id = "b" * 32
+        api.TASKS[task_id] = {"id": task_id, "owner": "alice", "status": "running", "agentSessionId": "session-live-1234", "progressEvents": []}
+        completed = mock.Mock(returncode=0, stdout='{"delivered":true}', stderr="")
+        try:
+            with mock.patch.object(api.subprocess, "run", return_value=completed) as run, mock.patch.object(api.legacy, "audit"):
+                result = api.message_native_task(task_id, "Focus on authentication", "steer", "alice")
+            self.assertTrue(result["delivered"])
+            command = run.call_args.args[0]
+            self.assertEqual(command[1:4], ["send", "--steer", "session-live-1234"])
+            with self.assertRaisesRegex(ValueError, "no longer running"):
+                api.message_native_task(task_id, "Wrong owner", "steer", "bob")
+        finally:
+            api.TASKS.pop(task_id, None)
+
     def test_update_requires_exact_confirmation(self):
         with self.assertRaisesRegex(ValueError, "confirmation"):
             api.start_update("webui", "yes")

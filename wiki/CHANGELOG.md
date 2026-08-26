@@ -3,6 +3,24 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-26 — v0075 — Echo new messages and add live steering
+
+- Added immediate optimistic rendering of a submitted user message, including
+  visible sending/received/failure state, so a new conversation no longer appears
+  empty while Prime starts.
+- Replaced completion-only stdout collection with bounded incremental processing
+  of Prime's supported JSON event stream. The dialogue shows safe lifecycle/tool
+  events, elapsed time, and available draft response text while excluding hidden
+  reasoning. Raw progress/log retention is bounded.
+- Added owner-scoped `/steer` and `/follow-up` delivery through Prime 0.8.0's
+  supported `send` command, plus `/stop` and ordinary Message choices in the
+  composer. Controls become available only after a valid active agent ID arrives.
+- Added regression coverage for safe event projection and owner-scoped steering;
+  the local suite now contains 30 tests.
+- Added [ADR-0049](decisions/0049-live-dialogue-and-supported-steering.md),
+  immutable snapshot [v0075](versions/v0075.md), and planned root-only pre-change
+  recovery at `/var/backups/prime-live-dialogue-v0075-20260826T134500-0500`.
+
 ## 2026-08-26 — v0074 — Prevent invalid single-user trust downgrades
 
 - The bounded third forward test correctly rejected argv injection, CSP, and

@@ -31,7 +31,7 @@ verified current state and enough history to understand or reverse changes.
 
 ## Status
 
-- Current wiki version: `v0074`
+- Current wiki version: `v0075`
 - Last verified: 2026-08-25
 - Project phase: session-authenticated native Prime WebUI with structured tasks
 

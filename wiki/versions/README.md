@@ -6,6 +6,7 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0075](v0075.md) | 2026-08-26 | Added immediate message echo, live task state, and supported steering |
 | [v0074](v0074.md) | 2026-08-26 | Prevented invalid single-user/local-trust severity downgrades |
 | [v0073](v0073.md) | 2026-08-26 | Added semantic false-positive and report-density guardrails |
 | [v0072](v0072.md) | 2026-08-26 | Refined gateway, execution-identity, and metadata review gates |

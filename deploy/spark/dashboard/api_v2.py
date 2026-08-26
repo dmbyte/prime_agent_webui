@@ -6,6 +6,7 @@ import json
 import mimetypes
 import os
 import re
+import select
 import shutil
 import signal
 import subprocess
@@ -317,7 +318,7 @@ def task_snapshot(user=None):
         for task_id, task in TASKS.items():
             if user is not None and task.get("owner", "dbyte") != user:
                 continue
-            row = {key: value for key, value in task.items() if key not in {"process"}}
+            row = {key: value for key, value in task.items() if key not in {"process", "usage"}}
             if row.get("status") == "running":
                 row["elapsedSeconds"] = round(time.time() - row["startedEpoch"], 1)
             rows.append(row)
@@ -326,7 +327,13 @@ def task_snapshot(user=None):
 
 def append_ledger(task, status, output=""):
     record = {"at": now_iso(), "taskId": task["id"], "owner": task.get("owner", "dbyte"), "sessionId": task.get("sessionId"), "provider": task.get("provider"), "model": task.get("model"), "status": status, "elapsedSeconds": round(time.time() - task["startedEpoch"], 2)}
+    if task.get("usage"):
+        usage = task["usage"]
+        record["usage"] = {key: usage.get(key, 0) for key in ("input", "output", "cacheRead", "cacheWrite", "totalTokens")}
+        record["cost"] = (usage.get("cost") or {}).get("total", 0)
     for line in reversed(output.splitlines()):
+        if record.get("usage"):
+            break
         try:
             value = json.loads(line)
             usage = value.get("usage") or (value.get("message") or {}).get("usage") or {}
@@ -357,17 +364,91 @@ def ledger_summary():
     return {"nativeRequests": len(rows), "recent": rows[-50:]}
 
 
+def add_task_progress(task, label):
+    label = re.sub(r"\s+", " ", str(label)).strip()[:160]
+    if not label or (task.get("progressEvents") and task["progressEvents"][-1]["label"] == label):
+        return
+    task.setdefault("progressEvents", []).append({"at": now_iso(), "label": label})
+    task["progressEvents"] = task["progressEvents"][-30:]
+    task["progress"] = label
+
+
+def apply_task_event(task_id, event):
+    with TASK_LOCK:
+        task = TASKS.get(task_id)
+        if not task or not isinstance(event, dict):
+            return
+        event_type = event.get("type")
+        if event_type == "session" and valid_id(event.get("id")):
+            task["agentSessionId"] = event["id"]
+            if not task.get("sessionId"):
+                task["sessionId"] = event["id"]
+            add_task_progress(task, "Prime connected")
+        elif event_type == "agent_start":
+            add_task_progress(task, "Agent started")
+        elif event_type == "turn_start":
+            add_task_progress(task, "Working on the request")
+        elif event_type in {"message_update", "message_end"}:
+            message = event.get("message") or {}
+            if message.get("role") != "assistant":
+                return
+            for part in message.get("content") or []:
+                if not isinstance(part, dict):
+                    continue
+                if part.get("type") == "text" and part.get("text"):
+                    task["liveResponse"] = str(part["text"])[-50000:]
+                    add_task_progress(task, "Drafting response")
+                elif part.get("type") in {"toolCall", "tool_call"}:
+                    name = str(part.get("name") or part.get("toolName") or "tool")
+                    add_task_progress(task, f"Using {name}")
+            usage = message.get("usage") or event.get("usage")
+            if isinstance(usage, dict) and usage:
+                task["usage"] = usage
+        elif event_type == "tool_execution_start":
+            add_task_progress(task, f"Using {event.get('toolName') or event.get('tool') or 'tool'}")
+        elif event_type == "tool_execution_end":
+            add_task_progress(task, f"Finished {event.get('toolName') or event.get('tool') or 'tool'}")
+
+
 def monitor_task(task_id, before):
     with TASK_LOCK:
         task = TASKS[task_id]
         process = task["process"]
+    deadline = time.monotonic() + MAX_TASK_SECONDS
+    log_lines = []
+    timed_out = False
+    while process.poll() is None:
+        if time.monotonic() >= deadline:
+            timed_out = True
+            os.killpg(process.pid, signal.SIGTERM)
+            break
+        ready, _, _ = select.select([process.stdout], [], [], 1)
+        if not ready:
+            continue
+        line = process.stdout.readline()
+        if not line:
+            continue
+        try:
+            apply_task_event(task_id, json.loads(line))
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+        if len(line) <= 20000:
+            log_lines.append(line)
+            log_lines = log_lines[-200:]
     try:
-        output, _ = process.communicate(timeout=MAX_TASK_SECONDS)
-        status = "completed" if process.returncode == 0 else "failed"
+        remainder, _ = process.communicate(timeout=10)
     except subprocess.TimeoutExpired:
-        os.killpg(process.pid, signal.SIGTERM)
-        output, _ = process.communicate(timeout=10)
-        status = "timed_out"
+        os.killpg(process.pid, signal.SIGKILL)
+        remainder, _ = process.communicate(timeout=5)
+    for line in remainder.splitlines():
+        try:
+            apply_task_event(task_id, json.loads(line))
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+        if len(line) <= 20000:
+            log_lines.append(line + "\n")
+    output = "".join(log_lines[-200:])
+    status = "timed_out" if timed_out else "completed" if process.returncode == 0 else "failed"
     after = {path.stem for path in legacy.SESSIONS.glob("*.jsonl")}
     created = sorted(after - before, key=lambda value: (legacy.SESSIONS / f"{value}.jsonl").stat().st_mtime, reverse=True)
     with TASK_LOCK:
@@ -375,6 +456,7 @@ def monitor_task(task_id, before):
         if not task.get("sessionId") and created:
             task["sessionId"] = created[0]
         task.update({"status": status, "finished": now_iso(), "elapsedSeconds": round(time.time() - task["startedEpoch"], 1)})
+        add_task_progress(task, status.replace("_", " ").title())
         log_path = TASK_LOGS / f"{task_id}.log"
         TASK_LOGS.mkdir(mode=0o700, parents=True, exist_ok=True)
         sanitized = re.sub(r"(?i)sk-(?:proj-)?[A-Za-z0-9_-]{20,}", "[REDACTED_API_KEY]", output[-200000:])
@@ -430,7 +512,7 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner="dbyt
     before = {path.stem for path in legacy.SESSIONS.glob("*.jsonl")}
     task_id = uuid.uuid4().hex
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=legacy.HOME / "prime-dgx-agent", env=prime_env(), start_new_session=True)
-    task = {"id": task_id, "sessionId": session_id if not fork else None, "owner": owner, "topic": legacy.safe_topic(message) or "Native task", **route, "thinking": thinking, "contextWindow": details.get("contextWindow"), "maxTokens": details.get("maxTokens"), "status": "running", "started": now_iso(), "startedEpoch": time.time(), "pid": process.pid, "process": process, "logAvailable": False}
+    task = {"id": task_id, "sessionId": session_id if not fork else None, "agentSessionId": session_id if session_id and not fork else None, "owner": owner, "topic": legacy.safe_topic(message) or "Native task", **route, "thinking": thinking, "contextWindow": details.get("contextWindow"), "maxTokens": details.get("maxTokens"), "status": "running", "progress": "Starting Prime", "progressEvents": [{"at": now_iso(), "label": "Request received"}], "liveResponse": "", "started": now_iso(), "startedEpoch": time.time(), "pid": process.pid, "process": process, "logAvailable": False}
     with TASK_LOCK:
         TASKS[task_id] = task
     with META_LOCK:
@@ -452,6 +534,33 @@ def stop_native_task(task_id, owner="dbyte"):
         process = task["process"]
     os.killpg(process.pid, signal.SIGTERM)
     return {"stopping": True, "id": task_id}
+
+
+def message_native_task(task_id, message, mode="steer", owner="dbyte"):
+    message = str(message).strip()
+    if not message or len(message) > 10000:
+        raise ValueError("Steering message must contain between 1 and 10,000 characters")
+    if mode not in {"steer", "follow-up"}:
+        raise ValueError("Unsupported task message mode")
+    with TASK_LOCK:
+        task = TASKS.get(task_id)
+        if not task or task.get("owner", "dbyte") != owner or task.get("status") != "running":
+            raise ValueError("Task is no longer running")
+        agent_id = task.get("agentSessionId")
+    if not valid_id(agent_id):
+        raise RuntimeError("Prime is still connecting; try again in a moment")
+    command = [str(legacy.PRIME_AGENT), "send", f"--{mode}", agent_id, message, "--json"]
+    result = subprocess.run(command, timeout=15, capture_output=True, text=True, env=prime_env())
+    if result.returncode:
+        raise RuntimeError("Prime did not accept the task message")
+    with TASK_LOCK:
+        task = TASKS.get(task_id)
+        if task:
+            task.setdefault("steering", []).append({"at": now_iso(), "mode": mode, "message": message[:1000]})
+            task["steering"] = task["steering"][-20:]
+            add_task_progress(task, "Steering delivered" if mode == "steer" else "Follow-up queued")
+    legacy.audit("native_task_message", task=task_id, mode=mode, owner=owner)
+    return {"delivered": True, "id": task_id, "mode": mode}
 
 
 def update_conversation(session_id, action, value=None, user="dbyte"):
@@ -803,7 +912,7 @@ class Handler(legacy.Handler):
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
-        v2 = {"/api/settings", "/api/tasks/start", "/api/tasks/stop", "/api/conversations/update", "/api/conversations/delete", "/api/conversations/duplicate", "/api/files/delete", "/api/admin/restart", "/api/admin/retention", "/api/admin/update", "/api/admin/user-cache", "/api/providers/configure", "/api/files/upload"}
+        v2 = {"/api/settings", "/api/tasks/start", "/api/tasks/stop", "/api/tasks/message", "/api/conversations/update", "/api/conversations/delete", "/api/conversations/duplicate", "/api/files/delete", "/api/admin/restart", "/api/admin/retention", "/api/admin/update", "/api/admin/user-cache", "/api/providers/configure", "/api/files/upload"}
         if path not in v2:
             if not csrf_ok(self.headers):
                 self.send_json(403, {"error": "CSRF validation failed"})
@@ -842,6 +951,8 @@ class Handler(legacy.Handler):
                 self.send_json(202, {"task": launch_task(payload.get("message"), payload.get("sessionId"), thinking=payload.get("thinking"), owner=user)})
             elif path == "/api/tasks/stop":
                 self.send_json(200, stop_native_task(str(payload.get("id", "")), user))
+            elif path == "/api/tasks/message":
+                self.send_json(202, message_native_task(str(payload.get("id", "")), payload.get("message"), str(payload.get("mode", "steer")), user))
             elif path == "/api/conversations/update":
                 self.send_json(200, update_conversation(str(payload.get("id", "")), str(payload.get("action", "")), payload.get("value"), user))
             elif path == "/api/conversations/delete":

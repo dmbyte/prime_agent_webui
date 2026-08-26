@@ -17,6 +17,14 @@ polls persisted Prime JSONL messages while work runs and safely renders headings
 lists, and fenced code. The optional **Advanced console** opens ttyd in a dialog;
 normal chat actions never send attach commands to ttyd.
 
+A newly submitted message is rendered immediately with its delivery state. While
+the task runs, a live assistant card shows bounded safe lifecycle/tool events,
+elapsed time, and available draft response text from Prime's JSON event stream;
+private reasoning is not exposed. The composer command selector offers ordinary
+Message plus `/steer`, `/follow-up`, and `/stop`. Steering is delivered through
+Prime's supported running-agent message command after the active agent ID is
+known, and remains restricted to the task owner.
+
 The active conversation header shows the effective provider/model, effort,
 routing mode, and context capacity. Effort is selectable there and applies to
 the next message in that conversation; Settings remains the default for new
