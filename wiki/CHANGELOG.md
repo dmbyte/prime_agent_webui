@@ -14,6 +14,12 @@ snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
   saved conversation and refreshes both the active title and sidebar.
 - All 25 local tests and JavaScript syntax/whitespace checks pass. Added immutable
   snapshot [v0068](versions/v0068.md).
+- Deployed commit `89d3a24`; all 25 deployed tests and four service checks passed.
+  Live desktop inspection verified the full Admin/user-card layout and the Rename
+  control on a saved active conversation.
+- Visual transcript inspection disclosed a separate plaintext credential embedded
+  in a historical user script/output. No secret was copied into the wiki; source
+  removal, transcript redaction, and credential rotation remain pending approval.
 
 ## 2026-08-25 — v0067 — Complete recoverable user-data cleanup
 

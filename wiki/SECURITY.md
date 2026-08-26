@@ -65,6 +65,13 @@ Both were replaced with `[REDACTED_OPENAI_API_KEY]`; a follow-up scan found zero
 matching active or trashed session files. If the key is active, it must still be
 revoked or rotated in the OpenAI account.
 
+The v0068 visual check found a different plaintext service credential embedded
+in a historical user-authored script and consequently rendered in that user's
+private transcript. Its value is intentionally omitted here. Rotation at the
+service provider, removal from the source script, and redaction of the owned
+transcript remain pending explicit authorization; WebUI ownership isolation does
+not make a credential safe once it has been written into user-visible content.
+
 ## Package state and validation
 
 On 2026-08-25, all 19 available security updates were applied (OpenSSL, FFmpeg,

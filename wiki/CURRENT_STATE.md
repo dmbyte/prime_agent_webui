@@ -70,6 +70,8 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   disabled instead of failing only after a click.
   A saved active conversation exposes Rename in the conversation header; new
   conversations hide it, and a successful rename refreshes the header/sidebar.
+  The v0068 desktop visual check verified both the full user-action grid and the
+  saved-conversation Rename control; all 25 deployed tests passed.
 - Static HTML is installed in `/var/www/prime-agent/`; JavaScript and CSS are in
   `/var/www/prime-agent/assets/`. The tracked installer preserves this mapping.
 - vLLM: `0.27.1` ARM64/CUDA 12.9 image, two user services enabled at boot
