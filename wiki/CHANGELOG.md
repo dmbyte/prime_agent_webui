@@ -3,6 +3,18 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-25 — v0068 — Refine Admin layout and active rename
+
+- Visually inspected the live Admin tab and corrected concatenated labels,
+  collapsed retention copy, cramped user actions, and ambiguous status text.
+- Grouped System, Maintenance, and WebUI users into scannable sections; added
+  health/role/state badges, a two-column user-action grid, and disabled controls
+  that the backend intentionally refuses for the current/initial admin.
+- Added a Rename action to the active conversation header. It appears only for a
+  saved conversation and refreshes both the active title and sidebar.
+- All 25 local tests and JavaScript syntax/whitespace checks pass. Added immutable
+  snapshot [v0068](versions/v0068.md).
+
 ## 2026-08-25 — v0067 — Complete recoverable user-data cleanup
 
 - Extended per-user cleanup to persisted task ownership/logs and owned usage

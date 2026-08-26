@@ -20,7 +20,8 @@ normal chat actions never send attach commands to ttyd.
 The active conversation header shows the effective provider/model, effort,
 routing mode, and context capacity. Effort is selectable there and applies to
 the next message in that conversation; Settings remains the default for new
-conversations.
+conversations. A saved active conversation also exposes **Rename** in its header,
+which changes the topic and refreshes the sidebar; new conversations hide it.
 
 The sidebar includes:
 
@@ -119,6 +120,10 @@ and Bearer authorization values. The main chat retains the stop button.
 - The deployed compatibility check retained the existing mode-0600 version-1
   credential and recognized it as `dbyte`/admin without rewriting it. The first
   successful management change performs the atomic version-2 store migration.
+- The Admin surface groups System, Maintenance, and WebUI users. Service health,
+  account role, and enabled state use explicit badges; user operations use a
+  responsive two-column action grid. Actions disallowed for the signed-in or
+  initial administrator are disabled with explanatory tooltips.
 - Conversation metadata is stored atomically in
   `~/.prime/agent/webui-metadata.json`; transcripts remain Prime's JSONL source
   of truth. Delete still moves inactive transcripts to private recovery storage.

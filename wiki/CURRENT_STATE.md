@@ -64,6 +64,12 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   divider is hidden in the stacked mobile layout.
   The narrow-sidebar Archived checkbox and conversation contents remain within
   the sidebar boundary.
+  The Admin tab is visually grouped into System, Maintenance, and WebUI users;
+  status/role/state badges and grouped user actions remain readable at the
+  default sidebar width. Backend-protected self/initial-admin actions are visibly
+  disabled instead of failing only after a click.
+  A saved active conversation exposes Rename in the conversation header; new
+  conversations hide it, and a successful rename refreshes the header/sidebar.
 - Static HTML is installed in `/var/www/prime-agent/`; JavaScript and CSS are in
   `/var/www/prime-agent/assets/`. The tracked installer preserves this mapping.
 - vLLM: `0.27.1` ARM64/CUDA 12.9 image, two user services enabled at boot
