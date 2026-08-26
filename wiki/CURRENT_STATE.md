@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-26
-Wiki version: `v0077`
+Wiki version: `v0078`
 
 ## Project summary
 
@@ -123,6 +123,12 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   authenticated owner to send native `steer`, `follow_up`, and `abort` commands
   over the task's private stdin channel while events stream from stdout. Hidden
   reasoning and internal RPC bookkeeping are excluded from browser snapshots.
+  Deployment commit `4a66709` passed all 30 tests and live browser validation:
+  the prompt echoed before task-start completion; lifecycle/tool progress updated
+  in the dialogue; `/steer` was queued during an in-flight IPython call; and Prime
+  applied it at the next turn boundary, changing the requested two-sentence answer
+  into the requested one-sentence final response. No alert or console attachment
+  occurred.
 - Static HTML is installed in `/var/www/prime-agent/`; JavaScript and CSS are in
   `/var/www/prime-agent/assets/`. The tracked installer preserves this mapping.
 - vLLM: `0.27.1` ARM64/CUDA 12.9 image, two user services enabled at boot

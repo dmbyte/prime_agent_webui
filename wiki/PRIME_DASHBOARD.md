@@ -26,6 +26,9 @@ Prime's persistent RPC mode: the initial prompt and authenticated owner commands
 use the process's private stdin, while safe events stream from stdout. `/steer`
 queues direction at the next turn boundary, `/follow-up` waits until current work
 finishes, and Stop sends native `abort`; none requires console attachment.
+Deployment commit `4a66709` passed all 30 tests and a live steering run: an
+in-flight IPython task displayed progress, accepted `/steer`, and honored the new
+one-sentence constraint at the next turn boundary without an alert.
 
 The active conversation header shows the effective provider/model, effort,
 routing mode, and context capacity. Effort is selectable there and applies to

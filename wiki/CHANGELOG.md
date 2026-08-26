@@ -3,6 +3,19 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-26 — v0078 — Verify live RPC steering end to end
+
+- Deployed commit `4a66709`; the deployed suite passed all 30 tests and installed
+  API/static files matched the repository.
+- Live browser validation confirmed immediate optimistic echo, safe lifecycle and
+  IPython progress in the dialogue, visible steering delivery, and no alert or
+  console attachment.
+- Prime completed the in-flight tool call, consumed `/steer` at the next turn
+  boundary, and changed a requested two-sentence result into the requested
+  one-sentence final answer.
+- Added immutable verification snapshot [v0078](versions/v0078.md). Runtime
+  recovery remains the pre-v0077 bundle documented in v0077.
+
 ## 2026-08-26 — v0077 — Use Prime RPC for interactive running tasks
 
 - Live validation proved that one-shot JSON/print sessions publish valid saved
