@@ -3,6 +3,23 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-26 — v0074 — Prevent invalid single-user trust downgrades
+
+- The bounded third forward test correctly rejected argv injection, CSP, and
+  guarded-import/listener false positives, demonstrating that v0073's semantic
+  guardrails changed behavior as intended.
+- It still downgraded local privileged-backend access and shared execution identity
+  to informational by assuming a single-user system despite distinct WebUI users
+  and user-influenced local agents/terminals.
+- The skill now rejects `single-user`/`trusted-localhost` assumptions when the
+  product exposes distinct accounts or lets less-trusted users launch local code,
+  jobs, plugins, terminals, or agents. Such workloads are explicitly part of the
+  attacker model.
+- Added generic safeguards against treating side-effect-free GETs as CSRF data
+  exfiltration without cross-origin response access, or assuming an unimplemented
+  HTTP method falls through to another method handler.
+- Added immutable snapshot [v0074](versions/v0074.md).
+
 ## 2026-08-26 — v0073 — Add semantic false-positive guardrails
 
 - Used Prime's JSON event stream to verify the second forward test actually ran

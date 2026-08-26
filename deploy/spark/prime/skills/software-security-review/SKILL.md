@@ -30,6 +30,11 @@ separately asks for remediation.
    the OS/process identity, filesystem view, credentials, tools, terminal, cache,
    and IPC access used by background work. A shared execution identity invalidates
    isolation unless an independently enforced sandbox preserves the boundary.
+   Do not accept a `single-user` or `trusted-localhost` assumption when the product
+   itself supports distinct accounts/roles or lets a less-trusted user start code,
+   plugins, jobs, terminals, or agents on that host. In that case, those local
+   workloads are part of the attacker model and a reachable privileged backend is
+   an authorization boundary, not merely an informational deployment note.
    These two gates must each produce either a finding or an evidence-based negative
    result; do not bury them as general observations.
 4. Validate behavior against code, configuration, tests, runtime evidence, or
@@ -49,6 +54,10 @@ separately asks for remediation.
      assess direct backend reachability separately from external header spoofing;
    - random double-submit CSRF tokens can be valid without a server-side HMAC when
      cookie policy, Origin checks, and token secrecy satisfy the design;
+   - CSRF primarily concerns state-changing actions; missing Origin/CSRF checks on
+     a side-effect-free GET are not data exfiltration unless cross-origin response
+     reading is also enabled. An unimplemented HTTP method does not fall through
+     to another method handler merely because that handler exists;
    - argument arrays avoid shell interpretation, and an end-of-options marker
      prevents ordinary option injection; separately analyze the downstream
      interpreter, agent, or tool authority as prompt/data injection;

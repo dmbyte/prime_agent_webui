@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-25
-Wiki version: `v0073`
+Wiki version: `v0074`
 
 ## Project summary
 
@@ -39,6 +39,11 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   guarded-import, CSP, and runtime-evidence guardrails plus a decision-dense output
   rule. Local gateway and shared-execution gates must now resolve to a finding or
   an evidence-based negative result.
+  A bounded third test cleared the prior argv, CSP, and guarded-import errors but
+  incorrectly treated shared execution and local backend bypass as informational
+  under a single-user assumption. The current skill rejects that downgrade when
+  software exposes distinct accounts/roles or lets less-trusted users launch local
+  workloads, and adds precise GET/CORS/CSRF and HTTP-method dispatch guardrails.
 - Browser interface: native Prime chat API on `127.0.0.1:8765`, optional ttyd
   1.7.4 console on `127.0.0.1:7681`, and isolated local session broker on
   `127.0.0.1:8764`, fronted by Nginx 1.24 on loopback and
