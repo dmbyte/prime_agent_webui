@@ -18,10 +18,9 @@ write_status running 0
 exec 9>"${HOME}/.prime/agent/webui-update.lock"
 flock -n 9 || { echo "Another WebUI update is already running." >&2; exit 75; }
 
-repo="${HOME}/prime_agent_webui"
+repo="${PRIME_WEBUI_REPO:-${HOME}/prime_agent_webui}"
 live="${HOME}/prime-dgx-dashboard"
 source_dir="$repo/deploy/spark/dashboard"
-test "$(git -C "$repo" branch --show-current)" = main
 test -z "$(git -C "$repo" status --porcelain)"
 test "$(git -C "$repo" remote get-url origin)" = "https://github.com/dmbyte/prime_agent_webui.git"
 
@@ -30,13 +29,17 @@ release_tag=$(gh api repos/dmbyte/prime_agent_webui/releases/latest --jq .tag_na
 echo "Fetching Prime WebUI release ${release_tag}..."
 GIT_TERMINAL_PROMPT=0 git -C "$repo" fetch origin "refs/tags/${release_tag}:refs/tags/${release_tag}"
 release_commit=$(git -C "$repo" rev-parse "${release_tag}^{commit}")
-if git -C "$repo" merge-base --is-ancestor "$release_commit" HEAD; then
+branch=$(git -C "$repo" branch --show-current)
+if [[ $branch == main ]] && git -C "$repo" merge-base --is-ancestor "$release_commit" HEAD; then
   echo "Prime WebUI already contains release ${release_tag}."
-else
+elif [[ $branch == main ]]; then
   git -C "$repo" merge --ff-only "$release_commit"
+else
+  git -C "$repo" checkout --detach "$release_commit"
 fi
 
 python3 -m py_compile "$source_dir/api.py" "$source_dir/api_v2.py" "$source_dir/auth.py"
+python3 -m unittest discover -s "$source_dir" -p 'test*.py'
 install -d -m 0755 "$live"
 install -m 0644 "$source_dir"/*.py "$source_dir"/*.js "$source_dir"/*.css "$source_dir"/*.html "$live"/
 install -m 0755 "$source_dir/install-static.sh" "$live/install-static.sh"
@@ -44,7 +47,8 @@ install -m 0755 "$source_dir/install-static.sh" "$live/install-static.sh"
 install -d -m 0755 "${HOME}/prime-update" "${HOME}/.config/systemd/user"
 install -m 0755 "$repo/deploy/spark/update/update-prime-agent.sh" "$repo/deploy/spark/update/update-webui.sh" "${HOME}/prime-update/"
 install -m 0644 "$repo/deploy/spark/systemd/prime-update-agent.service" "$repo/deploy/spark/systemd/prime-update-webui.service" "${HOME}/.config/systemd/user/"
-install -m 0644 "$repo/deploy/spark/systemd/prime-dashboard-api.service" "${HOME}/.config/systemd/user/"
+[[ $repo != *'"'* && $repo != *$'\n'* ]]
+printf 'Environment="PRIME_WEBUI_REPO=%s"\n' "$repo" >>"${HOME}/.config/systemd/user/prime-update-webui.service"
 systemctl --user daemon-reload
 
 "$live/install-static.sh" "$live"

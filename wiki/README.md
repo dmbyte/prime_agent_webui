@@ -7,6 +7,8 @@ verified current state and enough history to understand or reverse changes.
 
 - [Current state](CURRENT_STATE.md) — authoritative, concise description of the
   project as it exists now.
+- [Project README](../README.md) — portable installation, first use, operations,
+  security limits, and a synthetic interface preview.
 - [Change log](CHANGELOG.md) — chronological record of tweaks and optimizations.
 - [Operating guide](OPERATING_GUIDE.md) — how to keep this wiki accurate.
 - [Recommended agent stack](AGENT_STACK.md) — Spark-optimized model roles,
@@ -31,9 +33,9 @@ verified current state and enough history to understand or reverse changes.
 
 ## Status
 
-- Current wiki version: `v0079`
+- Current wiki version: `v0080`
 - Last verified: 2026-08-26
-- Project phase: staged migration to policy-controlled rootless task containers
+- Project phase: portable v0.2.0 release with staged rootless-container migration
 
 ## Truth and precedence
 

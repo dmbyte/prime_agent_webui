@@ -57,3 +57,4 @@ only historical evidence: when a decision changes, mark the old record
 - [ADR-0050: Use Prime's parser-verified busy-agent send for steering](0050-use-parser-verified-prime-steering.md)
 - [ADR-0051: Use Prime RPC for interactive WebUI tasks](0051-use-prime-rpc-for-interactive-webui-tasks.md)
 - [ADR-0052: Isolate WebUI work in policy-controlled rootless task containers](0052-rootless-per-task-execution.md)
+- [ADR-0053: Ship a portable, versioned host-mode installer before container activation](0053-portable-versioned-installation.md)

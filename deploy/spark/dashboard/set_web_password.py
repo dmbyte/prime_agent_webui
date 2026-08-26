@@ -17,7 +17,7 @@ SCRYPT_MAXMEM = 64 * 1024 * 1024
 
 
 def main():
-    username = os.environ.get("PRIME_AUTH_USER", "dbyte")
+    username = os.environ.get("PRIME_AUTH_USER") or pwd.getpwuid(os.getuid()).pw_name
     account = pwd.getpwnam(username)
     if os.getuid() != account.pw_uid:
         raise SystemExit(f"Run this command as {username}, without sudo.")

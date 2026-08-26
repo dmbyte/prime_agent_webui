@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-26
-Wiki version: `v0079`
+Wiki version: `v0080`
 
 ## Project summary
 
@@ -17,6 +17,15 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 - Version control: Git `main`, private GitHub repository
   `https://github.com/dmbyte/prime_agent_webui`, tracking `origin/main`
 - Reviewable deployment source: `deploy/spark/`
+- Portable entry points: repository-root `README.md` and `install.sh`; the
+  installer detects Debian, Red Hat, and SUSE families, installs the host-mode
+  prerequisites, installs pinned Prime Agent 0.8.0, provisions private TLS,
+  Nginx, dedicated WebUI authentication, and hardened user services, then
+  verifies telemetry and the unauthenticated 401 boundary. It does not change
+  the firewall or activate the rootless-container preview.
+- Release validation: `scripts/validate-release.sh` checks required artifacts,
+  shell and JavaScript syntax, Python compilation, and the full dashboard test
+  suite. The public-facing sample screenshot contains only synthetic data.
 - Parametric CAD source and generated parts:
   `cad/pi5-iuniker-inv001-case/`
 - Target Spark: SSH verified as `dbyte@172.16.253.231`; passwordless sudo works
@@ -246,6 +255,11 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 - This path is feature-gated by `PRIME_TASK_CONTAINER_IMAGE=1` and is not enabled
   in the deployed service. The active WebUI remains on the verified v0078 host
   execution path while the gateway and migration are incomplete.
+- Rootless activation still requires a dedicated service identity, subordinate
+  UID/GID mappings, persistent user services, immutable profile images, the
+  authenticated model/provider credential gateway, per-user data migration,
+  network-policy enforcement, resource-limit tests, backup/restore validation,
+  and an end-to-end canary. Installation of Podman alone is not activation.
 - The official Prime 0.8.0 release artifact is pinned by SHA-256
   `f5b0093c7e0fddb73f94773d74383585456adfa84f12a4082d3098f23bb8fab6`.
   Prime's inherited package name is not published on npm; direct registry

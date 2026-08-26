@@ -45,6 +45,7 @@ META_LOCK = threading.Lock()
 LEDGER_LOCK = threading.Lock()
 EXECUTION_GRANTS = {}
 EXECUTION_GRANT_LOCK = threading.Lock()
+INITIAL_ADMIN = os.environ.get("PRIME_INITIAL_ADMIN", "dbyte")
 
 NEMOTRON_ROUTE = ("spark-nemotron", "nemotron-3.5-lightning")
 QWEN_ROUTE = ("spark-qwen", "qwen3.6-35b-a3b")
@@ -210,11 +211,11 @@ def save_metadata(data):
 def conversation_owner(session_id):
     rows = metadata().get("conversations", {})
     if session_id in rows:
-        return rows[session_id].get("owner", "dbyte")
+        return rows[session_id].get("owner", INITIAL_ADMIN)
     try:
-        return rows.get(legacy.session_path(session_id).stem, {}).get("owner", "dbyte")
+        return rows.get(legacy.session_path(session_id).stem, {}).get("owner", INITIAL_ADMIN)
     except ValueError:
-        return "dbyte"
+        return INITIAL_ADMIN
 
 
 def require_conversation_owner(session_id, user):
@@ -234,7 +235,7 @@ def usage_for_user(user):
     return legacy.usage_summary(paths)
 
 
-def conversation_catalog(query="", include_archived=False, user="dbyte"):
+def conversation_catalog(query="", include_archived=False, user=INITIAL_ADMIN):
     rows = legacy.session_catalog()
     data = metadata().get("conversations", {})
     result = []
@@ -245,7 +246,7 @@ def conversation_catalog(query="", include_archived=False, user="dbyte"):
         except ValueError:
             storage_id = row["id"]
         extra = data.get(row["id"], data.get(storage_id, {}))
-        if extra.get("owner", "dbyte") != user:
+        if extra.get("owner", INITIAL_ADMIN) != user:
             continue
         row.update({"pinned": bool(extra.get("pinned")), "archived": bool(extra.get("archived"))})
         if extra.get("thinking"):
@@ -278,7 +279,7 @@ def message_text(parts):
     return "\n".join(values)
 
 
-def conversation_messages(session_id, user="dbyte"):
+def conversation_messages(session_id, user=INITIAL_ADMIN):
     if not valid_id(session_id):
         raise ValueError("Invalid conversation identifier")
     require_conversation_owner(session_id, user)
@@ -326,7 +327,7 @@ def task_snapshot(user=None):
     with TASK_LOCK:
         rows = []
         for task_id, task in TASKS.items():
-            if user is not None and task.get("owner", "dbyte") != user:
+            if user is not None and task.get("owner", INITIAL_ADMIN) != user:
                 continue
             row = {key: value for key, value in task.items() if key not in {"process", "usage", "rpcResponses", "agentEnded"}}
             if row.get("status") == "running":
@@ -336,7 +337,7 @@ def task_snapshot(user=None):
 
 
 def append_ledger(task, status, output=""):
-    record = {"at": now_iso(), "taskId": task["id"], "owner": task.get("owner", "dbyte"), "sessionId": task.get("sessionId"), "provider": task.get("provider"), "model": task.get("model"), "status": status, "elapsedSeconds": round(time.time() - task["startedEpoch"], 2)}
+    record = {"at": now_iso(), "taskId": task["id"], "owner": task.get("owner", INITIAL_ADMIN), "sessionId": task.get("sessionId"), "provider": task.get("provider"), "model": task.get("model"), "status": status, "elapsedSeconds": round(time.time() - task["startedEpoch"], 2)}
     if task.get("usage"):
         usage = task["usage"]
         record["usage"] = {key: usage.get(key, 0) for key in ("input", "output", "cacheRead", "cacheWrite", "totalTokens")}
@@ -525,12 +526,12 @@ def store_task_route(task):
             "routeModel": task.get("model"),
             "routingMode": task.get("routingMode"),
             "routeReason": task.get("routeReason"),
-            "owner": task.get("owner", "dbyte"),
+            "owner": task.get("owner", INITIAL_ADMIN),
         })
         legacy.atomic_json(META, data)
 
 
-def launch_task(message, session_id=None, fork=False, thinking=None, owner="dbyte", authorization=None):
+def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITIAL_ADMIN, authorization=None):
     message = str(message).strip()
     if not message or len(message) > 100000:
         raise ValueError("Message must contain between 1 and 100,000 characters")
@@ -596,10 +597,10 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner="dbyt
     return {key: value for key, value in task.items() if key not in {"process", "rpcResponses", "agentEnded"}}
 
 
-def stop_native_task(task_id, owner="dbyte"):
+def stop_native_task(task_id, owner=INITIAL_ADMIN):
     with TASK_LOCK:
         task = TASKS.get(task_id)
-        if not task or task.get("owner", "dbyte") != owner or task["status"] != "running":
+        if not task or task.get("owner", INITIAL_ADMIN) != owner or task["status"] != "running":
             raise ValueError("Task is no longer running")
         process = task["process"]
         if not process.stdin:
@@ -616,7 +617,7 @@ def stop_native_task(task_id, owner="dbyte"):
     return {"stopping": True, "id": task_id}
 
 
-def message_native_task(task_id, message, mode="steer", owner="dbyte"):
+def message_native_task(task_id, message, mode="steer", owner=INITIAL_ADMIN):
     message = str(message).strip()
     if not message or len(message) > 10000:
         raise ValueError("Steering message must contain between 1 and 10,000 characters")
@@ -625,7 +626,7 @@ def message_native_task(task_id, message, mode="steer", owner="dbyte"):
     request_id = f"task-message-{uuid.uuid4().hex}"
     with TASK_LOCK:
         task = TASKS.get(task_id)
-        if not task or task.get("owner", "dbyte") != owner or task.get("status") != "running":
+        if not task or task.get("owner", INITIAL_ADMIN) != owner or task.get("status") != "running":
             raise ValueError("Task is no longer running")
         process = task.get("process")
         if not task.get("rpcReady") or not process or not process.stdin:
@@ -659,7 +660,7 @@ def message_native_task(task_id, message, mode="steer", owner="dbyte"):
     return {"delivered": True, "id": task_id, "mode": mode}
 
 
-def update_conversation(session_id, action, value=None, user="dbyte"):
+def update_conversation(session_id, action, value=None, user=INITIAL_ADMIN):
     if not valid_id(session_id):
         raise ValueError("Conversation not found")
     legacy.session_path(session_id)
@@ -682,7 +683,7 @@ def update_conversation(session_id, action, value=None, user="dbyte"):
     return {"id": session_id, **row}
 
 
-def upload_rows(user="dbyte"):
+def upload_rows(user=INITIAL_ADMIN):
     rows = []
     if not legacy.UPLOADS.exists():
         return rows
@@ -691,7 +692,7 @@ def upload_rows(user="dbyte"):
             if not path.is_file() or path.name.startswith("."):
                 continue
             relative = path.relative_to(legacy.UPLOADS).as_posix()
-            if metadata().get("files", {}).get(relative, {}).get("owner", "dbyte") != user:
+            if metadata().get("files", {}).get(relative, {}).get("owner", INITIAL_ADMIN) != user:
                 continue
             stat = path.stat()
             rows.append({"id": base64.urlsafe_b64encode(relative.encode()).decode().rstrip("="), "name": path.name.split("-", 1)[-1], "path": str(path), "sizeBytes": stat.st_size, "modified": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(), "type": mimetypes.guess_type(path.name)[0] or "application/octet-stream"})
@@ -708,7 +709,7 @@ def upload_path(file_id, user=None):
     path = (legacy.UPLOADS / relative).resolve()
     if legacy.UPLOADS.resolve() not in path.parents or not path.is_file():
         raise ValueError("File not found")
-    if user is not None and metadata().get("files", {}).get(relative, {}).get("owner", "dbyte") != user:
+    if user is not None and metadata().get("files", {}).get(relative, {}).get("owner", INITIAL_ADMIN) != user:
         raise ValueError("File not found")
     return path
 
@@ -723,13 +724,13 @@ def register_upload(path, owner):
 
 def purge_user_cache(username):
     username = str(username)
-    if not re.fullmatch(r"[A-Za-z0-9_.-]{2,32}", username) or username == "dbyte":
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{2,32}", username) or username == INITIAL_ADMIN:
         raise ValueError("The initial administrator cache cannot be deleted here")
     with TASK_LOCK:
         if any(row.get("owner") == username and row.get("status") == "running" for row in TASKS.values()):
             raise RuntimeError("Stop the user's active tasks before deleting their cache")
     data = metadata()
-    owned_sessions = [sid for sid, row in data.get("conversations", {}).items() if row.get("owner", "dbyte") == username]
+    owned_sessions = [sid for sid, row in data.get("conversations", {}).items() if row.get("owner", INITIAL_ADMIN) == username]
     recovery = USER_TRASH / username / f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:8]}"
     recovery.mkdir(mode=0o700, parents=True, exist_ok=False)
     os.chmod(USER_TRASH, 0o700); os.chmod(USER_TRASH / username, 0o700)
@@ -742,7 +743,7 @@ def purge_user_cache(username):
         except ValueError:
             pass
     for relative, row in list(data.get("files", {}).items()):
-        if row.get("owner", "dbyte") != username:
+        if row.get("owner", INITIAL_ADMIN) != username:
             continue
         source = (legacy.UPLOADS / relative).resolve()
         if source.is_file() and legacy.UPLOADS.resolve() in source.parents:
@@ -753,8 +754,8 @@ def purge_user_cache(username):
     for session_id in owned_sessions:
         data.get("conversations", {}).pop(session_id, None)
     with TASK_LOCK:
-        owned_tasks = {task_id for task_id, row in TASKS.items() if row.get("owner", "dbyte") == username}
-    owned_tasks.update(task_id for task_id, row in data.get("tasks", {}).items() if row.get("owner", "dbyte") == username)
+        owned_tasks = {task_id for task_id, row in TASKS.items() if row.get("owner", INITIAL_ADMIN) == username}
+    owned_tasks.update(task_id for task_id, row in data.get("tasks", {}).items() if row.get("owner", INITIAL_ADMIN) == username)
     for task_id in owned_tasks:
         source = TASK_LOGS / f"{task_id}.log"
         if source.is_file():
@@ -773,7 +774,7 @@ def purge_user_cache(username):
                     row = json.loads(line)
                 except json.JSONDecodeError:
                     retained.append(line); continue
-                (removed if row.get("owner", "dbyte") == username else retained).append(line)
+                (removed if row.get("owner", INITIAL_ADMIN) == username else retained).append(line)
         except OSError:
             pass
         if removed:
@@ -868,7 +869,7 @@ def release_status():
                 current_version, latest_version = version_tuple(installed), version_tuple(tag)
                 available = bool(current_version and latest_version and latest_version > current_version)
             else:
-                repo = legacy.HOME / "prime_agent_webui"
+                repo = Path(os.environ.get("PRIME_WEBUI_REPO", legacy.HOME / "prime_agent_webui"))
                 current = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True, timeout=5, check=True).stdout.strip()
                 resolved = subprocess.run(["gh", "api", f"repos/{repository}/commits/{tag}", "--jq", ".sha"], capture_output=True, text=True, timeout=15, check=True).stdout.strip()
                 if not re.fullmatch(r"[a-f0-9]{40}", current) or not re.fullmatch(r"[a-f0-9]{40}", resolved): raise ValueError("Invalid release revision")

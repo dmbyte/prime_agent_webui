@@ -3,6 +3,27 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-26 — v0080 — Publish portable WebUI release 0.2.0
+
+- Added a repository-root README with a synthetic screenshot, complete first-use
+  and operating guidance, and explicit Ubuntu/Debian, RHEL-family, and
+  SLES/openSUSE installation alternatives.
+- Added a non-root installer that detects the distribution family, installs only
+  production host-mode prerequisites, provisions pinned Prime Agent 0.8.0,
+  private TLS, Nginx, dedicated WebUI authentication, hardened user services,
+  and verifies the local health and authentication boundary.
+- Kept firewall modification and rootless execution opt-in. Documented the
+  optional Podman prerequisites and every remaining activation gate rather than
+  implying that package installation provides isolation.
+- Made WebUI origins, repository location, and initial administrator portable;
+  made the release updater work from main or a detached tagged checkout and run
+  the full suite before installation.
+- Added a release validation script and validated all 39 Python tests, shell and
+  JavaScript syntax, required release contents, and the screenshot artifact.
+- Added [ADR-0053](decisions/0053-portable-versioned-installation.md) and
+  immutable snapshot [v0080](versions/v0080.md). Rollback is checkout/reinstall
+  of `v0.1.0`; the staged container feature remains off.
+
 ## 2026-08-26 — v0079 — Stage policy-controlled rootless task containers
 
 - Created and verified the root-only pre-change bundle

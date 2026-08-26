@@ -26,12 +26,17 @@ MODEL_CONFIG = HOME / ".prime/agent/models.json"
 OPENAI_ENV = HOME / ".config/prime-agent/openai.env"
 PROVIDER_SETTINGS = HOME / ".prime/agent/provider-settings.json"
 PLANNED_MODELS = [{"provider": "openai", "model": "gpt-5.4"}]
-ALLOWED_ORIGINS = {
+DEFAULT_ALLOWED_ORIGINS = {
     "https://172.16.253.231:8443",
     "https://127.0.0.1:8443",
     "https://localhost:8443",
     "https://spark-c562:8443",
 }
+ALLOWED_ORIGINS = {
+    value.strip().rstrip("/")
+    for value in os.environ.get("PRIME_WEB_ORIGINS", "").split(",")
+    if value.strip()
+} or DEFAULT_ALLOWED_ORIGINS
 MODELS = {
     "spark-nemotron": {"nemotron-3.5-lightning"},
     "spark-qwen": {"qwen3.6-35b-a3b"},
