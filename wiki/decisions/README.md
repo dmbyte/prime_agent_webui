@@ -50,3 +50,4 @@ only historical evidence: when a decision changes, mark the old record
 - [ADR-0043: Route specialist WebUI tasks to Qwen deterministically](0043-deterministic-qwen-specialist-routing.md)
 - [ADR-0044: Use narrow one-shot services for software updates](0044-narrow-update-services.md)
 - [ADR-0045: Isolate WebUI users and recoverably remove their server data](0045-isolated-webui-users.md)
+- [ADR-0046: Configure providers through a write-only admin workflow](0046-write-only-provider-configuration.md)

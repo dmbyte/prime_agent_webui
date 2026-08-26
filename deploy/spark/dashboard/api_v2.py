@@ -44,6 +44,111 @@ QWEN_SPECIALIST_PATTERNS = (
     r"\b(code review|security review|architecture review|independent review|second opinion|adversarial review|critique|refactor|debug)\b",
 )
 
+PROVIDER_AUTH = legacy.HOME / ".prime/agent/auth.json"
+API_KEY_PROVIDERS = (
+    ("anthropic", "Anthropic", "ANTHROPIC_API_KEY"),
+    ("openai", "OpenAI", "OPENAI_API_KEY"),
+    ("prime-inference", "Prime Inference", "PRIME_API_KEY"),
+    ("deepseek", "DeepSeek", "DEEPSEEK_API_KEY"),
+    ("google", "Google Gemini", "GEMINI_API_KEY"),
+    ("mistral", "Mistral", "MISTRAL_API_KEY"),
+    ("groq", "Groq", "GROQ_API_KEY"),
+    ("cerebras", "Cerebras", "CEREBRAS_API_KEY"),
+    ("xai", "xAI", "XAI_API_KEY"),
+    ("openrouter", "OpenRouter", "OPENROUTER_API_KEY"),
+    ("vercel-ai-gateway", "Vercel AI Gateway", "AI_GATEWAY_API_KEY"),
+    ("zai", "ZAI", "ZAI_API_KEY"),
+    ("opencode", "OpenCode Zen", "OPENCODE_API_KEY"),
+    ("opencode-go", "OpenCode Go", "OPENCODE_API_KEY"),
+    ("huggingface", "Hugging Face", "HF_TOKEN"),
+    ("fireworks", "Fireworks", "FIREWORKS_API_KEY"),
+    ("kimi-coding", "Kimi For Coding", "KIMI_API_KEY"),
+    ("moonshotai", "Moonshot AI", "MOONSHOT_API_KEY"),
+    ("moonshotai-cn", "Moonshot AI China", "MOONSHOT_API_KEY"),
+    ("minimax", "MiniMax", "MINIMAX_API_KEY"),
+    ("minimax-cn", "MiniMax China", "MINIMAX_CN_API_KEY"),
+    ("xiaomi", "Xiaomi MiMo", "XIAOMI_API_KEY"),
+    ("xiaomi-token-plan-cn", "Xiaomi Token Plan China", "XIAOMI_TOKEN_PLAN_CN_API_KEY"),
+    ("xiaomi-token-plan-ams", "Xiaomi Token Plan Amsterdam", "XIAOMI_TOKEN_PLAN_AMS_API_KEY"),
+    ("xiaomi-token-plan-sgp", "Xiaomi Token Plan Singapore", "XIAOMI_TOKEN_PLAN_SGP_API_KEY"),
+)
+SUBSCRIPTION_PROVIDERS = (
+    ("openai-codex", "ChatGPT Plus/Pro", "OpenAI Codex subscription login"),
+    ("anthropic-subscription", "Claude Pro/Max", "Anthropic subscription login"),
+    ("github-copilot", "GitHub Copilot", "GitHub or GitHub Enterprise login"),
+)
+
+
+def provider_catalog():
+    auth = legacy.read_json(PROVIDER_AUTH, {})
+    auth = auth if isinstance(auth, dict) else {}
+    extra = legacy.read_json(legacy.PROVIDER_SETTINGS, {})
+    extra = extra if isinstance(extra, dict) else {}
+    rows = []
+    for provider, name, env_name in API_KEY_PROVIDERS:
+        configured = provider in auth or (provider == "openai" and legacy.openai_env_configured())
+        rows.append({"id": provider, "name": name, "kind": "api-key", "description": f"Built-in Prime provider · {env_name}", "configured": configured, "fields": [{"id": "apiKey", "label": "API key", "secret": True, "required": not configured}]})
+    for provider, name, description in SUBSCRIPTION_PROVIDERS:
+        auth_key = "anthropic" if provider == "anthropic-subscription" else provider
+        rows.append({"id": provider, "name": name, "kind": "subscription", "description": description, "configured": auth_key in auth, "fields": []})
+    rows.extend([
+        {"id": "azure-openai-responses", "name": "Azure OpenAI", "kind": "cloud", "description": "Azure OpenAI Responses API", "configured": "azure-openai-responses" in auth, "fields": [{"id": "apiKey", "label": "API key", "secret": True, "required": "azure-openai-responses" not in auth}, {"id": "baseUrl", "label": "Base URL", "placeholder": "https://resource.openai.azure.com", "required": True}, {"id": "apiVersion", "label": "API version", "placeholder": "Optional"}, {"id": "deploymentMap", "label": "Deployment name map", "placeholder": "gpt-4o=my-deployment"}]},
+        {"id": "cloudflare-ai-gateway", "name": "Cloudflare AI Gateway", "kind": "cloud", "description": "Unified billing or stored BYOK gateway", "configured": "cloudflare-ai-gateway" in auth and bool(extra.get("CLOUDFLARE_ACCOUNT_ID") and extra.get("CLOUDFLARE_GATEWAY_ID")), "fields": [{"id": "apiKey", "label": "Cloudflare API key", "secret": True, "required": "cloudflare-ai-gateway" not in auth}, {"id": "accountId", "label": "Account ID", "required": True}, {"id": "gatewayId", "label": "Gateway ID", "required": True}]},
+        {"id": "cloudflare-workers-ai", "name": "Cloudflare Workers AI", "kind": "cloud", "description": "Cloudflare Workers AI models", "configured": "cloudflare-workers-ai" in auth and bool(extra.get("CLOUDFLARE_ACCOUNT_ID")), "fields": [{"id": "apiKey", "label": "Cloudflare API key", "secret": True, "required": "cloudflare-workers-ai" not in auth}, {"id": "accountId", "label": "Account ID", "required": True}]},
+        {"id": "amazon-bedrock", "name": "Amazon Bedrock", "kind": "cloud", "description": "AWS profile, IAM credentials, or bearer token", "configured": bool(extra.get("AWS_PROFILE") or extra.get("AWS_BEARER_TOKEN_BEDROCK") or (extra.get("AWS_ACCESS_KEY_ID") and extra.get("AWS_SECRET_ACCESS_KEY"))), "fields": [{"id": "profile", "label": "AWS profile", "placeholder": "Optional"}, {"id": "accessKey", "label": "Access key ID", "placeholder": "Optional"}, {"id": "secretKey", "label": "Secret access key", "secret": True}, {"id": "bearerToken", "label": "Bedrock bearer token", "secret": True}, {"id": "region", "label": "AWS region", "placeholder": "us-east-1"}]},
+        {"id": "google-vertex", "name": "Google Vertex AI", "kind": "cloud", "description": "Application Default Credentials or service-account file", "configured": bool(extra.get("GOOGLE_CLOUD_PROJECT") and extra.get("GOOGLE_CLOUD_LOCATION")), "fields": [{"id": "project", "label": "Google Cloud project", "required": True}, {"id": "location", "label": "Google Cloud location", "placeholder": "us-central1", "required": True}, {"id": "credentialsPath", "label": "Service-account JSON path", "placeholder": "Optional existing path on Spark"}]},
+        {"id": "custom-openai", "name": "Custom OpenAI-compatible", "kind": "custom", "description": "Ollama, LM Studio, vLLM, or another compatible endpoint", "configured": False, "fields": [{"id": "providerId", "label": "Provider ID", "required": True}, {"id": "baseUrl", "label": "Base URL", "placeholder": "http://127.0.0.1:8000/v1", "required": True}, {"id": "apiKey", "label": "API key", "secret": True}, {"id": "modelId", "label": "Model ID", "required": True}, {"id": "contextWindow", "label": "Context window", "placeholder": "32768", "required": True}, {"id": "maxTokens", "label": "Maximum output tokens", "placeholder": "8192", "required": True}]},
+    ])
+    return sorted(rows, key=lambda row: row["name"].casefold())
+
+
+def configure_provider(payload):
+    provider = str(payload.get("provider", ""))
+    values = payload.get("values")
+    if not isinstance(values, dict): raise ValueError("Provider values are required")
+    definition = next((row for row in provider_catalog() if row["id"] == provider), None)
+    if not definition or definition["kind"] == "subscription": raise ValueError("Use Prime interactive login for this provider")
+    clean = {str(key): str(value).strip() for key, value in values.items() if isinstance(value, str)}
+    for field in definition["fields"]:
+        if field.get("required") and not clean.get(field["id"]): raise ValueError(f"{field['label']} is required")
+    auth = legacy.read_json(PROVIDER_AUTH, {})
+    auth = auth if isinstance(auth, dict) else {}
+    settings = legacy.read_json(legacy.PROVIDER_SETTINGS, {})
+    settings = settings if isinstance(settings, dict) else {}
+    api_key = clean.get("apiKey")
+    if api_key:
+        if len(api_key) > 8192 or "\x00" in api_key: raise ValueError("Invalid API key")
+        auth[provider] = {"type": "api_key", "key": api_key}
+    if definition["kind"] == "api-key" and provider not in auth and not (provider == "openai" and legacy.openai_env_configured()): raise ValueError("API key is required")
+    mappings = {
+        "azure-openai-responses": {"baseUrl": "AZURE_OPENAI_BASE_URL", "apiVersion": "AZURE_OPENAI_API_VERSION", "deploymentMap": "AZURE_OPENAI_DEPLOYMENT_NAME_MAP"},
+        "cloudflare-ai-gateway": {"accountId": "CLOUDFLARE_ACCOUNT_ID", "gatewayId": "CLOUDFLARE_GATEWAY_ID"},
+        "cloudflare-workers-ai": {"accountId": "CLOUDFLARE_ACCOUNT_ID"},
+        "amazon-bedrock": {"profile": "AWS_PROFILE", "accessKey": "AWS_ACCESS_KEY_ID", "secretKey": "AWS_SECRET_ACCESS_KEY", "bearerToken": "AWS_BEARER_TOKEN_BEDROCK", "region": "AWS_REGION"},
+        "google-vertex": {"project": "GOOGLE_CLOUD_PROJECT", "location": "GOOGLE_CLOUD_LOCATION", "credentialsPath": "GOOGLE_APPLICATION_CREDENTIALS"},
+    }
+    for field, env_name in mappings.get(provider, {}).items():
+        if clean.get(field): settings[env_name] = clean[field]
+    if provider == "amazon-bedrock" and not (clean.get("profile") or clean.get("bearerToken") or (clean.get("accessKey") and clean.get("secretKey")) or definition["configured"]): raise ValueError("Choose an AWS profile, IAM key pair, or bearer token")
+    if provider == "custom-openai":
+        custom_id = clean.get("providerId", "")
+        if not re.fullmatch(r"[a-z][a-z0-9-]{2,31}", custom_id) or custom_id in {row[0] for row in API_KEY_PROVIDERS}: raise ValueError("Custom provider ID must be unique lowercase letters, numbers, and hyphens")
+        parsed = urllib.parse.urlparse(clean.get("baseUrl", ""))
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname: raise ValueError("A valid HTTP(S) base URL is required")
+        context = int(clean.get("contextWindow", 0)); maximum = int(clean.get("maxTokens", 0))
+        if not 1024 <= context <= 2000000 or not 256 <= maximum <= context: raise ValueError("Invalid context or output token limit")
+        env_name = f"PRIME_CUSTOM_{custom_id.upper().replace('-', '_')}_API_KEY"
+        if api_key: settings[env_name] = api_key
+        models = legacy.read_json(legacy.MODEL_CONFIG, {"providers": {}})
+        models.setdefault("providers", {})[custom_id] = {"baseUrl": clean["baseUrl"], "api": "openai-completions", "apiKey": env_name if api_key else "EMPTY", "models": [{"id": clean["modelId"], "contextWindow": context, "maxTokens": maximum}]}
+        legacy.atomic_json(legacy.MODEL_CONFIG, models)
+        auth.pop(provider, None)
+    legacy.atomic_json(PROVIDER_AUTH, auth)
+    legacy.atomic_json(legacy.PROVIDER_SETTINGS, settings)
+    legacy.MODEL_CACHE["at"] = 0
+    legacy.audit("provider_configured", provider=provider, actor="admin")
+    return {"provider": provider, "configured": True}
+
 
 def model_details(provider, model):
     return next((row for row in legacy.model_catalog() if row["provider"] == provider and row["model"] == model), {})
@@ -201,7 +306,7 @@ def conversation_messages(session_id, user="dbyte"):
 
 
 def prime_env():
-    env = os.environ.copy()
+    env = legacy.provider_env()
     env["PATH"] = f"{legacy.PRIME_BIN}:{env.get('PATH', '')}"
     return env
 
@@ -643,6 +748,9 @@ class Handler(legacy.Handler):
             elif path == "/api/admin":
                 self.require_admin()
                 self.send_json(200, admin_status())
+            elif path == "/api/providers/catalog":
+                self.require_admin()
+                self.send_json(200, {"providers": provider_catalog()})
             else:
                 super().do_GET()
         except ValueError as error:
@@ -653,7 +761,7 @@ class Handler(legacy.Handler):
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
-        v2 = {"/api/settings", "/api/tasks/start", "/api/tasks/stop", "/api/conversations/update", "/api/conversations/delete", "/api/conversations/duplicate", "/api/files/delete", "/api/admin/restart", "/api/admin/retention", "/api/admin/update", "/api/admin/user-cache", "/api/files/upload"}
+        v2 = {"/api/settings", "/api/tasks/start", "/api/tasks/stop", "/api/conversations/update", "/api/conversations/delete", "/api/conversations/duplicate", "/api/files/delete", "/api/admin/restart", "/api/admin/retention", "/api/admin/update", "/api/admin/user-cache", "/api/providers/configure", "/api/files/upload"}
         if path not in v2:
             if not csrf_ok(self.headers):
                 self.send_json(403, {"error": "CSRF validation failed"})
@@ -685,6 +793,9 @@ class Handler(legacy.Handler):
             if path == "/api/settings":
                 self.require_admin()
                 self.send_json(200, {"settings": legacy.save_settings(payload)})
+            elif path == "/api/providers/configure":
+                self.require_admin()
+                self.send_json(200, configure_provider(payload))
             elif path == "/api/tasks/start":
                 self.send_json(202, {"task": launch_task(payload.get("message"), payload.get("sessionId"), thinking=payload.get("thinking"), owner=user)})
             elif path == "/api/tasks/stop":

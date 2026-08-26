@@ -131,6 +131,13 @@ and Bearer authorization values. The main chat retains the stop button.
   It is not a provider invoice and cannot include calls outside Prime.
 - Upload preview permits only PNG/JPEG/GIF/WebP, PDF, plain text, CSV, and JSON;
   framed previews are sandboxed. Other types are not rendered inline.
+- **Settings providers:** the compact configured-provider filter sits beside an
+  admin-only **Add provider** button. A searchable modal lists Prime 0.8.0 API-key
+  providers, subscription logins, Azure/AWS/Cloudflare/Vertex cloud variants,
+  and custom OpenAI-compatible endpoints. It renders only the fields required by
+  the selected provider. Secret fields are write-only, masked, cleared after use,
+  stored outside the repository, and never returned by the API. Subscription
+  entries open the authenticated Advanced console for Prime's `/login` flow.
 - Applying retention requires explicit confirmation and deletes only uploads
   older than 1–365 configured days. Conversation retention is unchanged.
 

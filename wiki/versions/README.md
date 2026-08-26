@@ -6,6 +6,7 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0069](v0069.md) | 2026-08-25 | Added write-only provider configuration and searchable Prime provider catalog |
 | [v0068](v0068.md) | 2026-08-25 | Refined the Admin visual hierarchy and added active-conversation rename |
 | [v0067](v0067.md) | 2026-08-25 | Completed recoverable cleanup of each user's persisted server data |
 | [v0066](v0066.md) | 2026-08-25 | Added isolated local WebUI users and administrative lifecycle controls |

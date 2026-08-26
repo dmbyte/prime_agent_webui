@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-25
-Wiki version: `v0066`
+Wiki version: `v0069`
 
 ## Project summary
 
@@ -72,6 +72,11 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   conversations hide it, and a successful rename refreshes the header/sidebar.
   The v0068 desktop visual check verified both the full user-action grid and the
   saved-conversation Rename control; all 25 deployed tests passed.
+  Settings now uses a compact configured-provider filter beside **Add provider**.
+  Its modal catalogs every provider documented by installed Prime 0.8.0: API-key,
+  subscription, Azure/AWS/Cloudflare/Vertex, and custom OpenAI-compatible paths.
+  Admins can configure required fields without secrets being returned to the
+  browser. Provider credentials are global trusted infrastructure, not per-user.
 - Static HTML is installed in `/var/www/prime-agent/`; JavaScript and CSS are in
   `/var/www/prime-agent/assets/`. The tracked installer preserves this mapping.
 - vLLM: `0.27.1` ARM64/CUDA 12.9 image, two user services enabled at boot
@@ -133,6 +138,10 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   `/var/backups/prime-users-v0066-20260825T180700-0500`; it preserves the prior
   one-way credential, auth/API/UI, auth unit, Nginx, metadata-absence state,
   deployed Git commit, and checksums.
+- The root-only pre-v0069 provider-workflow recovery bundle is
+  `/var/backups/prime-providers-v0069-20260825T203000-0500`; it preserves the
+  credential/provider/model configuration (including explicit absence), prior
+  API/UI/unit, deployed Git head, and checksums without exposing their contents.
 
 ## Deployed architecture
 
@@ -151,6 +160,10 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   the dashboard and wiki never receive its value. Authentication/configuration
   succeeded, but the first request was refused because the API account has no
   credits remaining. GPT-5.6 Sol remains a separate `openai-codex`/ChatGPT route.
+- Native WebUI Prime children may make outbound provider connections. The API
+  listener remains loopback-only behind authenticated Nginx, but its former
+  systemd loopback-only egress filter was removed because it prevented any cloud
+  provider configured through Settings from functioning.
 - Hermes is not installed. Historical framework analysis still describes it as
   an alternative gateway, but it has no current runtime role.
 - When Nemotron is the selected default, native WebUI tasks with clear

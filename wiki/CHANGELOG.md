@@ -3,6 +3,24 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-25 — v0069 — Add secure provider configuration workflow
+
+- Replaced the full-width configured-provider search with a compact filter and
+  **Add provider** action.
+- Added a searchable modal catalog based on the providers documented by installed
+  Prime 0.8.0: built-in API keys, subscription login, Azure OpenAI, Amazon
+  Bedrock, Cloudflare, Vertex AI, and custom OpenAI-compatible endpoints.
+- Added admin-only, CSRF-protected configuration endpoints. Secrets are stored
+  atomically in Prime's mode-0600 auth/settings files, are never returned, logged,
+  or recorded in the wiki, and are cleared from modal fields after use.
+- Preserved existing OAuth/auth and local model configuration during updates;
+  added tests for write-only keys and custom-model merge behavior.
+- Allowed outbound networking for loopback-bound API child tasks so configured
+  cloud providers can actually run. Added ADR-0046 and immutable snapshot
+  [v0069](versions/v0069.md). All 27 local tests and syntax checks pass.
+- Created root-only checksummed pre-change recovery at
+  `/var/backups/prime-providers-v0069-20260825T203000-0500`.
+
 ## 2026-08-25 — v0068 — Refine Admin layout and active rename
 
 - Visually inspected the live Admin tab and corrected concatenated labels,

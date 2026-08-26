@@ -55,6 +55,32 @@ class DashboardV2Tests(unittest.TestCase):
             self.assertNotIn("alice", ledger.read_text())
             self.assertIn("bob", ledger.read_text())
 
+    def test_provider_catalog_never_returns_stored_key(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            auth = root / "auth.json"; provider_settings = root / "provider-settings.json"; models = root / "models.json"
+            models.write_text('{"providers":{}}')
+            with mock.patch.object(api, "PROVIDER_AUTH", auth), mock.patch.object(api.legacy, "PROVIDER_SETTINGS", provider_settings), mock.patch.object(api.legacy, "MODEL_CONFIG", models), mock.patch.object(api.legacy, "openai_env_configured", return_value=False), mock.patch.object(api.legacy, "audit"):
+                api.configure_provider({"provider": "google", "values": {"apiKey": "private-test-key-value"}})
+                catalog = json.dumps(api.provider_catalog())
+            self.assertNotIn("private-test-key-value", catalog)
+            self.assertTrue(next(row for row in json.loads(catalog) if row["id"] == "google")["configured"])
+            self.assertEqual(json.loads(auth.read_text())["google"]["type"], "api_key")
+            self.assertEqual(auth.stat().st_mode & 0o777, 0o600)
+
+    def test_custom_provider_preserves_existing_models(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            auth = root / "auth.json"; provider_settings = root / "provider-settings.json"; models = root / "models.json"
+            models.write_text(json.dumps({"providers": {"spark-local": {"models": [{"id": "local"}]}}}))
+            payload = {"provider": "custom-openai", "values": {"providerId": "lab-model", "baseUrl": "http://127.0.0.1:9000/v1", "apiKey": "custom-private-key", "modelId": "test-model", "contextWindow": "32768", "maxTokens": "4096"}}
+            with mock.patch.object(api, "PROVIDER_AUTH", auth), mock.patch.object(api.legacy, "PROVIDER_SETTINGS", provider_settings), mock.patch.object(api.legacy, "MODEL_CONFIG", models), mock.patch.object(api.legacy, "openai_env_configured", return_value=False), mock.patch.object(api.legacy, "audit"):
+                api.configure_provider(payload)
+            saved = json.loads(models.read_text())["providers"]
+            self.assertIn("spark-local", saved)
+            self.assertEqual(saved["lab-model"]["apiKey"], "PRIME_CUSTOM_LAB_MODEL_API_KEY")
+            self.assertEqual(json.loads(provider_settings.read_text())["PRIME_CUSTOM_LAB_MODEL_API_KEY"], "custom-private-key")
+
     def settings(self, provider="spark-nemotron", model="nemotron-3.5-lightning", qwen=True):
         enabled = ["spark-nemotron/nemotron-3.5-lightning"]
         if qwen:

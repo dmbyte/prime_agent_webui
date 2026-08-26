@@ -37,6 +37,7 @@ install -m 0755 "$source_dir/install-static.sh" "$live/install-static.sh"
 install -d -m 0755 "${HOME}/prime-update" "${HOME}/.config/systemd/user"
 install -m 0755 "$repo/deploy/spark/update/update-prime-agent.sh" "$repo/deploy/spark/update/update-webui.sh" "${HOME}/prime-update/"
 install -m 0644 "$repo/deploy/spark/systemd/prime-update-agent.service" "$repo/deploy/spark/systemd/prime-update-webui.service" "${HOME}/.config/systemd/user/"
+install -m 0644 "$repo/deploy/spark/systemd/prime-dashboard-api.service" "${HOME}/.config/systemd/user/"
 systemctl --user daemon-reload
 
 "$live/install-static.sh" "$live"

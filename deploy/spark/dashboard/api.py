@@ -24,6 +24,7 @@ SESSION_TRASH = HOME / ".prime/agent/session-trash"
 UPLOADS = HOME / "prime-dgx-agent/uploads"
 MODEL_CONFIG = HOME / ".prime/agent/models.json"
 OPENAI_ENV = HOME / ".config/prime-agent/openai.env"
+PROVIDER_SETTINGS = HOME / ".prime/agent/provider-settings.json"
 PLANNED_MODELS = [{"provider": "openai", "model": "gpt-5.4"}]
 ALLOWED_ORIGINS = {
     "https://172.16.253.231:8443",
@@ -98,6 +99,16 @@ def settings_view():
     }
 
 
+def provider_env():
+    env = os.environ.copy()
+    values = read_json(PROVIDER_SETTINGS, {})
+    if isinstance(values, dict):
+        for key, value in values.items():
+            if re.fullmatch(r"[A-Z][A-Z0-9_]{1,95}", str(key)) and isinstance(value, str) and "\x00" not in value:
+                env[str(key)] = value
+    return env
+
+
 def model_catalog():
     catalog = []
     enabled_models = set(read_json(SETTINGS, {}).get("enabledModels") or [])
@@ -147,7 +158,7 @@ def discovered_prime_models():
             return list(MODEL_CACHE["rows"])
         rows = []
         try:
-            env = os.environ.copy()
+            env = provider_env()
             env["PATH"] = f"{PRIME_BIN}:{env.get('PATH', '')}"
             result = subprocess.run(
                 [str(PRIME_AGENT), "model", "list"], capture_output=True, text=True,

@@ -54,6 +54,11 @@ Spark IP, hostname, localhost, and loopback. Clients must install the downloadab
   not enabled because the current GitHub credential lacks workflow scope.
 - Native tasks have four-task admission, separate process groups, explicit stop,
   30-minute limits, credential-redacted logs, and a dedicated usage ledger.
+- Provider configuration is administrator-only and CSRF/Origin checked. API keys
+  are accepted only in bounded JSON, atomically stored mode 0600 in Prime's auth
+  store, never returned or audit-logged, and cleared from the modal after use.
+  Non-key cloud fields use a separate mode-0600 settings file. Existing OAuth
+  entries and local model definitions are preserved during updates.
 - Upload archives reject traversal and links. Active-content previews are blocked;
   allowed PDF/text frames are sandboxed. Retention requires explicit confirmation.
 
