@@ -22,6 +22,14 @@ separately asks for remediation.
 3. Trace security properties end to end. A control at one layer is insufficient
    if another path bypasses it. Follow data and authority across process, host,
    container, proxy, queue, storage, and third-party boundaries.
+   For every privileged backend behind a gateway, explicitly test whether a local
+   process, sibling service, container, plugin, job, or agent can reach it without
+   the gateway and forge the gateway's identity assertions. Loopback alone is not
+   authentication.
+   For every claimed tenant/user boundary, compare the application identity with
+   the OS/process identity, filesystem view, credentials, tools, terminal, cache,
+   and IPC access used by background work. A shared execution identity invalidates
+   isolation unless an independently enforced sandbox preserves the boundary.
 4. Validate behavior against code, configuration, tests, runtime evidence, or
    authoritative platform semantics. Never infer that a default header is
    dropped, a same-origin path is cross-origin, memory is leaked, or sanitization
@@ -63,9 +71,11 @@ Classify every item as one of:
 
 Lead with the confirmed findings in descending severity. Then list needs-
 validation items, reliability defects, and defense-in-depth suggestions. Include
-an assessed-capabilities table, important negative results, review limitations,
+an assessed-capabilities table before the findings, important negative results,
+review limitations,
 and a prioritized remediation order. State the provider, model, effort, tools,
-and whether runtime validation was performed.
+and whether runtime validation was performed only from trusted invocation/runtime
+metadata. If that metadata is unavailable, say `unknown`; never infer or invent it.
 
 Do not count duplicated symptoms as separate vulnerabilities. Do not recommend
 weakening a protection merely to restore functionality without first identifying

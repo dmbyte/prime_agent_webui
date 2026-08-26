@@ -3,6 +3,22 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-26 — v0072 — Refine the generic security skill from forward testing
+
+- Forward-tested the new skill against the same WebUI source with all tools
+  disabled. It no longer repeated the earlier CSP and Origin-forwarding false
+  positives and added capability-driven negative results, subprocess sandboxing,
+  and resource-lifecycle analysis.
+- The test still missed the direct local gateway-bypass attack and did not connect
+  shared OS execution identity to failed tenant isolation. It also invented
+  provider/model/effort metadata instead of respecting the invocation.
+- Added mandatory generic gates for direct reachability of privileged backends,
+  forgery of gateway assertions by sibling/local workloads, and comparison of
+  application identities with actual process/filesystem/credential/tool/terminal
+  isolation. Runtime metadata must now come from trusted execution metadata or be
+  reported as unknown.
+- Added immutable snapshot [v0072](versions/v0072.md).
+
 ## 2026-08-26 — v0071 — Add a generic capability-driven security-review skill
 
 - Added a technology-neutral Prime skill that inventories capabilities before

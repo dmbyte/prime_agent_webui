@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-25
-Wiki version: `v0071`
+Wiki version: `v0072`
 
 ## Project summary
 
@@ -28,6 +28,10 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   attack paths, evidence/confidence, negative results, and separate classifications
   for confirmed vulnerabilities, validation needs, reliability, defense in depth,
   and accepted trust assumptions.
+  Forward testing eliminated the earlier CSP/Origin false positives but initially
+  missed gateway-bypass and shared-execution consequences and invented runtime
+  metadata. The refined entrypoint now makes local gateway bypass, execution-
+  identity comparison, and metadata non-invention mandatory review gates.
 - Browser interface: native Prime chat API on `127.0.0.1:8765`, optional ttyd
   1.7.4 console on `127.0.0.1:7681`, and isolated local session broker on
   `127.0.0.1:8764`, fronted by Nginx 1.24 on loopback and
@@ -164,6 +168,9 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   `/var/backups/prime-releases-v0070-20260825T204000-0500`; it preserves the
   prior API/UI/update scripts and units, deployed Git head, Prime version, and
   checksums without including credentials.
+- The root-only pre-v0071 skill-inventory recovery bundle is
+  `/var/backups/prime-skill-v0071-20260826T000000-0500`; it preserves the prior
+  global Prime skill tree and a checksum manifest. The new skill is additive.
 
 ## Deployed architecture
 
