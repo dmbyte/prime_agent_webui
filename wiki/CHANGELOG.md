@@ -3,6 +3,25 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-26 — v0071 — Add a generic capability-driven security-review skill
+
+- Added a technology-neutral Prime skill that inventories capabilities before
+  activating relevant web, authentication, memory/resource, filesystem/storage,
+  subprocess/plugin/agent, network/IPC, cryptography, concurrency, dependency,
+  update, and deployment review modules.
+- Required concrete attack paths, compensating-control checks, evidence and
+  confidence, important negative results, and explicit separation of confirmed
+  vulnerabilities from validation needs, reliability defects, defense in depth,
+  and accepted trust assumptions.
+- Added lifecycle-aware memory guidance for manual, managed, pooled, FFI, GPU,
+  and sensitive buffers without incorrectly demanding manual deallocation or
+  unverifiable zeroization from garbage-collected abstractions.
+- Recorded the two material trust-boundary discoveries from the preceding
+  report-only comparison without changing the WebUI: spoofable loopback proxy
+  identity headers and shared-user execution/console isolation.
+- Added [ADR-0048](decisions/0048-capability-driven-security-review-skill.md) and
+  immutable snapshot [v0071](versions/v0071.md).
+
 ## 2026-08-25 — v0070 — Make both component updaters release-aware
 
 - Published the first Prime WebUI GitHub release with display title `.1`, valid

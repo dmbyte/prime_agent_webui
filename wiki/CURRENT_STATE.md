@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-25
-Wiki version: `v0070`
+Wiki version: `v0071`
 
 ## Project summary
 
@@ -21,6 +21,13 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   `cad/pi5-iuniker-inv001-case/`
 - Target Spark: SSH verified as `dbyte@172.16.253.231`; passwordless sudo works
 - Prime Agent: `0.8.0`, installed for `dbyte`; launcher `prime-dgx`
+- Prime has a tracked, globally installed `software-security-review` skill. It
+  discovers project capabilities first and conditionally audits applicable web,
+  authentication, memory/resource, storage, command/agent, network, cryptography,
+  concurrency, supply-chain, and deployment boundaries. It requires concrete
+  attack paths, evidence/confidence, negative results, and separate classifications
+  for confirmed vulnerabilities, validation needs, reliability, defense in depth,
+  and accepted trust assumptions.
 - Browser interface: native Prime chat API on `127.0.0.1:8765`, optional ttyd
   1.7.4 console on `127.0.0.1:7681`, and isolated local session broker on
   `127.0.0.1:8764`, fronted by Nginx 1.24 on loopback and
@@ -360,6 +367,16 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   restarts, retention, and the private-CA download.
 
 ## Known gaps
+
+- A read-only comparative review found that the loopback dashboard API trusts
+  Nginx-supplied identity/role headers without authenticating the proxy. A local
+  process can forge them; a non-mutating live request with fabricated admin
+  headers returned 200 from `/api/admin`.
+- WebUI ownership metadata does not isolate the execution environment: native
+  Prime tasks and the authenticated Advanced console run as shared Linux user
+  `dbyte`, and the console is not restricted by WebUI role. Until process,
+  storage, and credential isolation is implemented, WebUI users must be treated
+  as mutually trusted. No remediation was made during the report-only review.
 
 - The credential formerly present in conversation history has been redacted from
   the Spark, but it should still be revoked at OpenAI if it remains active.

@@ -73,6 +73,21 @@ Spark IP, hostname, localhost, and loopback. Clients must install the downloadab
 - Upload archives reject traversal and links. Active-content previews are blocked;
   allowed PDF/text frames are sandboxed. Retention requires explicit confirmation.
 
+## Confirmed review gaps
+
+- The loopback dashboard API treats `X-Prime-User` and `X-Prime-Role` as trusted
+  proxy assertions but does not authenticate Nginx itself. Local processes can
+  bypass Nginx and forge those headers; a read-only request using fabricated
+  administrator headers returned HTTP 200 from `/api/admin` on 2026-08-26.
+- Per-user ownership enforcement exists in the WebUI APIs, but native Prime tasks
+  and the writable Advanced console execute as shared OS account `dbyte` with a
+  common home and agent environment. Nginx requires a valid session for the
+  console but does not require the admin role. These execution paths are not a
+  tenant boundary, so all enabled WebUI users must currently be mutually trusted.
+- The review was explicitly report-only. No security control was changed. The
+  recommended direction is authenticated/permissioned backend IPC, admin-only
+  console access, and per-user process/storage/credential sandboxing.
+
 ## Credential-history remediation
 
 One conversation file contained two credential-shaped OpenAI key occurrences.

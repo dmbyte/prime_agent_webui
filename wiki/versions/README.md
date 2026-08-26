@@ -6,6 +6,7 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0071](v0071.md) | 2026-08-26 | Added a generic capability-driven software security-review skill |
 | [v0070](v0070.md) | 2026-08-25 | Added release-aware Agent/WebUI checks, notifications, and updates |
 | [v0069](v0069.md) | 2026-08-25 | Added write-only provider configuration and searchable Prime provider catalog |
 | [v0068](v0068.md) | 2026-08-25 | Refined the Admin visual hierarchy and added active-conversation rename |
