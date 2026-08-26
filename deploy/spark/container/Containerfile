@@ -1,0 +1,33 @@
+FROM docker.io/library/node:22.23.2-bookworm-slim
+
+ARG PRIME_AGENT_VERSION=0.8.0
+ARG PRIME_AGENT_SHA256=f5b0093c7e0fddb73f94773d74383585456adfa84f12a4082d3098f23bb8fab6
+ARG PROFILE=general
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       bash ca-certificates curl fd-find git iproute2 jq openssh-client \
+       procps python3 python3-venv ripgrep tini \
+    && if [ "$PROFILE" = "development" ]; then \
+         apt-get install -y --no-install-recommends build-essential python3-dev; \
+       elif [ "$PROFILE" = "cad" ]; then \
+         apt-get install -y --no-install-recommends openscad; \
+       elif [ "$PROFILE" = "network-operations" ]; then \
+         apt-get install -y --no-install-recommends dnsutils iputils-ping nmap traceroute; \
+       fi \
+    && curl -fsSL "https://pub-728493de92a943e2a9b2d17b4719f318.r2.dev/releases/v${PRIME_AGENT_VERSION}/prime-agent-${PRIME_AGENT_VERSION}.tgz" -o /tmp/prime-agent.tgz \
+    && echo "${PRIME_AGENT_SHA256}  /tmp/prime-agent.tgz" | sha256sum --check --strict \
+    && npm install --global --omit=dev /tmp/prime-agent.tgz \
+    && npm cache clean --force \
+    && rm -rf /var/lib/apt/lists/* /tmp/prime-agent.tgz
+
+RUN groupmod --new-name prime node \
+    && usermod --login prime --home /home/prime --move-home node \
+    && install -d -o prime -g prime -m 0700 /home/prime/.prime/agent /workspace
+
+ENV HOME=/home/prime \
+    PATH=/usr/local/bin:/usr/bin:/bin \
+    NODE_ENV=production
+WORKDIR /workspace
+USER prime
+ENTRYPOINT ["/usr/bin/tini", "--", "prime-agent"]

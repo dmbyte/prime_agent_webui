@@ -24,6 +24,14 @@ SPEC = importlib.util.spec_from_file_location("prime_dashboard_legacy", Path(__f
 legacy = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(legacy)
 
+POLICY_SPEC = importlib.util.spec_from_file_location("prime_task_policy", Path(__file__).with_name("task_policy.py"))
+task_policy = importlib.util.module_from_spec(POLICY_SPEC)
+POLICY_SPEC.loader.exec_module(task_policy)
+
+RUNNER_SPEC = importlib.util.spec_from_file_location("prime_container_runner", Path(__file__).with_name("container_runner.py"))
+container_runner = importlib.util.module_from_spec(RUNNER_SPEC)
+RUNNER_SPEC.loader.exec_module(container_runner)
+
 META = legacy.HOME / ".prime/agent/webui-metadata.json"
 LEDGER = legacy.HOME / ".prime/agent/webui-usage-ledger.jsonl"
 TASK_LOGS = legacy.HOME / ".prime/agent/webui-task-logs"
@@ -35,6 +43,8 @@ TASKS = {}
 TASK_LOCK = threading.Lock()
 META_LOCK = threading.Lock()
 LEDGER_LOCK = threading.Lock()
+EXECUTION_GRANTS = {}
+EXECUTION_GRANT_LOCK = threading.Lock()
 
 NEMOTRON_ROUTE = ("spark-nemotron", "nemotron-3.5-lightning")
 QWEN_ROUTE = ("spark-qwen", "qwen3.6-35b-a3b")
@@ -384,8 +394,8 @@ def apply_task_event(task_id, event):
             if request_id:
                 task.setdefault("rpcResponses", {})[request_id] = event
                 task["rpcResponses"] = dict(list(task["rpcResponses"].items())[-20:])
-            if not event.get("success", False):
-                task["rpcError"] = "Prime rejected an RPC command"
+            if not event.get("success", False) and request_id.startswith("prompt-"):
+                task["rpcError"] = "Prime rejected the initial prompt"
                 add_task_progress(task, "Prime rejected a command")
             data = event.get("data") or {}
             session_id = data.get("sessionId") if isinstance(data, dict) else None
@@ -444,8 +454,16 @@ def monitor_task(task_id, before):
         ready, _, _ = select.select([process.stdout], [], [], 1)
         if not ready:
             continue
-        line = process.stdout.readline()
+        line = process.stdout.readline(262145)
         if not line:
+            continue
+        if len(line) > 262144:
+            while line and not line.endswith("\n"):
+                line = process.stdout.readline(262145)
+            with TASK_LOCK:
+                task = TASKS.get(task_id)
+                if task:
+                    add_task_progress(task, "Discarded an oversized runtime event")
             continue
         try:
             apply_task_event(task_id, json.loads(line))
@@ -512,7 +530,7 @@ def store_task_route(task):
         legacy.atomic_json(META, data)
 
 
-def launch_task(message, session_id=None, fork=False, thinking=None, owner="dbyte"):
+def launch_task(message, session_id=None, fork=False, thinking=None, owner="dbyte", authorization=None):
     message = str(message).strip()
     if not message or len(message) > 100000:
         raise ValueError("Message must contain between 1 and 100,000 characters")
@@ -532,13 +550,22 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner="dbyt
         raise ValueError("Unsupported thinking level")
     route = route_task(message, settings)
     details = model_details(route["provider"], route["model"])
-    command = [str(legacy.PRIME_AGENT), "--cwd", str(legacy.HOME / "prime-dgx-agent"), "--mode", "rpc", "--provider", route["provider"], "--model", route["model"], "--thinking", thinking]
-    if session_id:
-        command.extend(["--fork" if fork else "--resume", session_id])
-    before = {path.stem for path in legacy.SESSIONS.glob("*.jsonl")}
     task_id = uuid.uuid4().hex
-    process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=legacy.HOME / "prime-dgx-agent", env=prime_env(), start_new_session=True)
-    task = {"id": task_id, "sessionId": session_id if not fork else None, "agentSessionId": session_id if session_id and not fork else None, "rpcReady": True, "rpcResponses": {}, "owner": owner, "topic": legacy.safe_topic(message) or "Native task", **route, "thinking": thinking, "contextWindow": details.get("contextWindow"), "maxTokens": details.get("maxTokens"), "status": "running", "progress": "Starting Prime", "progressEvents": [{"at": now_iso(), "label": "Request received"}], "liveResponse": "", "started": now_iso(), "startedEpoch": time.time(), "pid": process.pid, "process": process, "logAvailable": False}
+    if os.environ.get("PRIME_TASK_CONTAINER_IMAGE") == "1":
+        command = container_runner.command(task_id, owner, authorization or {}, route["provider"], route["model"], thinking, session_id, fork)
+        task_cwd = legacy.HOME
+        task_env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin")}
+    else:
+        command = [str(legacy.PRIME_AGENT), "--cwd", str(legacy.HOME / "prime-dgx-agent"), "--mode", "rpc", "--provider", route["provider"], "--model", route["model"], "--thinking", thinking]
+        if (authorization or {}).get("executionMode") == "deny":
+            command.append("--no-tools")
+        if session_id:
+            command.extend(["--fork" if fork else "--resume", session_id])
+        task_cwd = legacy.HOME / "prime-dgx-agent"
+        task_env = prime_env()
+    before = {path.stem for path in legacy.SESSIONS.glob("*.jsonl")}
+    process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=task_cwd, env=task_env, start_new_session=True)
+    task = {"id": task_id, "sessionId": session_id if not fork else None, "agentSessionId": session_id if session_id and not fork else None, "rpcReady": True, "rpcResponses": {}, "owner": owner, "authorization": authorization or {}, "topic": legacy.safe_topic(message) or "Native task", **route, "thinking": thinking, "contextWindow": details.get("contextWindow"), "maxTokens": details.get("maxTokens"), "status": "running", "progress": "Starting Prime", "progressEvents": [{"at": now_iso(), "label": "Request received"}], "liveResponse": "", "started": now_iso(), "startedEpoch": time.time(), "pid": process.pid, "process": process, "logAvailable": False}
     with TASK_LOCK:
         TASKS[task_id] = task
     with META_LOCK:
@@ -547,9 +574,23 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner="dbyt
         legacy.atomic_json(META, data)
     if task.get("sessionId"):
         store_task_route(task)
-    process.stdin.write(json.dumps({"id": f"state-{task_id}", "type": "get_state"}, separators=(",", ":")) + "\n")
-    process.stdin.write(json.dumps({"id": f"prompt-{task_id}", "type": "prompt", "message": message}, separators=(",", ":")) + "\n")
-    process.stdin.flush()
+    try:
+        process.stdin.write(json.dumps({"id": f"state-{task_id}", "type": "get_state"}, separators=(",", ":")) + "\n")
+        process.stdin.write(json.dumps({"id": f"prompt-{task_id}", "type": "prompt", "message": message}, separators=(",", ":")) + "\n")
+        process.stdin.flush()
+    except (BrokenPipeError, OSError, ValueError) as error:
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+        with TASK_LOCK:
+            TASKS.pop(task_id, None)
+        with META_LOCK:
+            data = metadata()
+            data.get("tasks", {}).pop(task_id, None)
+            legacy.atomic_json(META, data)
+        raise RuntimeError("Prime could not accept the initial prompt") from error
     threading.Thread(target=monitor_task, args=(task_id, before), daemon=True).start()
     legacy.audit("native_task_started", task=task_id, session=session_id)
     return {key: value for key, value in task.items() if key not in {"process", "rpcResponses", "agentEnded"}}
@@ -563,9 +604,15 @@ def stop_native_task(task_id, owner="dbyte"):
         process = task["process"]
         if not process.stdin:
             raise ValueError("Task is no longer accepting commands")
+    try:
         process.stdin.write('{"type":"abort"}\n')
         process.stdin.flush()
-        add_task_progress(task, "Stopping task")
+    except (BrokenPipeError, OSError, ValueError) as error:
+        raise RuntimeError("Prime is no longer accepting commands") from error
+    with TASK_LOCK:
+        current = TASKS.get(task_id)
+        if current:
+            add_task_progress(current, "Stopping task")
     return {"stopping": True, "id": task_id}
 
 
@@ -575,6 +622,7 @@ def message_native_task(task_id, message, mode="steer", owner="dbyte"):
         raise ValueError("Steering message must contain between 1 and 10,000 characters")
     if mode not in {"steer", "follow-up"}:
         raise ValueError("Unsupported task message mode")
+    request_id = f"task-message-{uuid.uuid4().hex}"
     with TASK_LOCK:
         task = TASKS.get(task_id)
         if not task or task.get("owner", "dbyte") != owner or task.get("status") != "running":
@@ -582,15 +630,31 @@ def message_native_task(task_id, message, mode="steer", owner="dbyte"):
         process = task.get("process")
         if not task.get("rpcReady") or not process or not process.stdin:
             raise RuntimeError("Prime is still connecting; try again in a moment")
-        request = {"id": f"task-message-{uuid.uuid4().hex}", "type": "steer" if mode == "steer" else "follow_up", "message": message}
-        try:
-            process.stdin.write(json.dumps(request, separators=(",", ":")) + "\n")
-            process.stdin.flush()
-        except (BrokenPipeError, OSError, ValueError) as error:
-            raise RuntimeError("Prime is no longer accepting task messages") from error
-        task.setdefault("steering", []).append({"at": now_iso(), "mode": mode, "message": message[:1000]})
-        task["steering"] = task["steering"][-20:]
-        add_task_progress(task, "Steering queued" if mode == "steer" else "Follow-up queued")
+    request = {"id": request_id, "type": "steer" if mode == "steer" else "follow_up", "message": message}
+    try:
+        process.stdin.write(json.dumps(request, separators=(",", ":")) + "\n")
+        process.stdin.flush()
+    except (BrokenPipeError, OSError, ValueError) as error:
+        raise RuntimeError("Prime is no longer accepting task messages") from error
+    deadline = time.monotonic() + 5
+    response = None
+    while time.monotonic() < deadline:
+        with TASK_LOCK:
+            current = TASKS.get(task_id)
+            response = (current or {}).get("rpcResponses", {}).get(request_id)
+        if response:
+            break
+        time.sleep(0.02)
+    if not response:
+        raise RuntimeError("Prime did not acknowledge the task message")
+    if not response.get("success", False):
+        raise RuntimeError("Prime rejected the task message")
+    with TASK_LOCK:
+        task = TASKS.get(task_id)
+        if task:
+            task.setdefault("steering", []).append({"at": now_iso(), "mode": mode, "message": message[:1000]})
+            task["steering"] = task["steering"][-20:]
+            add_task_progress(task, "Steering delivered" if mode == "steer" else "Follow-up queued")
     legacy.audit("native_task_message", task=task_id, mode=mode, owner=owner)
     return {"delivered": True, "id": task_id, "mode": mode}
 
@@ -862,6 +926,51 @@ def csrf_ok(headers):
     return bool(cookie and header and hmac_compare(cookie.value, header))
 
 
+def csrf_identity(headers):
+    parsed = SimpleCookie()
+    try:
+        parsed.load(headers.get("Cookie", ""))
+    except Exception:
+        return ""
+    cookie = parsed.get("prime_csrf")
+    return cookie.value if cookie else ""
+
+
+def execution_grant(user, headers):
+    key = (user, csrf_identity(headers))
+    now = time.time()
+    with EXECUTION_GRANT_LOCK:
+        for candidate, expires in list(EXECUTION_GRANTS.items()):
+            if expires <= now:
+                EXECUTION_GRANTS.pop(candidate, None)
+        return bool(key[1] and EXECUTION_GRANTS.get(key, 0) > now)
+
+
+def grant_login_execution(user, headers, confirmation):
+    if confirmation != "allow-execution-login":
+        raise ValueError("Explicit login-session execution confirmation is required")
+    key = (user, csrf_identity(headers))
+    if not key[1]:
+        raise ValueError("A valid WebUI session is required")
+    with EXECUTION_GRANT_LOCK:
+        EXECUTION_GRANTS[key] = time.time() + 12 * 60 * 60
+    legacy.audit("login_execution_granted", owner=user)
+    return {"granted": True, "expiresInSeconds": 12 * 60 * 60}
+
+
+def task_capabilities(role):
+    role = task_policy.normalize_role(role)
+    return {
+        "role": role,
+        "profiles": sorted(task_policy.PROFILES),
+        "networkModes": ["restricted", "internet"] + (["lan", "full"] if role in {"power_user", "admin"} else []),
+        "executionModes": ["prompt", "task", "login", "deny"],
+        "defaults": task_policy.ROLE_DEFAULTS[role].__dict__,
+        "maximums": task_policy.ROLE_MAXIMUMS[role].__dict__,
+        "packageOverride": role == "admin",
+    }
+
+
 def hmac_compare(left, right):
     import hmac
     return hmac.compare_digest(left, right)
@@ -897,7 +1006,8 @@ class Handler(legacy.Handler):
         try:
             if path == "/api/state":
                 user = self.request_user()
-                self.send_json(200, {"settings": legacy.settings_view(), "models": legacy.model_catalog(), "usage": usage_for_user(user), "requestLedger": {"nativeRequests": 0, "recent": []}, "sessions": conversation_catalog(query.get("q", [""])[0], query.get("archived", ["0"])[0] == "1", user), "telemetry": legacy.telemetry(), "nativeTasks": task_snapshot(user), "identity": {"user": user, "role": self.headers.get("X-Prime-Role", "user")}})
+                role = self.headers.get("X-Prime-Role", "user")
+                self.send_json(200, {"settings": legacy.settings_view(), "models": legacy.model_catalog(), "usage": usage_for_user(user), "requestLedger": {"nativeRequests": 0, "recent": []}, "sessions": conversation_catalog(query.get("q", [""])[0], query.get("archived", ["0"])[0] == "1", user), "telemetry": legacy.telemetry(), "nativeTasks": task_snapshot(user), "identity": {"user": user, "role": role}, "taskCapabilities": task_capabilities(role)})
             elif path == "/api/conversations/messages":
                 self.send_json(200, {"messages": conversation_messages(query.get("id", [""])[0], self.request_user())})
             elif path == "/api/conversations/export":
@@ -944,7 +1054,7 @@ class Handler(legacy.Handler):
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
-        v2 = {"/api/settings", "/api/tasks/start", "/api/tasks/stop", "/api/tasks/message", "/api/conversations/update", "/api/conversations/delete", "/api/conversations/duplicate", "/api/files/delete", "/api/admin/restart", "/api/admin/retention", "/api/admin/update", "/api/admin/user-cache", "/api/providers/configure", "/api/files/upload"}
+        v2 = {"/api/settings", "/api/tasks/start", "/api/tasks/stop", "/api/tasks/message", "/api/tasks/authorization", "/api/conversations/update", "/api/conversations/delete", "/api/conversations/duplicate", "/api/files/delete", "/api/admin/restart", "/api/admin/retention", "/api/admin/update", "/api/admin/user-cache", "/api/providers/configure", "/api/files/upload"}
         if path not in v2:
             if not csrf_ok(self.headers):
                 self.send_json(403, {"error": "CSRF validation failed"})
@@ -955,6 +1065,7 @@ class Handler(legacy.Handler):
             return
         try:
             user = self.request_user()
+            role = self.headers.get("X-Prime-Role", "user")
             length = int(self.headers.get("Content-Length", "0"))
             if path == "/api/files/upload":
                 encoded_name = self.headers.get("X-Prime-Filename", "")
@@ -980,11 +1091,21 @@ class Handler(legacy.Handler):
                 self.require_admin()
                 self.send_json(200, configure_provider(payload))
             elif path == "/api/tasks/start":
-                self.send_json(202, {"task": launch_task(payload.get("message"), payload.get("sessionId"), thinking=payload.get("thinking"), owner=user)})
+                requested = payload.get("taskPolicy") or {}
+                authorization = task_policy.authorize_task(
+                    requested,
+                    role,
+                    login_execution=execution_grant(user, self.headers),
+                    task_execution_confirmed=payload.get("executionConfirm") == "allow-execution-task",
+                    network_confirmed=payload.get("networkConfirm") == f"allow-network-{requested.get('networkMode')}",
+                )
+                self.send_json(202, {"task": launch_task(payload.get("message"), payload.get("sessionId"), thinking=payload.get("thinking"), owner=user, authorization=authorization)})
             elif path == "/api/tasks/stop":
                 self.send_json(200, stop_native_task(str(payload.get("id", "")), user))
             elif path == "/api/tasks/message":
                 self.send_json(202, message_native_task(str(payload.get("id", "")), payload.get("message"), str(payload.get("mode", "steer")), user))
+            elif path == "/api/tasks/authorization":
+                self.send_json(200, grant_login_execution(user, self.headers, payload.get("confirm")))
             elif path == "/api/conversations/update":
                 self.send_json(200, update_conversation(str(payload.get("id", "")), str(payload.get("action", "")), payload.get("value"), user))
             elif path == "/api/conversations/delete":
@@ -992,7 +1113,8 @@ class Handler(legacy.Handler):
                 require_conversation_owner(session_id, user)
                 self.send_json(200, legacy.delete_conversation(session_id))
             elif path == "/api/conversations/duplicate":
-                self.send_json(202, {"task": launch_task("Continue this fork with a concise recap of the inherited context.", str(payload.get("id", "")), True, owner=user)})
+                authorization = task_policy.authorize_task({"executionMode": "deny"}, role)
+                self.send_json(202, {"task": launch_task("Continue this fork with a concise recap of the inherited context.", str(payload.get("id", "")), True, owner=user, authorization=authorization)})
             elif path == "/api/files/delete":
                 file = upload_path(str(payload.get("id", "")), user)
                 file.unlink()

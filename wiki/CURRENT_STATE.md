@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-26
-Wiki version: `v0078`
+Wiki version: `v0079`
 
 ## Project summary
 
@@ -21,6 +21,15 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   `cad/pi5-iuniker-inv001-case/`
 - Target Spark: SSH verified as `dbyte@172.16.253.231`; passwordless sudo works
 - Prime Agent: `0.8.0`, installed for `dbyte`; launcher `prime-dgx`
+- Rootless Podman 4.9.3 and its user-namespace/network/storage prerequisites are
+  installed on the Spark. A non-production candidate image
+  `localhost/prime-task-general:0.8.0` was built as `dbyte`; its digest is
+  `sha256:e6a7e19dafb90cc737775e0bca74e22e2e1e680853061142058616d30664eddf`
+  and its image ID is
+  `f29131cc8ae8aeceb31a7adac10d66748c81b7cf814f20a3cec5411b5b8991cc`.
+  The image reports Prime 0.8.0. Production WebUI tasks have not switched to
+  this image: the model/credential gateway, per-user migration, dedicated service
+  identity, remaining profile images, and end-to-end gates must pass first.
 - Prime has a tracked, globally installed `software-security-review` skill. It
   discovers project capabilities first and conditionally audits applicable web,
   authentication, memory/resource, storage, command/agent, network, cryptography,
@@ -210,6 +219,44 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 - The root-only pre-v0077 RPC-transport recovery bundle is
   `/var/backups/prime-rpc-v0077-20260826T140000-0500`; it preserves the deployed
   v0076 API/UI assets with checksums.
+- The root-only pre-container-migration recovery bundle is
+  `/var/backups/prime-containers-v0079-20260826T145311-0500`; it contains the
+  dashboard, user units, Nginx configuration, authentication state, metadata,
+  firewall rules, manifests, and 38 verified checksums. It predates Podman
+  installation and all v0079 candidate work.
+
+## Staged task-container migration
+
+- The repository contains a server-enforced policy for `user`, `power_user`, and
+  `admin` roles; general, development, CAD, finance, network-operations, and
+  review profiles; restricted, Internet, LAN/VPN, and full-network choices; and
+  role-bounded CPU, RAM, runtime, PID, open-file, and temporary-storage limits.
+- The deployed host-compatible WebUI now exposes profile, execution, and network
+  choices. Shell/code
+  execution defaults to a per-task confirmation, can be allowed for one task or
+  the authenticated login, or denied. Prime's native `--no-tools` is applied to
+  denied host-mode tasks. LAN/VPN and full-network access require a separate
+  task-specific confirmation and are limited to power users and administrators.
+- The candidate runner creates a new rootless, read-only, capability-free,
+  no-new-privileges container per task with private per-user agent/workspace
+  mounts and hard resource/time limits. Restricted, Internet-proxy, and LAN-proxy
+  modes currently fail closed with no direct network; only confirmed full mode
+  is designed to use rootless user-mode networking. Host networking, privileged
+  mode, the Podman socket, and host credential mounts are prohibited.
+- This path is feature-gated by `PRIME_TASK_CONTAINER_IMAGE=1` and is not enabled
+  in the deployed service. The active WebUI remains on the verified v0078 host
+  execution path while the gateway and migration are incomplete.
+- The official Prime 0.8.0 release artifact is pinned by SHA-256
+  `f5b0093c7e0fddb73f94773d74383585456adfa84f12a4082d3098f23bb8fab6`.
+  Prime's inherited package name is not published on npm; direct registry
+  installation returns 404. The repository updater now uses the official
+  versioned artifact and its published SHA256SUMS file; this corrected updater is
+  installed on the Spark but has not been executed.
+- The deployed API also bounds each RPC event at 256 KiB, cleans up a child and its
+  task record if initial prompt delivery fails, writes stop/steering commands
+  outside the global task lock, waits for Prime's explicit steering/follow-up
+  acknowledgement, and treats a rejected auxiliary RPC command separately from
+  an initial-prompt failure.
 
 ## Deployed architecture
 
@@ -378,8 +425,9 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   and Prime WebUI. Installed and latest versions are displayed separately, and
   an available update produces a prominent notice. The two confirmed, serialized
   one-shot update services then install only the exact published release: the
-  Agent updater maps the official GitHub tag to the matching npm version, while
-  the WebUI updater resolves and fast-forwards to the private repository's release
+  Agent updater downloads the official versioned release artifact and verifies
+  its entry in the published SHA256SUMS file before installation. The
+  WebUI updater resolves and fast-forwards to the private repository's release
   tag before validation and deployment. Unreleased `main` commits are not offered
   as updates. Owner-only atomic status records preserve results across service
   reloads/reboots. The Prime package updater remains installed but has not been

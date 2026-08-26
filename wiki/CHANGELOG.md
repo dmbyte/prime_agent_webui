@@ -3,6 +3,36 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-26 — v0079 — Stage policy-controlled rootless task containers
+
+- Created and verified the root-only pre-change bundle
+  `/var/backups/prime-containers-v0079-20260826T145311-0500` with 38 checksums.
+- Installed Podman 4.9.3, uidmap, slirp4netns, fuse-overlayfs, and supporting
+  rootless runtime packages on the Spark; existing WebUI/model services remained
+  active and unchanged.
+- Added server-enforced roles, execution/network confirmations, profiles, and
+  resource ceilings, plus matching composer controls and activity visibility.
+- Added a fail-closed Podman argv builder and tests for read-only roots, dropped
+  capabilities, no-new-privileges, per-user paths, hard limits, no host network,
+  and Prime `--no-tools` enforcement when execution is denied.
+- Bounded RPC event reads, removed pipe writes from the global task lock, added
+  initial-prompt failure cleanup and command acknowledgement, and stopped an
+  auxiliary RPC rejection from poisoning an otherwise healthy task.
+- Built and ran the general ARM64 candidate image from the official checksum-
+  pinned Prime 0.8.0 artifact. The image digest is recorded in Current State.
+- Discovered that `prime-agent@0.8.0` is not published on the public npm registry;
+  replaced the tracked updater's npm-registry lookup with the official versioned
+  artifact plus its published SHA256SUMS verification. This updater change is not
+  deployed yet. The production task path remains v0078 pending gateway, service-
+  identity, data-migration, profile-image, and end-to-end validation.
+- The local suite passes 39 tests and JavaScript syntax validation. Added
+  [ADR-0052](decisions/0052-rootless-per-task-execution.md) and immutable
+  snapshot [v0079](versions/v0079.md).
+- Deployed the host-compatible policy/API/UI and corrected updater, restarted the
+  auth/API services with no active child task, verified both active, checked the
+  telemetry endpoint, confirmed unauthenticated HTTPS API access remains 401,
+  and confirmed the container feature flag is absent.
+
 ## 2026-08-26 — v0078 — Verify live RPC steering end to end
 
 - Deployed commit `4a66709`; the deployed suite passed all 30 tests and installed

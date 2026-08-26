@@ -186,7 +186,7 @@ def manage_user(action, body, actor):
     if action == "add":
         if username in users: raise ValueError("User already exists")
         role = str(body.get("role", "user"));
-        if role not in {"admin", "user"}: raise ValueError("Invalid role")
+        if role not in {"admin", "power_user", "user"}: raise ValueError("Invalid role")
         users[username] = {**password_record(body.get("password", "")), "role": role, "enabled": True, "createdAt": int(time.time())}
     elif action == "reset":
         if username not in users: raise ValueError("User not found")
@@ -194,7 +194,7 @@ def manage_user(action, body, actor):
     elif action == "change":
         if username not in users: raise ValueError("User not found")
         role = str(body.get("role", users[username].get("role", "user")))
-        if role not in {"admin", "user"}: raise ValueError("Invalid role")
+        if role not in {"admin", "power_user", "user"}: raise ValueError("Invalid role")
         if username == actor and role != "admin": raise ValueError("You cannot remove your own admin role")
         users[username]["role"] = role; users[username]["enabled"] = bool(body.get("enabled", True))
     elif action == "delete":

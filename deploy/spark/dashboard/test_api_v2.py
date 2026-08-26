@@ -32,6 +32,10 @@ class DashboardV2Tests(unittest.TestCase):
         stdin = mock.Mock()
         process = mock.Mock(stdin=stdin)
         api.TASKS[task_id] = {"id": task_id, "owner": "alice", "status": "running", "rpcReady": True, "process": process, "progressEvents": []}
+        def acknowledge(value):
+            request = json.loads(value)
+            api.TASKS[task_id].setdefault("rpcResponses", {})[request["id"]] = {"success": True}
+        stdin.write.side_effect = acknowledge
         try:
             with mock.patch.object(api.legacy, "audit"):
                 result = api.message_native_task(task_id, "Focus on authentication", "steer", "alice")
