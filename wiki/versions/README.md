@@ -6,6 +6,7 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0073](v0073.md) | 2026-08-26 | Added semantic false-positive and report-density guardrails |
 | [v0072](v0072.md) | 2026-08-26 | Refined gateway, execution-identity, and metadata review gates |
 | [v0071](v0071.md) | 2026-08-26 | Added a generic capability-driven software security-review skill |
 | [v0070](v0070.md) | 2026-08-25 | Added release-aware Agent/WebUI checks, notifications, and updates |

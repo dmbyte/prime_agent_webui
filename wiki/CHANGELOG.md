@@ -3,6 +3,21 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-26 — v0073 — Add semantic false-positive guardrails
+
+- Used Prime's JSON event stream to verify the second forward test actually ran
+  `spark-qwen/qwen3.6-35b-a3b` at high effort with tools disabled; this confirmed
+  the earlier Anthropic/minimal text was invented rather than runtime metadata.
+- The test surfaced the header-trust area but misattributed it to external client
+  header injection rather than direct local backend reachability, and still
+  produced false positives around double-submit CSRF, argument arrays plus `--`,
+  CSP `'self'`, and importing a listener behind an entrypoint guard.
+- Added generic platform-semantic rejection rules for those patterns. Gateway
+  bypass and shared execution identity must now each become an explicit finding
+  or evidence-based negative result. Reports must prioritize distinct material
+  results rather than manufacture an item for every checklist branch.
+- Added immutable snapshot [v0073](versions/v0073.md).
+
 ## 2026-08-26 — v0072 — Refine the generic security skill from forward testing
 
 - Forward-tested the new skill against the same WebUI source with all tools

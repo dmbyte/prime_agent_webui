@@ -30,6 +30,8 @@ separately asks for remediation.
    the OS/process identity, filesystem view, credentials, tools, terminal, cache,
    and IPC access used by background work. A shared execution identity invalidates
    isolation unless an independently enforced sandbox preserves the boundary.
+   These two gates must each produce either a finding or an evidence-based negative
+   result; do not bury them as general observations.
 4. Validate behavior against code, configuration, tests, runtime evidence, or
    authoritative platform semantics. Never infer that a default header is
    dropped, a same-origin path is cross-origin, memory is leaked, or sanitization
@@ -41,6 +43,20 @@ separately asks for remediation.
 6. Check compensating controls and alternate paths before assigning severity.
    Separate security vulnerabilities from reliability defects, functional bugs,
    policy choices, and defense-in-depth opportunities.
+7. Reject candidates that contradict established language/platform semantics.
+   In particular:
+   - a proxy's explicit header assignment normally replaces the client value;
+     assess direct backend reachability separately from external header spoofing;
+   - random double-submit CSRF tokens can be valid without a server-side HMAC when
+     cookie policy, Origin checks, and token secrecy satisfy the design;
+   - argument arrays avoid shell interpretation, and an end-of-options marker
+     prevents ordinary option injection; separately analyze the downstream
+     interpreter, agent, or tool authority as prompt/data injection;
+   - importing a module whose listener is guarded by an entrypoint check does not
+     start a second listener;
+   - CSP `'self'` permits same-origin external resources but not inline script;
+   - do not claim browser header behavior, process sandbox semantics, memory
+     cleanup, or live routing behavior from intuition when it can be verified.
 
 ## Evidence and severity rules
 
@@ -76,6 +92,10 @@ review limitations,
 and a prioritized remediation order. State the provider, model, effort, tools,
 and whether runtime validation was performed only from trusted invocation/runtime
 metadata. If that metadata is unavailable, say `unknown`; never infer or invent it.
+
+Keep the report decision-dense. Prefer the highest-impact distinct findings and
+important negative results over exhaustive speculative lists. A long checklist is
+an analysis aid, not a requirement to manufacture a finding for every module.
 
 Do not count duplicated symptoms as separate vulnerabilities. Do not recommend
 weakening a protection merely to restore functionality without first identifying

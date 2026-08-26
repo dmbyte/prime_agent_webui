@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-25
-Wiki version: `v0072`
+Wiki version: `v0073`
 
 ## Project summary
 
@@ -32,6 +32,13 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   missed gateway-bypass and shared-execution consequences and invented runtime
   metadata. The refined entrypoint now makes local gateway bypass, execution-
   identity comparison, and metadata non-invention mandatory review gates.
+  A machine-readable second test verified Qwen/high was actually used, found the
+  header trust area, but still confused direct local bypass with external header
+  spoofing and emitted several platform-semantic false positives. The current
+  skill therefore includes explicit proxy-header, double-submit CSRF, argv/`--`,
+  guarded-import, CSP, and runtime-evidence guardrails plus a decision-dense output
+  rule. Local gateway and shared-execution gates must now resolve to a finding or
+  an evidence-based negative result.
 - Browser interface: native Prime chat API on `127.0.0.1:8765`, optional ttyd
   1.7.4 console on `127.0.0.1:7681`, and isolated local session broker on
   `127.0.0.1:8764`, fronted by Nginx 1.24 on loopback and
