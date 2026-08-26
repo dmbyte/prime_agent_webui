@@ -64,6 +64,8 @@ Spark IP, hostname, localhost, and loopback. Clients must install the downloadab
   release commits are resolved through GitHub before use. Browser input cannot
   select a repository, package, tag, or shell command. Updaters install exact
   validated releases rather than an unconstrained branch or npm `latest` alias.
+  Deployed validation confirmed both release sources, all 28 regression tests,
+  and active authentication, API, and model services without invoking an update.
 - The owner explicitly approved removing the dashboard service's loopback-only
   egress filter for provider access. Its listener remains loopback-only; live
   validation showed empty `IPAddressDeny`/`IPAddressAllow` values and active

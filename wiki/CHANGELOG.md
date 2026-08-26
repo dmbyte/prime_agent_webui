@@ -18,6 +18,10 @@ snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
   provider configuration, model defaults, account controls, and update history.
 - Added numeric semantic-version regression coverage; all 28 local tests plus
   Python, JavaScript, shell, whitespace, and credential-pattern checks pass.
+- Deployed commit `a0d82b4`; all 28 deployed tests and four core service checks
+  passed. Live authenticated browser inspection confirmed the grouped Settings
+  layout and automatic release results: Agent 0.8.0 equals v0.8.0, while the
+  unreleased WebUI commit is correctly treated as containing `.1` and up to date.
 - Added [ADR-0047](decisions/0047-release-aware-updates.md), immutable snapshot
   [v0070](versions/v0070.md), and root-only pre-change recovery bundle
   `/var/backups/prime-releases-v0070-20260825T204000-0500`.

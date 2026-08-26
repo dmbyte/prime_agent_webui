@@ -85,6 +85,9 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   prominent amber notice and target version when either installed component is
   behind. Prime Agent 0.8.0 currently matches upstream v0.8.0. The first WebUI
   release is titled `.1`, tagged `v0.1.0`, and targets commit `5d9fd3a`.
+  Deployment at commit `a0d82b4` passed all 28 tests and live browser inspection:
+  Settings reported Agent `0.8.0` / latest `v0.8.0` and WebUI `.1+a0d82b4` /
+  latest `.1`, correctly marking both up to date.
 - Static HTML is installed in `/var/www/prime-agent/`; JavaScript and CSS are in
   `/var/www/prime-agent/assets/`. The tracked installer preserves this mapping.
 - vLLM: `0.27.1` ARM64/CUDA 12.9 image, two user services enabled at boot
