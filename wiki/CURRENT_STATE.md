@@ -77,6 +77,9 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   subscription, Azure/AWS/Cloudflare/Vertex, and custom OpenAI-compatible paths.
   Admins can configure required fields without secrets being returned to the
   browser. Provider credentials are global trusted infrastructure, not per-user.
+  Deployment and live visual validation confirmed 34 catalog rows and masked
+  provider-specific forms. No credential was submitted during testing, and the
+  existing credential/model files remained byte-identical to the backup.
 - Static HTML is installed in `/var/www/prime-agent/`; JavaScript and CSS are in
   `/var/www/prime-agent/assets/`. The tracked installer preserves this mapping.
 - vLLM: `0.27.1` ARM64/CUDA 12.9 image, two user services enabled at boot
@@ -164,6 +167,7 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   listener remains loopback-only behind authenticated Nginx, but its former
   systemd loopback-only egress filter was removed because it prevented any cloud
   provider configured through Settings from functioning.
+  This egress change was explicitly approved by the owner on 2026-08-25.
 - Hermes is not installed. Historical framework analysis still describes it as
   an alternative gateway, but it has no current runtime role.
 - When Nemotron is the selected default, native WebUI tasks with clear

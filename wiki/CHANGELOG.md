@@ -20,6 +20,13 @@ snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
   [v0069](versions/v0069.md). All 27 local tests and syntax checks pass.
 - Created root-only checksummed pre-change recovery at
   `/var/backups/prime-providers-v0069-20260825T203000-0500`.
+- After explicit approval of the outbound-network tradeoff, deployed commit
+  `bf1d662`; all 27 deployed tests and four service checks passed, and the live
+  unit reports no IP egress deny/allow filter.
+- Live desktop inspection verified the compact Settings controls, all 34 catalog
+  rows, subscription/configured badges, and a masked provider-specific API-key
+  form. The dialog was closed without submission and byte comparison confirmed
+  that credentials/model configuration were unchanged.
 
 ## 2026-08-25 — v0068 — Refine Admin layout and active rename
 

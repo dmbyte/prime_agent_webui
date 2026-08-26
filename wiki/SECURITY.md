@@ -59,6 +59,10 @@ Spark IP, hostname, localhost, and loopback. Clients must install the downloadab
   store, never returned or audit-logged, and cleared from the modal after use.
   Non-key cloud fields use a separate mode-0600 settings file. Existing OAuth
   entries and local model definitions are preserved during updates.
+- The owner explicitly approved removing the dashboard service's loopback-only
+  egress filter for provider access. Its listener remains loopback-only; live
+  validation showed empty `IPAddressDeny`/`IPAddressAllow` values and active
+  authentication/API/model services.
 - Upload archives reject traversal and links. Active-content previews are blocked;
   allowed PDF/text frames are sandboxed. Retention requires explicit confirmation.
 
