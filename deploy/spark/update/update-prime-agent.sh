@@ -25,7 +25,10 @@ test -x "$runtime/bin/npm"
 export PATH="$runtime/bin:/usr/local/bin:/usr/bin:/bin"
 
 before=$(prime-agent --version)
-echo "Updating Prime Agent from ${before}..."
-npm install --global --prefix "$runtime" prime-agent@latest
+release_tag=$(gh api repos/PrimeIntellect-ai/prime-agent/releases/latest --jq .tag_name)
+[[ $release_tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+([+-][A-Za-z0-9.-]+)?$ ]]
+release_version=${release_tag#v}
+echo "Updating Prime Agent from ${before} to release ${release_tag}..."
+npm install --global --prefix "$runtime" "prime-agent@${release_version}"
 after=$(prime-agent --version)
 echo "Prime Agent update complete: ${before} -> ${after}"

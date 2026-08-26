@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-25
-Wiki version: `v0069`
+Wiki version: `v0070`
 
 ## Project summary
 
@@ -80,6 +80,11 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   Deployment and live visual validation confirmed 34 catalog rows and masked
   provider-specific forms. No credential was submitted during testing, and the
   existing credential/model files remained byte-identical to the backup.
+  Settings now uses the same grouped card hierarchy as Admin. Entering Settings
+  checks the latest published Prime Agent and Prime WebUI releases and shows a
+  prominent amber notice and target version when either installed component is
+  behind. Prime Agent 0.8.0 currently matches upstream v0.8.0. The first WebUI
+  release is titled `.1`, tagged `v0.1.0`, and targets commit `5d9fd3a`.
 - Static HTML is installed in `/var/www/prime-agent/`; JavaScript and CSS are in
   `/var/www/prime-agent/assets/`. The tracked installer preserves this mapping.
 - vLLM: `0.27.1` ARM64/CUDA 12.9 image, two user services enabled at boot
@@ -145,6 +150,10 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   `/var/backups/prime-providers-v0069-20260825T203000-0500`; it preserves the
   credential/provider/model configuration (including explicit absence), prior
   API/UI/unit, deployed Git head, and checksums without exposing their contents.
+- The root-only pre-v0070 release-update recovery bundle is
+  `/var/backups/prime-releases-v0070-20260825T204000-0500`; it preserves the
+  prior API/UI/update scripts and units, deployed Git head, Prime version, and
+  checksums without including credentials.
 
 ## Deployed architecture
 
@@ -309,17 +318,16 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   all configured/discovered providers and writes Prime's native `enabledModels`
   setting. Saves are allowlisted, origin/CSRF checked, atomic, and apply to new
   native tasks and advanced-console sessions.
-- Settings also starts two confirmed, serialized one-shot update services without
-  relaxing the dashboard API's network/home confinement. Prime Agent updates via
-  its bundled Node runtime and `prime-agent@latest`. WebUI updates require the
-  clean known private clone and fast-forward-only pull from `origin/main` HEAD,
-  validate, redeploy, and restart the API. Release selection/version comparison
-  remains a planned replacement for the temporary HEAD policy.
-  The WebUI updater and the dashboard's actual update API path both completed a
-  private GitHub HEAD update successfully; the clone and deployed UI matched the
-  resulting commit. Owner-only atomic status records preserve results across
-  service reloads/reboots. The Prime package updater was installed but
-  intentionally not executed during validation.
+- Entering Settings performs an admin-only release check for both Prime Agent
+  and Prime WebUI. Installed and latest versions are displayed separately, and
+  an available update produces a prominent notice. The two confirmed, serialized
+  one-shot update services then install only the exact published release: the
+  Agent updater maps the official GitHub tag to the matching npm version, while
+  the WebUI updater resolves and fast-forwards to the private repository's release
+  tag before validation and deployment. Unreleased `main` commits are not offered
+  as updates. Owner-only atomic status records preserve results across service
+  reloads/reboots. The Prime package updater remains installed but has not been
+  executed during validation.
 - The active header's effort selector overrides the default for the next message
   in that conversation. Task and conversation metadata expose model, effort,
   routing mode/reason, and model context for auditability.
@@ -387,4 +395,4 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   portfolio, paper-broker, and risk-gateway tools remain undefined.
 - No financial strategy has been specified or validated.
 - Local application security regression checks are included. GitHub Actions and
-  broader release promotion/rollback automation remain undefined.
+  automated release promotion/rollback remain undefined.

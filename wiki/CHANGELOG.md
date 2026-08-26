@@ -3,6 +3,25 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-25 — v0070 — Make both component updaters release-aware
+
+- Published the first Prime WebUI GitHub release with display title `.1`, valid
+  tag `v0.1.0`, and target commit `5d9fd3a`.
+- Added an admin-only release-status endpoint and automatic checks whenever
+  Settings is entered for both Prime Agent and Prime WebUI. Installed/latest
+  versions remain visible, and available updates receive prominent amber notices.
+- Changed both one-shot updaters to install only validated published releases:
+  the exact npm version matching Prime Agent's official tag and the exact commit
+  resolved from the private WebUI release tag. Unreleased `main` is no longer an
+  update target.
+- Restyled Settings into the same grouped card hierarchy as Admin while retaining
+  provider configuration, model defaults, account controls, and update history.
+- Added numeric semantic-version regression coverage; all 28 local tests plus
+  Python, JavaScript, shell, whitespace, and credential-pattern checks pass.
+- Added [ADR-0047](decisions/0047-release-aware-updates.md), immutable snapshot
+  [v0070](versions/v0070.md), and root-only pre-change recovery bundle
+  `/var/backups/prime-releases-v0070-20260825T204000-0500`.
+
 ## 2026-08-25 — v0069 — Add secure provider configuration workflow
 
 - Replaced the full-width configured-provider search with a compact filter and

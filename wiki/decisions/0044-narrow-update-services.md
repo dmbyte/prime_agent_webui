@@ -1,7 +1,7 @@
 # ADR-0044: Use narrow one-shot services for software updates
 
 Date: 2026-08-25
-Status: accepted
+Status: superseded by [ADR-0047](0047-release-aware-updates.md)
 
 ## Context
 

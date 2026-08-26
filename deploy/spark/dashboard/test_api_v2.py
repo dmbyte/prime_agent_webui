@@ -17,6 +17,11 @@ class DashboardV2Tests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "confirmation"):
             api.start_update("webui", "yes")
 
+    def test_release_versions_are_compared_numerically(self):
+        self.assertEqual(api.version_tuple("v0.10.2"), (0, 10, 2))
+        self.assertEqual(api.version_tuple("0.8.0"), (0, 8, 0))
+        self.assertIsNone(api.version_tuple("latest"))
+
     def test_running_update_cannot_be_started_twice(self):
         with mock.patch.object(api, "update_status", return_value={"agent": {"active": True}}):
             with self.assertRaisesRegex(RuntimeError, "already running"):

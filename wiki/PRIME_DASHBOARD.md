@@ -68,23 +68,31 @@ the minimum sidebar width; conversation rows are constrained to the same boundar
 
 ## Software updates
 
-Settings has two confirmed update controls. **Update Prime Agent** runs npm
-`prime-agent@latest` inside the existing bundled Node 22 runtime. **Update WebUI
-from GitHub** currently requires a clean `main` checkout at the exact private
-`dmbyte/prime_agent_webui` remote, fetches `origin/main`, permits only a
-fast-forward, compiles the Python entry points, redeploys tracked assets/services,
-and restarts the dashboard API. The UI polls running and last-result status.
+Settings has two release-aware, confirmed update controls. Every entry into
+Settings checks the latest official Prime Agent release and the latest private
+`dmbyte/prime_agent_webui` release, compares each with the installed state, and
+shows a prominent amber notice with the target version when an update is
+available. The release check is also refreshed after an update finishes.
 
-The long-running dashboard remains network-denied and home-read-only. It can only
-start the two named update units; those short-lived services hold separate locks
-and have the network/write access needed for npm or Git. Release discovery and
-installed-versus-release comparison are the next planned update-policy revision.
+**Update Prime Agent** installs the exact npm version corresponding to the
+validated official GitHub release tag inside the existing bundled Node 22
+runtime. **Update WebUI from GitHub** requires a clean `main` checkout at the
+exact private remote, fetches the latest release tag, resolves its commit,
+permits only a fast-forward, compiles the Python entry points, redeploys tracked
+assets/services, and restarts the dashboard API. Unreleased commits on `main`
+are not advertised as updates. The UI polls running and last-result status.
+
+The long-running dashboard is loopback-only and home-read-only. It can only start
+the two named update units; those short-lived services hold separate locks and
+have the network/write access needed for npm or Git. The admin-only release
+endpoint queries validated GitHub metadata but never accepts a repository or
+command from the browser.
 Each job writes an atomic mode-0600 result beneath
 `~/.prime/agent/update-status/`, allowing Settings to distinguish never-run from
 success/failure across service reloads and reboots.
-The deployed WebUI unit and authenticated-control API path were each exercised
-successfully against GitHub HEAD. The Prime updater was not run during setup, so
-Prime remains at 0.8.0 until the owner selects its button.
+The first WebUI release is titled `.1`, uses valid tag `v0.1.0`, and targets
+commit `5d9fd3a`. Prime remains at 0.8.0, matching upstream v0.8.0; the Prime
+updater was not run during setup.
 
 ## Structured tasks
 

@@ -637,6 +637,45 @@ def update_status():
     return rows
 
 
+def version_tuple(value):
+    match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?", str(value).strip())
+    return tuple(map(int, match.groups())) if match else None
+
+
+def release_status():
+    definitions = {
+        "agent": ("PrimeIntellect-ai/prime-agent", "Prime Agent"),
+        "webui": ("dmbyte/prime_agent_webui", "Prime WebUI"),
+    }
+    rows = {}
+    for kind, (repository, label) in definitions.items():
+        try:
+            result = subprocess.run(["gh", "api", f"repos/{repository}/releases/latest"], capture_output=True, text=True, timeout=15, check=True)
+            release = json.loads(result.stdout)
+            tag = str(release.get("tag_name") or "")[:80]
+            name = str(release.get("name") or tag)[:120]
+            url = str(release.get("html_url") or "")[:500]
+            if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]{0,79}", tag) or not url.startswith("https://github.com/"):
+                raise ValueError("Invalid release metadata")
+            if kind == "agent":
+                package = legacy.PRIME_BIN.parent / "lib/node_modules/prime-agent/package.json"
+                installed = str(legacy.read_json(package, {}).get("version") or "unknown")
+                current_version, latest_version = version_tuple(installed), version_tuple(tag)
+                available = bool(current_version and latest_version and latest_version > current_version)
+            else:
+                repo = legacy.HOME / "prime_agent_webui"
+                current = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True, timeout=5, check=True).stdout.strip()
+                resolved = subprocess.run(["gh", "api", f"repos/{repository}/commits/{tag}", "--jq", ".sha"], capture_output=True, text=True, timeout=15, check=True).stdout.strip()
+                if not re.fullmatch(r"[a-f0-9]{40}", current) or not re.fullmatch(r"[a-f0-9]{40}", resolved): raise ValueError("Invalid release revision")
+                ancestor = subprocess.run(["git", "-C", str(repo), "merge-base", "--is-ancestor", resolved, current], capture_output=True, timeout=5).returncode == 0
+                available = current != resolved and not ancestor
+                installed = name if current == resolved else f"{name}+{current[:7]}" if ancestor else current[:7]
+            rows[kind] = {"label": label, "repository": repository, "installed": installed, "latestName": name, "latestTag": tag, "publishedAt": release.get("published_at"), "url": url, "available": available, "checkedAt": now_iso()}
+        except (OSError, subprocess.SubprocessError, json.JSONDecodeError, ValueError, TypeError) as error:
+            rows[kind] = {"label": label, "repository": repository, "available": False, "error": "Release check unavailable", "checkedAt": now_iso()}
+    return rows
+
+
 def start_update(kind, confirmation):
     units = {"agent": "prime-update-agent.service", "webui": "prime-update-webui.service"}
     unit = units.get(str(kind))
@@ -751,6 +790,9 @@ class Handler(legacy.Handler):
             elif path == "/api/providers/catalog":
                 self.require_admin()
                 self.send_json(200, {"providers": provider_catalog()})
+            elif path == "/api/admin/releases":
+                self.require_admin()
+                self.send_json(200, {"releases": release_status()})
             else:
                 super().do_GET()
         except ValueError as error:

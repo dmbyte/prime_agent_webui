@@ -25,9 +25,16 @@ test "$(git -C "$repo" branch --show-current)" = main
 test -z "$(git -C "$repo" status --porcelain)"
 test "$(git -C "$repo" remote get-url origin)" = "https://github.com/dmbyte/prime_agent_webui.git"
 
-echo "Fetching private origin/main..."
-GIT_TERMINAL_PROMPT=0 git -C "$repo" fetch origin main
-git -C "$repo" merge --ff-only FETCH_HEAD
+release_tag=$(gh api repos/dmbyte/prime_agent_webui/releases/latest --jq .tag_name)
+[[ $release_tag =~ ^[A-Za-z0-9][A-Za-z0-9._+-]{0,79}$ ]]
+echo "Fetching Prime WebUI release ${release_tag}..."
+GIT_TERMINAL_PROMPT=0 git -C "$repo" fetch origin "refs/tags/${release_tag}:refs/tags/${release_tag}"
+release_commit=$(git -C "$repo" rev-parse "${release_tag}^{commit}")
+if git -C "$repo" merge-base --is-ancestor "$release_commit" HEAD; then
+  echo "Prime WebUI already contains release ${release_tag}."
+else
+  git -C "$repo" merge --ff-only "$release_commit"
+fi
 
 python3 -m py_compile "$source_dir/api.py" "$source_dir/api_v2.py" "$source_dir/auth.py"
 install -d -m 0755 "$live"
@@ -42,4 +49,4 @@ systemctl --user daemon-reload
 
 "$live/install-static.sh" "$live"
 systemctl --user restart prime-dashboard-api.service
-echo "Prime WebUI now matches $(git -C "$repo" rev-parse --short HEAD)."
+echo "Prime WebUI now contains release ${release_tag} at $(git -C "$repo" rev-parse --short HEAD)."
