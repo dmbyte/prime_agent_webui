@@ -18,6 +18,11 @@ snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 - Added generic safeguards against treating side-effect-free GETs as CSRF data
   exfiltration without cross-origin response access, or assuming an unimplemented
   HTTP method falls through to another method handler.
+- The final tools-disabled regression was capped at 500 words and correctly
+  identified both direct loopback identity/role forgery by user-influenced local
+  processes and failed cross-account isolation under shared agent/terminal OS
+  identity. It supplied concrete paths and did not repeat the prior semantic
+  false positives.
 - Added immutable snapshot [v0074](versions/v0074.md).
 
 ## 2026-08-26 — v0073 — Add semantic false-positive guardrails

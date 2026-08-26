@@ -44,6 +44,9 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   under a single-user assumption. The current skill rejects that downgrade when
   software exposes distinct accounts/roles or lets less-trusted users launch local
   workloads, and adds precise GET/CORS/CSRF and HTTP-method dispatch guardrails.
+  The final tools-disabled, 500-word regression then correctly classified both
+  user-influenced direct loopback API forgery and the lack of cross-account
+  isolation under shared agent/terminal execution, with concrete attack paths.
 - Browser interface: native Prime chat API on `127.0.0.1:8765`, optional ttyd
   1.7.4 console on `127.0.0.1:7681`, and isolated local session broker on
   `127.0.0.1:8764`, fronted by Nginx 1.24 on loopback and

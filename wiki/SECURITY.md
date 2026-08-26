@@ -87,6 +87,9 @@ Spark IP, hostname, localhost, and loopback. Clients must install the downloadab
 - The review was explicitly report-only. No security control was changed. The
   recommended direction is authenticated/permissioned backend IPC, admin-only
   console access, and per-user process/storage/credential sandboxing.
+- The installed generic security-review skill's final tools-disabled regression
+  independently reproduced both confirmed boundaries with concrete attack paths
+  after its semantic and account-awareness refinements.
 
 ## Credential-history remediation
 
