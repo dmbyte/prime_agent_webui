@@ -1,7 +1,7 @@
 # ADR-0049: Stream safe task state and use supported Prime steering
 
 Date: 2026-08-26
-Status: accepted
+Status: superseded by [ADR-0050](0050-use-parser-verified-prime-steering.md)
 
 ## Context
 

@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-26
-Wiki version: `v0075`
+Wiki version: `v0076`
 
 ## Project summary
 
@@ -118,9 +118,11 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   the API responds. While Prime runs, its bounded JSON event stream supplies a
   live assistant card with safe status/tool events, elapsed time, and draft answer
   text; private reasoning is never sent to the browser. The composer exposes
-  **Message**, `/steer`, `/follow-up`, and `/stop`. Steering uses Prime 0.8.0's
-  supported `send --steer`/`--follow-up` interface, is restricted to the owning
-  active task, and becomes available only after Prime publishes its agent ID.
+  **Message**, `/steer`, and `/stop`. Steering uses Prime 0.8.0's verified
+  `send <agent> --message <text>` interface (busy-agent sends are steering), is
+  restricted to the owning active task, and becomes available only after Prime
+  publishes its agent ID. The installed 0.8.0 help incorrectly advertises removed
+  `--steer`/`--follow-up` flags, so the UI does not offer an unsupported follow-up.
 - Static HTML is installed in `/var/www/prime-agent/`; JavaScript and CSS are in
   `/var/www/prime-agent/assets/`. The tracked installer preserves this mapping.
 - vLLM: `0.27.1` ARM64/CUDA 12.9 image, two user services enabled at boot
@@ -196,6 +198,9 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 - The root-only pre-v0075 live-dialogue recovery bundle is
   `/var/backups/prime-live-dialogue-v0075-20260826T134500-0500`; it preserves the
   prior tracked and installed API/UI assets with checksums.
+- The root-only pre-v0076 steering-fix recovery bundle is
+  `/var/backups/prime-steering-v0076-20260826T135500-0500`; it preserves the
+  initially deployed v0075 API/UI assets with checksums.
 
 ## Deployed architecture
 

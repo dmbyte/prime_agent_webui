@@ -36,7 +36,8 @@ class DashboardV2Tests(unittest.TestCase):
                 result = api.message_native_task(task_id, "Focus on authentication", "steer", "alice")
             self.assertTrue(result["delivered"])
             command = run.call_args.args[0]
-            self.assertEqual(command[1:4], ["send", "--steer", "session-live-1234"])
+            self.assertEqual(command[1:4], ["send", "session-live-1234", "--message"])
+            self.assertEqual(command[4], "Focus on authentication")
             with self.assertRaisesRegex(ValueError, "no longer running"):
                 api.message_native_task(task_id, "Wrong owner", "steer", "bob")
         finally:

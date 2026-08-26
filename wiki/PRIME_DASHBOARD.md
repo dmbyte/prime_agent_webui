@@ -21,9 +21,11 @@ A newly submitted message is rendered immediately with its delivery state. While
 the task runs, a live assistant card shows bounded safe lifecycle/tool events,
 elapsed time, and available draft response text from Prime's JSON event stream;
 private reasoning is not exposed. The composer command selector offers ordinary
-Message plus `/steer`, `/follow-up`, and `/stop`. Steering is delivered through
-Prime's supported running-agent message command after the active agent ID is
-known, and remains restricted to the task owner.
+Message plus `/steer` and `/stop`. Steering is delivered through Prime's verified
+`send <agent> --message <text>` command after the active agent ID is known, and
+remains restricted to the task owner. Prime 0.8.0's help advertises removed
+delivery flags that its parser rejects, so the UI does not expose follow-up until
+Prime provides a working supported interface for it.
 
 The active conversation header shows the effective provider/model, effort,
 routing mode, and context capacity. Effort is selectable there and applies to

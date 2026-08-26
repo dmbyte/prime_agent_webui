@@ -54,3 +54,4 @@ only historical evidence: when a decision changes, mark the old record
 - [ADR-0047: Update Prime components from validated published releases](0047-release-aware-updates.md)
 - [ADR-0048: Teach Prime capability-driven software security review](0048-capability-driven-security-review-skill.md)
 - [ADR-0049: Stream safe task state and use supported Prime steering](0049-live-dialogue-and-supported-steering.md)
+- [ADR-0050: Use Prime's parser-verified busy-agent send for steering](0050-use-parser-verified-prime-steering.md)

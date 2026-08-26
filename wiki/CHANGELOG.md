@@ -3,6 +3,20 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-26 — v0076 — Correct Prime 0.8 steering invocation
+
+- Live browser validation found that Prime 0.8.0's generated `send --help` still
+  advertises removed `--steer` and `--follow-up` flags; its installed parser
+  rejects both flags.
+- Changed steering to the parser-verified `send <agent> --message <text>` form.
+  Prime 0.8 delivers sends to a busy agent as steering.
+- Removed the unsupported follow-up choice rather than presenting a control that
+  cannot be honored reliably by the installed release. Message, `/steer`, and
+  `/stop` remain available.
+- Added [ADR-0050](decisions/0050-use-parser-verified-prime-steering.md), immutable
+  snapshot [v0076](versions/v0076.md), and root-only pre-fix recovery at
+  `/var/backups/prime-steering-v0076-20260826T135500-0500`.
+
 ## 2026-08-26 — v0075 — Echo new messages and add live steering
 
 - Added immediate optimistic rendering of a submitted user message, including

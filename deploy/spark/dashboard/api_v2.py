@@ -540,7 +540,7 @@ def message_native_task(task_id, message, mode="steer", owner="dbyte"):
     message = str(message).strip()
     if not message or len(message) > 10000:
         raise ValueError("Steering message must contain between 1 and 10,000 characters")
-    if mode not in {"steer", "follow-up"}:
+    if mode != "steer":
         raise ValueError("Unsupported task message mode")
     with TASK_LOCK:
         task = TASKS.get(task_id)
@@ -549,7 +549,10 @@ def message_native_task(task_id, message, mode="steer", owner="dbyte"):
         agent_id = task.get("agentSessionId")
     if not valid_id(agent_id):
         raise RuntimeError("Prime is still connecting; try again in a moment")
-    command = [str(legacy.PRIME_AGENT), "send", f"--{mode}", agent_id, message, "--json"]
+    # Prime 0.8.0 delivers `send` messages to a busy agent as steering. Its
+    # generated help still lists removed --steer/--follow-up flags, so use the
+    # parser-backed --message form verified against the installed binary.
+    command = [str(legacy.PRIME_AGENT), "send", agent_id, "--message", message, "--json"]
     result = subprocess.run(command, timeout=15, capture_output=True, text=True, env=prime_env())
     if result.returncode:
         raise RuntimeError("Prime did not accept the task message")
@@ -558,7 +561,7 @@ def message_native_task(task_id, message, mode="steer", owner="dbyte"):
         if task:
             task.setdefault("steering", []).append({"at": now_iso(), "mode": mode, "message": message[:1000]})
             task["steering"] = task["steering"][-20:]
-            add_task_progress(task, "Steering delivered" if mode == "steer" else "Follow-up queued")
+            add_task_progress(task, "Steering delivered")
     legacy.audit("native_task_message", task=task_id, mode=mode, owner=owner)
     return {"delivered": True, "id": task_id, "mode": mode}
 
