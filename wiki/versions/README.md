@@ -6,6 +6,7 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0077](v0077.md) | 2026-08-26 | Moved WebUI tasks to Prime RPC for native steering, follow-up, and abort |
 | [v0076](v0076.md) | 2026-08-26 | Corrected steering to Prime's parser-verified busy-agent send interface |
 | [v0075](v0075.md) | 2026-08-26 | Added immediate message echo, live task state, and supported steering |
 | [v0074](v0074.md) | 2026-08-26 | Prevented invalid single-user/local-trust severity downgrades |

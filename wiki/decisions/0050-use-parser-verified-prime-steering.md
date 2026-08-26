@@ -1,7 +1,7 @@
 # ADR-0050: Use Prime's parser-verified busy-agent send for steering
 
 Date: 2026-08-26
-Status: accepted
+Status: superseded by [ADR-0051](0051-use-prime-rpc-for-interactive-webui-tasks.md)
 
 ## Context
 

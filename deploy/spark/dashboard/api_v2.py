@@ -318,7 +318,7 @@ def task_snapshot(user=None):
         for task_id, task in TASKS.items():
             if user is not None and task.get("owner", "dbyte") != user:
                 continue
-            row = {key: value for key, value in task.items() if key not in {"process", "usage"}}
+            row = {key: value for key, value in task.items() if key not in {"process", "usage", "rpcResponses", "agentEnded"}}
             if row.get("status") == "running":
                 row["elapsedSeconds"] = round(time.time() - row["startedEpoch"], 1)
             rows.append(row)
@@ -379,13 +379,31 @@ def apply_task_event(task_id, event):
         if not task or not isinstance(event, dict):
             return
         event_type = event.get("type")
-        if event_type == "session" and valid_id(event.get("id")):
+        if event_type == "response":
+            request_id = str(event.get("id") or "")
+            if request_id:
+                task.setdefault("rpcResponses", {})[request_id] = event
+                task["rpcResponses"] = dict(list(task["rpcResponses"].items())[-20:])
+            if not event.get("success", False):
+                task["rpcError"] = "Prime rejected an RPC command"
+                add_task_progress(task, "Prime rejected a command")
+            data = event.get("data") or {}
+            session_id = data.get("sessionId") if isinstance(data, dict) else None
+            if valid_id(session_id):
+                task["agentSessionId"] = session_id
+                if not task.get("sessionId"):
+                    task["sessionId"] = session_id
+        elif event_type == "session" and valid_id(event.get("id")):
             task["agentSessionId"] = event["id"]
             if not task.get("sessionId"):
                 task["sessionId"] = event["id"]
             add_task_progress(task, "Prime connected")
         elif event_type == "agent_start":
+            task["agentEnded"] = False
             add_task_progress(task, "Agent started")
+        elif event_type == "agent_end":
+            task["agentEnded"] = True
+            add_task_progress(task, "Finishing response")
         elif event_type == "turn_start":
             add_task_progress(task, "Working on the request")
         elif event_type in {"message_update", "message_end"}:
@@ -417,6 +435,7 @@ def monitor_task(task_id, before):
     deadline = time.monotonic() + MAX_TASK_SECONDS
     log_lines = []
     timed_out = False
+    stdin_closed = False
     while process.poll() is None:
         if time.monotonic() >= deadline:
             timed_out = True
@@ -435,6 +454,12 @@ def monitor_task(task_id, before):
         if len(line) <= 20000:
             log_lines.append(line)
             log_lines = log_lines[-200:]
+        with TASK_LOCK:
+            ended = bool(TASKS.get(task_id, {}).get("agentEnded"))
+        if ended and not stdin_closed and process.stdin:
+            process.stdin.close()
+            process.stdin = None
+            stdin_closed = True
     try:
         remainder, _ = process.communicate(timeout=10)
     except subprocess.TimeoutExpired:
@@ -448,7 +473,9 @@ def monitor_task(task_id, before):
         if len(line) <= 20000:
             log_lines.append(line + "\n")
     output = "".join(log_lines[-200:])
-    status = "timed_out" if timed_out else "completed" if process.returncode == 0 else "failed"
+    with TASK_LOCK:
+        rpc_error = TASKS.get(task_id, {}).get("rpcError")
+    status = "timed_out" if timed_out else "failed" if rpc_error else "completed" if process.returncode == 0 else "failed"
     after = {path.stem for path in legacy.SESSIONS.glob("*.jsonl")}
     created = sorted(after - before, key=lambda value: (legacy.SESSIONS / f"{value}.jsonl").stat().st_mtime, reverse=True)
     with TASK_LOCK:
@@ -505,14 +532,13 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner="dbyt
         raise ValueError("Unsupported thinking level")
     route = route_task(message, settings)
     details = model_details(route["provider"], route["model"])
-    command = [str(legacy.PRIME_AGENT), "--cwd", str(legacy.HOME / "prime-dgx-agent"), "--mode", "json", "--print", "--provider", route["provider"], "--model", route["model"], "--thinking", thinking]
+    command = [str(legacy.PRIME_AGENT), "--cwd", str(legacy.HOME / "prime-dgx-agent"), "--mode", "rpc", "--provider", route["provider"], "--model", route["model"], "--thinking", thinking]
     if session_id:
         command.extend(["--fork" if fork else "--resume", session_id])
-    command.extend(["--", message])
     before = {path.stem for path in legacy.SESSIONS.glob("*.jsonl")}
     task_id = uuid.uuid4().hex
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=legacy.HOME / "prime-dgx-agent", env=prime_env(), start_new_session=True)
-    task = {"id": task_id, "sessionId": session_id if not fork else None, "agentSessionId": session_id if session_id and not fork else None, "owner": owner, "topic": legacy.safe_topic(message) or "Native task", **route, "thinking": thinking, "contextWindow": details.get("contextWindow"), "maxTokens": details.get("maxTokens"), "status": "running", "progress": "Starting Prime", "progressEvents": [{"at": now_iso(), "label": "Request received"}], "liveResponse": "", "started": now_iso(), "startedEpoch": time.time(), "pid": process.pid, "process": process, "logAvailable": False}
+    process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=legacy.HOME / "prime-dgx-agent", env=prime_env(), start_new_session=True)
+    task = {"id": task_id, "sessionId": session_id if not fork else None, "agentSessionId": session_id if session_id and not fork else None, "rpcReady": True, "rpcResponses": {}, "owner": owner, "topic": legacy.safe_topic(message) or "Native task", **route, "thinking": thinking, "contextWindow": details.get("contextWindow"), "maxTokens": details.get("maxTokens"), "status": "running", "progress": "Starting Prime", "progressEvents": [{"at": now_iso(), "label": "Request received"}], "liveResponse": "", "started": now_iso(), "startedEpoch": time.time(), "pid": process.pid, "process": process, "logAvailable": False}
     with TASK_LOCK:
         TASKS[task_id] = task
     with META_LOCK:
@@ -521,9 +547,12 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner="dbyt
         legacy.atomic_json(META, data)
     if task.get("sessionId"):
         store_task_route(task)
+    process.stdin.write(json.dumps({"id": f"state-{task_id}", "type": "get_state"}, separators=(",", ":")) + "\n")
+    process.stdin.write(json.dumps({"id": f"prompt-{task_id}", "type": "prompt", "message": message}, separators=(",", ":")) + "\n")
+    process.stdin.flush()
     threading.Thread(target=monitor_task, args=(task_id, before), daemon=True).start()
     legacy.audit("native_task_started", task=task_id, session=session_id)
-    return {key: value for key, value in task.items() if key != "process"}
+    return {key: value for key, value in task.items() if key not in {"process", "rpcResponses", "agentEnded"}}
 
 
 def stop_native_task(task_id, owner="dbyte"):
@@ -532,7 +561,11 @@ def stop_native_task(task_id, owner="dbyte"):
         if not task or task.get("owner", "dbyte") != owner or task["status"] != "running":
             raise ValueError("Task is no longer running")
         process = task["process"]
-    os.killpg(process.pid, signal.SIGTERM)
+        if not process.stdin:
+            raise ValueError("Task is no longer accepting commands")
+        process.stdin.write('{"type":"abort"}\n')
+        process.stdin.flush()
+        add_task_progress(task, "Stopping task")
     return {"stopping": True, "id": task_id}
 
 
@@ -540,28 +573,24 @@ def message_native_task(task_id, message, mode="steer", owner="dbyte"):
     message = str(message).strip()
     if not message or len(message) > 10000:
         raise ValueError("Steering message must contain between 1 and 10,000 characters")
-    if mode != "steer":
+    if mode not in {"steer", "follow-up"}:
         raise ValueError("Unsupported task message mode")
     with TASK_LOCK:
         task = TASKS.get(task_id)
         if not task or task.get("owner", "dbyte") != owner or task.get("status") != "running":
             raise ValueError("Task is no longer running")
-        agent_id = task.get("agentSessionId")
-    if not valid_id(agent_id):
-        raise RuntimeError("Prime is still connecting; try again in a moment")
-    # Prime 0.8.0 delivers `send` messages to a busy agent as steering. Its
-    # generated help still lists removed --steer/--follow-up flags, so use the
-    # parser-backed --message form verified against the installed binary.
-    command = [str(legacy.PRIME_AGENT), "send", agent_id, "--message", message, "--json"]
-    result = subprocess.run(command, timeout=15, capture_output=True, text=True, env=prime_env())
-    if result.returncode:
-        raise RuntimeError("Prime did not accept the task message")
-    with TASK_LOCK:
-        task = TASKS.get(task_id)
-        if task:
-            task.setdefault("steering", []).append({"at": now_iso(), "mode": mode, "message": message[:1000]})
-            task["steering"] = task["steering"][-20:]
-            add_task_progress(task, "Steering delivered")
+        process = task.get("process")
+        if not task.get("rpcReady") or not process or not process.stdin:
+            raise RuntimeError("Prime is still connecting; try again in a moment")
+        request = {"id": f"task-message-{uuid.uuid4().hex}", "type": "steer" if mode == "steer" else "follow_up", "message": message}
+        try:
+            process.stdin.write(json.dumps(request, separators=(",", ":")) + "\n")
+            process.stdin.flush()
+        except (BrokenPipeError, OSError, ValueError) as error:
+            raise RuntimeError("Prime is no longer accepting task messages") from error
+        task.setdefault("steering", []).append({"at": now_iso(), "mode": mode, "message": message[:1000]})
+        task["steering"] = task["steering"][-20:]
+        add_task_progress(task, "Steering queued" if mode == "steer" else "Follow-up queued")
     legacy.audit("native_task_message", task=task_id, mode=mode, owner=owner)
     return {"delivered": True, "id": task_id, "mode": mode}
 

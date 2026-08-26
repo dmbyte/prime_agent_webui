@@ -27,17 +27,19 @@ class DashboardV2Tests(unittest.TestCase):
         finally:
             api.TASKS.pop(task_id, None)
 
-    def test_steering_is_owner_scoped_and_uses_prime_send(self):
+    def test_steering_is_owner_scoped_and_uses_rpc_channel(self):
         task_id = "b" * 32
-        api.TASKS[task_id] = {"id": task_id, "owner": "alice", "status": "running", "agentSessionId": "session-live-1234", "progressEvents": []}
-        completed = mock.Mock(returncode=0, stdout='{"delivered":true}', stderr="")
+        stdin = mock.Mock()
+        process = mock.Mock(stdin=stdin)
+        api.TASKS[task_id] = {"id": task_id, "owner": "alice", "status": "running", "rpcReady": True, "process": process, "progressEvents": []}
         try:
-            with mock.patch.object(api.subprocess, "run", return_value=completed) as run, mock.patch.object(api.legacy, "audit"):
+            with mock.patch.object(api.legacy, "audit"):
                 result = api.message_native_task(task_id, "Focus on authentication", "steer", "alice")
             self.assertTrue(result["delivered"])
-            command = run.call_args.args[0]
-            self.assertEqual(command[1:4], ["send", "session-live-1234", "--message"])
-            self.assertEqual(command[4], "Focus on authentication")
+            payload = json.loads(stdin.write.call_args.args[0])
+            self.assertEqual(payload["type"], "steer")
+            self.assertEqual(payload["message"], "Focus on authentication")
+            stdin.flush.assert_called_once()
             with self.assertRaisesRegex(ValueError, "no longer running"):
                 api.message_native_task(task_id, "Wrong owner", "steer", "bob")
         finally:

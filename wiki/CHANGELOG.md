@@ -3,6 +3,21 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-26 — v0077 — Use Prime RPC for interactive running tasks
+
+- Live validation proved that one-shot JSON/print sessions publish valid saved
+  session IDs but are not addressable by Prime's external `send` command while
+  running.
+- Changed WebUI task transport to Prime's documented persistent RPC mode. Initial
+  prompts, steering, follow-ups, and aborts now share the task's private stdin;
+  responses and safe task events stream over stdout.
+- Restored `/follow-up` because RPC exposes native `follow_up`, and changed Stop
+  to native `abort`. Internal response maps and end-state flags are excluded from
+  browser task snapshots and remain bounded.
+- Added [ADR-0051](decisions/0051-use-prime-rpc-for-interactive-webui-tasks.md),
+  immutable snapshot [v0077](versions/v0077.md), and root-only pre-change recovery
+  at `/var/backups/prime-rpc-v0077-20260826T140000-0500`.
+
 ## 2026-08-26 — v0076 — Correct Prime 0.8 steering invocation
 
 - Live browser validation found that Prime 0.8.0's generated `send --help` still

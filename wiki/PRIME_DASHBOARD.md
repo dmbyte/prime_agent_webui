@@ -21,11 +21,11 @@ A newly submitted message is rendered immediately with its delivery state. While
 the task runs, a live assistant card shows bounded safe lifecycle/tool events,
 elapsed time, and available draft response text from Prime's JSON event stream;
 private reasoning is not exposed. The composer command selector offers ordinary
-Message plus `/steer` and `/stop`. Steering is delivered through Prime's verified
-`send <agent> --message <text>` command after the active agent ID is known, and
-remains restricted to the task owner. Prime 0.8.0's help advertises removed
-delivery flags that its parser rejects, so the UI does not expose follow-up until
-Prime provides a working supported interface for it.
+Message plus `/steer`, `/follow-up`, and `/stop`. Native WebUI tasks run through
+Prime's persistent RPC mode: the initial prompt and authenticated owner commands
+use the process's private stdin, while safe events stream from stdout. `/steer`
+queues direction at the next turn boundary, `/follow-up` waits until current work
+finishes, and Stop sends native `abort`; none requires console attachment.
 
 The active conversation header shows the effective provider/model, effort,
 routing mode, and context capacity. Effort is selectable there and applies to
