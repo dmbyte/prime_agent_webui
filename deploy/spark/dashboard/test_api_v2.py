@@ -69,8 +69,34 @@ class DashboardV2Tests(unittest.TestCase):
             {"id": "session-bob-12", "topic": "Bob", "modified": "2026-01-01T00:00:00Z", "provider": "p", "model": "m"},
         ]
         meta = {"conversations": {"session-alice": {"owner": "alice"}, "session-bob-12": {"owner": "bob"}}}
-        with mock.patch.object(api.legacy, "session_catalog", return_value=rows), mock.patch.object(api, "metadata", return_value=meta), mock.patch.object(api.legacy, "session_path", side_effect=lambda value: Path(f"/tmp/{value}.jsonl")), mock.patch.object(api, "model_details", return_value={}):
+        with mock.patch.object(api.legacy, "session_catalog", return_value=rows), mock.patch.object(api, "metadata", return_value=meta), mock.patch.object(api.legacy, "session_path", side_effect=lambda value, root=None: Path(f"/tmp/{value}.jsonl")), mock.patch.object(api, "model_details", return_value={}):
             self.assertEqual([row["id"] for row in api.conversation_catalog(user="alice")], ["session-alice"])
+
+    def test_conversation_catalog_uses_cache_during_temporary_permission_change(self):
+        rows = [{"id": "session-alice", "topic": "Alice", "modified": "2026-01-01T00:00:00Z", "provider": "p", "model": "m"}]
+        meta = {"conversations": {"session-alice": {"owner": "alice"}}}
+        api.SESSION_CACHE.pop("alice", None)
+        with mock.patch.object(api.legacy, "session_catalog", side_effect=[rows, PermissionError("temporarily protected")]), mock.patch.object(api, "metadata", return_value=meta), mock.patch.object(api.legacy, "session_path", side_effect=lambda value, root=None: Path(f"/tmp/{value}.jsonl")), mock.patch.object(api, "model_details", return_value={}):
+            self.assertEqual([row["id"] for row in api.conversation_catalog(user="alice")], ["session-alice"])
+            self.assertEqual([row["id"] for row in api.conversation_catalog(user="alice")], ["session-alice"])
+        api.SESSION_CACHE.pop("alice", None)
+
+    def test_broker_exit_marks_task_failed_without_exposing_details(self):
+        task_id = "c" * 32
+        api.TASKS[task_id] = {"id": task_id, "owner": "alice", "status": "running", "progressEvents": []}
+        try:
+            api.apply_task_event(task_id, {"type": "broker_exit", "exitCode": 17})
+            self.assertEqual(api.TASKS[task_id]["rpcError"], "Rootless task broker exited")
+            self.assertNotIn("exitCode", api.TASKS[task_id])
+        finally:
+            api.TASKS.pop(task_id, None)
+
+    def test_container_sessions_are_resolved_per_authenticated_owner(self):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.dict(api.os.environ, {"PRIME_TASK_CONTAINER_IMAGE":"1", "PRIME_RUNNER_STORAGE":directory}):
+            self.assertEqual(api.session_root("alice"), Path(directory)/"alice/prime/agent/sessions")
+            self.assertNotEqual(api.session_root("alice"), api.session_root("bob"))
+            with self.assertRaisesRegex(ValueError, "owner"):
+                api.session_root("../escape")
 
     def test_initial_admin_cache_cannot_be_deleted(self):
         with self.assertRaisesRegex(ValueError, "initial administrator"):

@@ -41,6 +41,8 @@ MAX_NATIVE_TASKS = 4
 MAX_TASK_SECONDS = 30 * 60
 TASKS = {}
 TASK_LOCK = threading.Lock()
+SESSION_CACHE = {}
+SESSION_CACHE_LOCK = threading.Lock()
 META_LOCK = threading.Lock()
 LEDGER_LOCK = threading.Lock()
 EXECUTION_GRANTS = {}
@@ -208,14 +210,27 @@ def save_metadata(data):
         legacy.atomic_json(META, data)
 
 
+def container_mode():
+    return os.environ.get("PRIME_TASK_CONTAINER_IMAGE") == "1"
+
+
+def session_root(user):
+    if not container_mode():
+        return legacy.SESSIONS
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{2,32}", str(user)):
+        raise ValueError("Invalid task owner")
+    return Path(os.environ.get("PRIME_RUNNER_STORAGE", "/var/lib/prime-runner/users")) / user / "prime/agent/sessions"
+
+
+def session_trash(user):
+    return session_root(user).parent / "trash"
+
+
 def conversation_owner(session_id):
     rows = metadata().get("conversations", {})
     if session_id in rows:
         return rows[session_id].get("owner", INITIAL_ADMIN)
-    try:
-        return rows.get(legacy.session_path(session_id).stem, {}).get("owner", INITIAL_ADMIN)
-    except ValueError:
-        return INITIAL_ADMIN
+    return INITIAL_ADMIN
 
 
 def require_conversation_owner(session_id, user):
@@ -223,26 +238,39 @@ def require_conversation_owner(session_id, user):
         raise ValueError("Conversation not found")
 
 
+def cached_session_catalog(user):
+    """Keep state polling available while Prime temporarily protects its tree."""
+    try:
+        rows = legacy.session_catalog(session_root(user))
+    except OSError:
+        with SESSION_CACHE_LOCK:
+            return [dict(row) for row in SESSION_CACHE.get(user, [])]
+    rows = [dict(row) for row in rows]
+    with SESSION_CACHE_LOCK:
+        SESSION_CACHE[user] = [dict(row) for row in rows]
+    return rows
+
+
 def usage_for_user(user):
     paths = []
-    for row in legacy.session_catalog():
-        if conversation_owner(row["id"]) != user:
-            continue
+    root = session_root(user)
+    for row in cached_session_catalog(user):
         try:
-            paths.append(legacy.session_path(row["id"]))
+            paths.append(legacy.session_path(row["id"], root))
         except ValueError:
             pass
     return legacy.usage_summary(paths)
 
 
 def conversation_catalog(query="", include_archived=False, user=INITIAL_ADMIN):
-    rows = legacy.session_catalog()
+    root = session_root(user)
+    rows = cached_session_catalog(user)
     data = metadata().get("conversations", {})
     result = []
     query = query.casefold().strip()
     for row in rows:
         try:
-            storage_id = legacy.session_path(row["id"]).stem
+            storage_id = legacy.session_path(row["id"], root).stem
         except ValueError:
             storage_id = row["id"]
         extra = data.get(row["id"], data.get(storage_id, {}))
@@ -284,7 +312,7 @@ def conversation_messages(session_id, user=INITIAL_ADMIN):
         raise ValueError("Invalid conversation identifier")
     require_conversation_owner(session_id, user)
     try:
-        path = legacy.session_path(session_id)
+        path = legacy.session_path(session_id, session_root(user))
     except ValueError as error:
         raise ValueError("Conversation not found") from error
     rows = []
@@ -437,6 +465,9 @@ def apply_task_event(task_id, event):
             add_task_progress(task, f"Using {event.get('toolName') or event.get('tool') or 'tool'}")
         elif event_type == "tool_execution_end":
             add_task_progress(task, f"Finished {event.get('toolName') or event.get('tool') or 'tool'}")
+        elif event_type == "broker_exit":
+            task["rpcError"] = "Rootless task broker exited"
+            add_task_progress(task, "Isolated task runtime failed")
 
 
 def monitor_task(task_id, before):
@@ -447,10 +478,14 @@ def monitor_task(task_id, before):
     log_lines = []
     timed_out = False
     stdin_closed = False
+    completed_deadline = None
     while process.poll() is None:
         if time.monotonic() >= deadline:
             timed_out = True
             os.killpg(process.pid, signal.SIGTERM)
+            break
+        if completed_deadline and time.monotonic() >= completed_deadline:
+            process.terminate()
             break
         ready, _, _ = select.select([process.stdout], [], [], 1)
         if not ready:
@@ -479,6 +514,7 @@ def monitor_task(task_id, before):
             process.stdin.close()
             process.stdin = None
             stdin_closed = True
+            completed_deadline = time.monotonic() + 5
     try:
         remainder, _ = process.communicate(timeout=10)
     except subprocess.TimeoutExpired:
@@ -493,10 +529,14 @@ def monitor_task(task_id, before):
             log_lines.append(line + "\n")
     output = "".join(log_lines[-200:])
     with TASK_LOCK:
-        rpc_error = TASKS.get(task_id, {}).get("rpcError")
-    status = "timed_out" if timed_out else "failed" if rpc_error else "completed" if process.returncode == 0 else "failed"
-    after = {path.stem for path in legacy.SESSIONS.glob("*.jsonl")}
-    created = sorted(after - before, key=lambda value: (legacy.SESSIONS / f"{value}.jsonl").stat().st_mtime, reverse=True)
+        current = TASKS.get(task_id, {})
+        rpc_error = current.get("rpcError")
+        agent_ended = bool(current.get("agentEnded"))
+    stopped = bool(current.get("stopRequested"))
+    status = "timed_out" if timed_out else "stopped" if stopped else "failed" if rpc_error else "completed" if agent_ended or process.returncode == 0 else "failed"
+    root = session_root(task.get("owner", INITIAL_ADMIN))
+    after = {path.stem for path in root.glob("*.jsonl")}
+    created = sorted(after - before, key=lambda value: (root / f"{value}.jsonl").stat().st_mtime, reverse=True)
     with TASK_LOCK:
         task = TASKS[task_id]
         if not task.get("sessionId") and created:
@@ -552,8 +592,8 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITI
     route = route_task(message, settings)
     details = model_details(route["provider"], route["model"])
     task_id = uuid.uuid4().hex
-    if os.environ.get("PRIME_TASK_CONTAINER_IMAGE") == "1":
-        command = container_runner.command(task_id, owner, authorization or {}, route["provider"], route["model"], thinking, session_id, fork)
+    if container_mode():
+        command = container_runner.broker_command(task_id, owner, authorization or {}, route["provider"], route["model"], thinking, session_id, fork)
         task_cwd = legacy.HOME
         task_env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin")}
     else:
@@ -564,7 +604,7 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITI
             command.extend(["--fork" if fork else "--resume", session_id])
         task_cwd = legacy.HOME / "prime-dgx-agent"
         task_env = prime_env()
-    before = {path.stem for path in legacy.SESSIONS.glob("*.jsonl")}
+    before = {path.stem for path in session_root(owner).glob("*.jsonl")}
     process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=task_cwd, env=task_env, start_new_session=True)
     task = {"id": task_id, "sessionId": session_id if not fork else None, "agentSessionId": session_id if session_id and not fork else None, "rpcReady": True, "rpcResponses": {}, "owner": owner, "authorization": authorization or {}, "topic": legacy.safe_topic(message) or "Native task", **route, "thinking": thinking, "contextWindow": details.get("contextWindow"), "maxTokens": details.get("maxTokens"), "status": "running", "progress": "Starting Prime", "progressEvents": [{"at": now_iso(), "label": "Request received"}], "liveResponse": "", "started": now_iso(), "startedEpoch": time.time(), "pid": process.pid, "process": process, "logAvailable": False}
     with TASK_LOCK:
@@ -613,6 +653,7 @@ def stop_native_task(task_id, owner=INITIAL_ADMIN):
     with TASK_LOCK:
         current = TASKS.get(task_id)
         if current:
+            current["stopRequested"] = True
             add_task_progress(current, "Stopping task")
     return {"stopping": True, "id": task_id}
 
@@ -624,6 +665,21 @@ def message_native_task(task_id, message, mode="steer", owner=INITIAL_ADMIN):
     if mode not in {"steer", "follow-up"}:
         raise ValueError("Unsupported task message mode")
     request_id = f"task-message-{uuid.uuid4().hex}"
+    if container_mode():
+        prompt_id = f"prompt-{task_id}"
+        deadline = time.monotonic() + 10
+        initial = None
+        while time.monotonic() < deadline:
+            with TASK_LOCK:
+                current = TASKS.get(task_id)
+                if not current or current.get("status") != "running":
+                    raise ValueError("Task is no longer running")
+                initial = current.get("rpcResponses", {}).get(prompt_id)
+            if initial:
+                break
+            time.sleep(0.02)
+        if not initial or not initial.get("success", False):
+            raise RuntimeError("Prime has not accepted the initial task yet")
     with TASK_LOCK:
         task = TASKS.get(task_id)
         if not task or task.get("owner", INITIAL_ADMIN) != owner or task.get("status") != "running":
@@ -663,7 +719,7 @@ def message_native_task(task_id, message, mode="steer", owner=INITIAL_ADMIN):
 def update_conversation(session_id, action, value=None, user=INITIAL_ADMIN):
     if not valid_id(session_id):
         raise ValueError("Conversation not found")
-    legacy.session_path(session_id)
+    legacy.session_path(session_id, session_root(user))
     require_conversation_owner(session_id, user)
     data = metadata()
     row = data.setdefault("conversations", {}).setdefault(session_id, {})
@@ -675,7 +731,8 @@ def update_conversation(session_id, action, value=None, user=INITIAL_ADMIN):
         title = re.sub(r"\s+", " ", str(value)).strip()[:96]
         if not title:
             raise ValueError("Title is required")
-        subprocess.run([str(legacy.PRIME_AGENT), "rename", session_id, title, "--json"], timeout=12, check=False, capture_output=True, env=prime_env())
+        if not container_mode():
+            subprocess.run([str(legacy.PRIME_AGENT), "rename", session_id, title, "--json"], timeout=12, check=False, capture_output=True, env=prime_env())
         row["title"] = title
     else:
         raise ValueError("Unsupported conversation action")
@@ -737,7 +794,7 @@ def purge_user_cache(username):
     moved_sessions = moved_files = moved_logs = 0
     for session_id in owned_sessions:
         try:
-            source = legacy.session_path(session_id)
+            source = legacy.session_path(session_id, session_root(username))
             os.replace(source, recovery / source.name)
             moved_sessions += 1
         except ValueError:
@@ -1112,7 +1169,9 @@ class Handler(legacy.Handler):
             elif path == "/api/conversations/delete":
                 session_id = str(payload.get("id", ""))
                 require_conversation_owner(session_id, user)
-                self.send_json(200, legacy.delete_conversation(session_id))
+                with TASK_LOCK:
+                    active_ids = {value for task in TASKS.values() if task.get("owner") == user and task.get("status") == "running" for value in (task.get("sessionId"), task.get("agentSessionId")) if value}
+                self.send_json(200, legacy.delete_conversation(session_id, session_root(user), session_trash(user), active_ids))
             elif path == "/api/conversations/duplicate":
                 authorization = task_policy.authorize_task({"executionMode": "deny"}, role)
                 self.send_json(202, {"task": launch_task("Continue this fork with a concise recap of the inherited context.", str(payload.get("id", "")), True, owner=user, authorization=authorization)})

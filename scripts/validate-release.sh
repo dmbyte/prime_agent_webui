@@ -17,12 +17,29 @@ required=(
   deploy/spark/nginx/prime-security.conf
   deploy/spark/update/update-prime-agent.sh
   deploy/spark/update/update-webui.sh
+  deploy/spark/container/Containerfile
+  deploy/spark/container/install-rootless.sh
+  deploy/spark/container/activate-rootless.sh
+  deploy/spark/container/create-rootless-backup.sh
+  deploy/spark/container/rollback-rootless.sh
+  deploy/spark/container/install-user-codex-credential.sh
+  deploy/spark/container/model_gateway.py
+  deploy/spark/container/runner_broker.py
+  deploy/spark/container/runner_client.py
+  deploy/spark/container/runner_launch.py
+  deploy/spark/systemd/prime-model-gateway.service
+  deploy/spark/systemd/prime-runner-broker.service
+  docs/releases/v0.3.0.md
 )
 for path in "${required[@]}"; do
   [[ -f $path ]] || { echo "Missing release file: $path" >&2; exit 1; }
 done
 
-bash -n install.sh deploy/spark/update/update-prime-agent.sh deploy/spark/update/update-webui.sh
+bash -n install.sh deploy/spark/update/update-prime-agent.sh deploy/spark/update/update-webui.sh \
+  deploy/spark/container/install-rootless.sh deploy/spark/container/activate-rootless.sh \
+  deploy/spark/container/create-rootless-backup.sh deploy/spark/container/rollback-rootless.sh \
+  deploy/spark/container/install-user-codex-credential.sh \
+  deploy/spark/container/prime-container-entrypoint.sh
 python3 -m compileall -q deploy/spark/dashboard
 python3 -m unittest discover -s deploy/spark/dashboard -p 'test*.py'
 
@@ -33,5 +50,5 @@ else
 fi
 
 grep -Fq 'docs/prime-webui-sample.jpg' README.md
-grep -Fq 'v0.2.0' README.md
+grep -Fq 'v0.3.0' README.md
 echo "Release validation passed."

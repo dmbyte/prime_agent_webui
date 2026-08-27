@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-08-26
-Wiki version: `v0080`
+Wiki version: `v0081`
 
 ## Project summary
 
@@ -21,8 +21,9 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   installer detects Debian, Red Hat, and SUSE families, installs the host-mode
   prerequisites, installs pinned Prime Agent 0.8.0, provisions private TLS,
   Nginx, dedicated WebUI authentication, and hardened user services, then
-  verifies telemetry and the unauthenticated 401 boundary. It does not change
-  the firewall or activate the rootless-container preview.
+  verifies telemetry and the unauthenticated 401 boundary. The separate Spark
+  rootless installer creates a recovery bundle, dedicated runner/gateway, pinned
+  images, and activation drop-in; neither installer changes the firewall.
 - Release validation: `scripts/validate-release.sh` checks required artifacts,
   shell and JavaScript syntax, Python compilation, and the full dashboard test
   suite. The public-facing sample screenshot contains only synthetic data.
@@ -30,15 +31,14 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   `cad/pi5-iuniker-inv001-case/`
 - Target Spark: SSH verified as `dbyte@172.16.253.231`; passwordless sudo works
 - Prime Agent: `0.8.0`, installed for `dbyte`; launcher `prime-dgx`
-- Rootless Podman 4.9.3 and its user-namespace/network/storage prerequisites are
-  installed on the Spark. A non-production candidate image
-  `localhost/prime-task-general:0.8.0` was built as `dbyte`; its digest is
-  `sha256:e6a7e19dafb90cc737775e0bca74e22e2e1e680853061142058616d30664eddf`
-  and its image ID is
-  `f29131cc8ae8aeceb31a7adac10d66748c81b7cf814f20a3cec5411b5b8991cc`.
-  The image reports Prime 0.8.0. Production WebUI tasks have not switched to
-  this image: the model/credential gateway, per-user migration, dedicated service
-  identity, remaining profile images, and end-to-end gates must pass first.
+- Rootless Podman 4.9.3 is active for production tasks under dedicated system
+  identity `prime-runner` (UID 995, private primary GID 982, supplementary
+  `prime-web` GID 1001) with subordinate UID/GID range `165536:65536`.
+  Persistent system services `prime-model-gateway` and `prime-runner-broker` are
+  enabled and active. Six production image references are protected by a
+  mode-0400 digest manifest: general `116c1a32…55e78`, development
+  `c8205f9a…29355`, CAD `baac6841…218b5`, finance `51939570…30d9a`,
+  network-operations `b770a23a…a356a`, and review `57a27838…8e39`.
 - Prime has a tracked, globally installed `software-security-review` skill. It
   discovers project capabilities first and conditionally audits applicable web,
   authentication, memory/resource, storage, command/agent, network, cryptography,
@@ -233,33 +233,62 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   dashboard, user units, Nginx configuration, authentication state, metadata,
   firewall rules, manifests, and 38 verified checksums. It predates Podman
   installation and all v0079 candidate work.
+- The authoritative pre-activation rootless recovery bundle is
+  `/var/backups/prime-rootless-v0081-20260826T161217-0500`. Its state archive,
+  warnings, user-unit, Podman-image, listener, and firewall manifests all pass
+  `SHA256SUMS`. The tracked rollback dry run reports `ROLLBACK_CHECK_OK` with no
+  active containers. Temporary isolation-test artifacts were moved recoverably
+  to root-only `/var/backups/prime-rootless-test-artifacts-20260826T185500-0500`.
 
-## Staged task-container migration
+## Production rootless task containers
 
 - The repository contains a server-enforced policy for `user`, `power_user`, and
   `admin` roles; general, development, CAD, finance, network-operations, and
   review profiles; restricted, Internet, LAN/VPN, and full-network choices; and
   role-bounded CPU, RAM, runtime, PID, open-file, and temporary-storage limits.
-- The deployed host-compatible WebUI now exposes profile, execution, and network
+- The deployed WebUI exposes profile, execution, and network
   choices. Shell/code
   execution defaults to a per-task confirmation, can be allowed for one task or
   the authenticated login, or denied. Prime's native `--no-tools` is applied to
-  denied host-mode tasks. LAN/VPN and full-network access require a separate
+  denied tasks. LAN/VPN and full-network access require a separate
   task-specific confirmation and are limited to power users and administrators.
-- The candidate runner creates a new rootless, read-only, capability-free,
+- The production runner creates a new rootless, read-only, capability-free,
   no-new-privileges container per task with private per-user agent/workspace
   mounts and hard resource/time limits. Restricted, Internet-proxy, and LAN-proxy
-  modes currently fail closed with no direct network; only confirmed full mode
-  is designed to use rootless user-mode networking. Host networking, privileged
+  modes fail closed with no direct network; only confirmed full mode uses
+  rootless user-mode networking. Host networking, privileged
   mode, the Podman socket, and host credential mounts are prohibited.
-- This path is feature-gated by `PRIME_TASK_CONTAINER_IMAGE=1` and is not enabled
-  in the deployed service. The active WebUI remains on the verified v0078 host
-  execution path while the gateway and migration are incomplete.
-- Rootless activation still requires a dedicated service identity, subordinate
-  UID/GID mappings, persistent user services, immutable profile images, the
-  authenticated model/provider credential gateway, per-user data migration,
-  network-policy enforcement, resource-limit tests, backup/restore validation,
-  and an end-to-end canary. Installation of Podman alone is not activation.
+- `PRIME_TASK_CONTAINER_IMAGE=1` is enabled in the API service. The hardened API
+  retains `NoNewPrivileges=yes` and `RestrictSUIDSGID=yes`; it neither invokes
+  Podman nor uses sudo. It sends validated requests over an abstract Unix socket
+  to `prime-runner-broker`, which authenticates the kernel peer UID against the
+  `prime-web` group. Rootless Podman's required `newuidmap`/`newgidmap` exception
+  exists only there: no-new-privileges and setuid restriction are disabled, the
+  capability bounding set contains only `CAP_SETUID`/`CAP_SETGID`, and ambient
+  capabilities remain empty. `/home` and `/root` are inaccessible to the broker.
+- Each WebUI account has its own mode-0700 Prime state and workspace. Only the
+  selected owner's state/workspace and network-mode gateway socket are mounted.
+  Session/trash ACLs allow the trusted API to catalog and recoverably delete that
+  owner's records without granting users cross-account access.
+- The credential/model gateway owns mode-0600 ChatGPT/Codex OAuth material and
+  proxies local Nemotron/Qwen over Unix sockets. A mode-0600 per-user auth file
+  overrides the global fallback. It rejects symlinks, unsafe ownership/modes and
+  oversized files, serializes refresh, refreshes by expiry and once on upstream
+  401, and never mounts real credentials in a task.
+- Current live validation passed Nemotron, Qwen, and GPT-5.4 Codex exact-response
+  canaries; persisted transcript/catalog, resume, 75-second in-flight steering,
+  and explicit stop canaries; temporary second-account catalog isolation and
+  recoverable deletion; and zero orphan containers. Live inspection proved an
+  8 GiB/4 CPU/256 PID task, read-only root, no-new-privileges, dropped
+  capabilities, network `none`, and owner-only mounts. Network canaries proved
+  restricted denial, public-only Internet access with private 403, LAN private
+  access (HTTP 302 from authenticated Nginx), and direct full-mode Internet.
+  The API retains each user's last verified catalog while Prime temporarily
+  protects its task-owned state tree, so active-task polling remains available;
+  nonzero broker exits become a safe failed-task status. The final deployed
+  restricted/no-tools canary returned exactly `FINAL_ROOTLESS_OK`, all three
+  services were active, unauthenticated HTTPS remained 401, no task containers
+  remained, and the recovery bundle passed its rollback dry check.
 - The official Prime 0.8.0 release artifact is pinned by SHA-256
   `f5b0093c7e0fddb73f94773d74383585456adfa84f12a4082d3098f23bb8fab6`.
   Prime's inherited package name is not published on npm; direct registry
@@ -269,8 +298,9 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 - The deployed API also bounds each RPC event at 256 KiB, cleans up a child and its
   task record if initial prompt delivery fails, writes stop/steering commands
   outside the global task lock, waits for Prime's explicit steering/follow-up
-  acknowledgement, and treats a rejected auxiliary RPC command separately from
-  an initial-prompt failure.
+  acknowledgement, waits for initial-prompt acceptance before steering to avoid a
+  startup race, labels user-aborted work `stopped`, and treats a rejected
+  auxiliary RPC command separately from an initial-prompt failure.
 
 ## Deployed architecture
 
@@ -480,11 +510,10 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   Nginx-supplied identity/role headers without authenticating the proxy. A local
   process can forge them; a non-mutating live request with fabricated admin
   headers returned 200 from `/api/admin`.
-- WebUI ownership metadata does not isolate the execution environment: native
-  Prime tasks and the authenticated Advanced console run as shared Linux user
-  `dbyte`, and the console is not restricted by WebUI role. Until process,
-  storage, and credential isolation is implemented, WebUI users must be treated
-  as mutually trusted. No remediation was made during the report-only review.
+- Native Prime tasks, storage, and gateway credentials are now account-isolated
+  rootless workloads. The optional Advanced console remains a shared `dbyte`
+  host shell and therefore must remain limited to trusted administrative use; it
+  is not equivalent to a task container.
 
 - The credential formerly present in conversation history has been redacted from
   the Spark, but it should still be revoked at OpenAI if it remains active.

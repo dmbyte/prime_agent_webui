@@ -58,3 +58,4 @@ only historical evidence: when a decision changes, mark the old record
 - [ADR-0051: Use Prime RPC for interactive WebUI tasks](0051-use-prime-rpc-for-interactive-webui-tasks.md)
 - [ADR-0052: Isolate WebUI work in policy-controlled rootless task containers](0052-rootless-per-task-execution.md)
 - [ADR-0053: Ship a portable, versioned host-mode installer before container activation](0053-portable-versioned-installation.md)
+- [ADR-0054: Activate a peer-authenticated rootless task runtime](0054-activate-peer-authenticated-rootless-runtime.md)

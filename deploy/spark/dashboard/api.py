@@ -295,10 +295,11 @@ def usage_summary(usage_paths=None):
     }
 
 
-def session_catalog():
+def session_catalog(session_root=None):
+    session_root = Path(session_root or SESSIONS)
     sessions = []
     try:
-        paths = sorted(SESSIONS.glob("*.jsonl"), key=lambda path: path.stat().st_mtime, reverse=True)
+        paths = sorted(session_root.glob("*.jsonl"), key=lambda path: path.stat().st_mtime, reverse=True)
     except OSError:
         paths = []
     for path in paths:
@@ -400,13 +401,14 @@ def live_session_ids():
         raise RuntimeError("Could not verify whether the conversation is active") from error
 
 
-def session_path(session_id):
+def session_path(session_id, session_root=None):
+    session_root = Path(session_root or SESSIONS)
     if not re.fullmatch(r"[A-Za-z0-9_-]{8,80}", session_id):
         raise ValueError("Invalid conversation identifier")
-    direct = SESSIONS / f"{session_id}.jsonl"
+    direct = session_root / f"{session_id}.jsonl"
     if direct.is_file() and not direct.is_symlink():
         return direct
-    for candidate in SESSIONS.glob("*.jsonl"):
+    for candidate in session_root.glob("*.jsonl"):
         try:
             if candidate.is_symlink() or not candidate.is_file():
                 continue
@@ -422,21 +424,26 @@ def session_path(session_id):
     raise ValueError("Conversation no longer exists")
 
 
-def delete_conversation(session_id):
+def delete_conversation(session_id, session_root=None, trash_root=None, active_ids=None):
+    session_root = Path(session_root or SESSIONS)
+    trash_root = Path(trash_root or SESSION_TRASH)
     if not re.fullmatch(r"[A-Za-z0-9_-]{8,80}", session_id):
         raise ValueError("Invalid conversation identifier")
     with DELETE_LOCK:
-        source = session_path(session_id)
+        source = session_path(session_id, session_root)
         storage_id = source.stem
-        if {session_id, storage_id} & live_session_ids():
+        active = set(active_ids) if active_ids is not None else live_session_ids()
+        if {session_id, storage_id} & active:
             raise RuntimeError("Stop and close the active conversation before deleting it")
         # Recheck immediately before the atomic move to reduce the resume/delete race.
-        if {session_id, storage_id} & live_session_ids():
+        active = set(active_ids) if active_ids is not None else live_session_ids()
+        if {session_id, storage_id} & active:
             raise RuntimeError("Conversation became active; deletion was cancelled")
-        SESSION_TRASH.mkdir(mode=0o700, parents=True, exist_ok=True)
-        os.chmod(SESSION_TRASH, 0o700)
+        trash_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if trash_root.stat().st_uid == os.geteuid():
+            os.chmod(trash_root, 0o700)
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-        target = SESSION_TRASH / f"{storage_id}.{stamp}.jsonl"
+        target = trash_root / f"{storage_id}.{stamp}.jsonl"
         os.replace(source, target)
     audit("conversation_deleted", session=session_id, storage=storage_id)
     return {"deleted": True, "recoverable": True, "id": session_id, "storageId": storage_id}

@@ -1,0 +1,36 @@
+[Unit]
+Description=Prime rootless task runner broker
+After=prime-model-gateway.service
+Requires=prime-model-gateway.service
+
+[Service]
+Type=simple
+User=prime-runner
+Group=prime-runner
+SupplementaryGroups=prime-web
+RuntimeDirectory=prime-runner
+RuntimeDirectoryMode=0750
+Environment=XDG_RUNTIME_DIR=/run/user/@RUNNER_UID@
+Environment=PRIME_WEB_OWNER=@WEB_OWNER@
+ExecStart=/usr/bin/python3 /usr/local/lib/prime-runner/runner_broker.py
+Restart=on-failure
+RestartSec=2
+# Rootless Podman requires the setuid newuidmap/newgidmap helpers. This
+# exception is confined to the dedicated unprivileged broker; the API and task
+# containers retain no-new-privileges and capability-free execution.
+NoNewPrivileges=no
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=no
+InaccessiblePaths=/home /root
+ReadWritePaths=/var/lib/prime-runner /run/prime-runner
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=no
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

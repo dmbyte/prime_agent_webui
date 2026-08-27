@@ -37,6 +37,26 @@ class ContainerRunnerTests(unittest.TestCase):
         self.assertIn("slirp4netns", joined)
         self.assertNotIn("--network host", joined)
 
+    def test_proxy_modes_mount_only_the_selected_user_gateway(self):
+        argv = self.build(policy(network="internet"))
+        joined = " ".join(argv)
+        self.assertIn("/gateway/alice/internet,dst=/run/prime-gateway,ro", joined)
+        self.assertNotIn("/gateway/alice/lan", joined)
+
+    def test_broker_command_crosses_only_validated_runner_boundary(self):
+        argv = container_runner.broker_command("a" * 32, "alice", policy(), "openai", "example", "low")
+        self.assertEqual(argv[0], "/usr/local/libexec/prime-runner-client")
+        self.assertEqual(len(argv), 2)
+
+    def test_production_manifest_requires_digest_pinned_profile(self):
+        with tempfile.TemporaryDirectory() as root:
+            manifest = os.path.join(root, "images.json")
+            with open(manifest, "w") as handle:
+                handle.write('{"general":"localhost/prime-task-general:0.8.0@sha256:' + 'a' * 64 + '"}')
+            with mock.patch.object(os, "getuid", return_value=1200), mock.patch.object(os, "getgid", return_value=1200):
+                argv = container_runner.command("a" * 32, "alice", policy(), "openai", "example", "low", storage_root=root, image_manifest=manifest)
+            self.assertTrue(any(value.endswith("@sha256:" + "a" * 64) for value in argv))
+
     def test_owner_cannot_escape_storage_root(self):
         with self.assertRaisesRegex(ValueError, "owner"):
             self.build(owner="../root")

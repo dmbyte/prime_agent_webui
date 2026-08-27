@@ -33,9 +33,9 @@ verified current state and enough history to understand or reverse changes.
 
 ## Status
 
-- Current wiki version: `v0080`
+- Current wiki version: `v0081`
 - Last verified: 2026-08-26
-- Project phase: portable v0.2.0 release with staged rootless-container migration
+- Project phase: production rootless-container runtime and v0.3.0 release
 
 ## Truth and precedence
 

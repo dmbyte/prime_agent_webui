@@ -3,6 +3,31 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-08-26 — v0081 — Activate production rootless task isolation
+
+- Created and verified root-only pre-activation recovery bundle
+  `/var/backups/prime-rootless-v0081-20260826T161217-0500` and added automatic
+  preinstall backup plus conversation-preserving rollback tooling.
+- Provisioned dedicated `prime-runner`, subordinate mappings, persistent model
+  gateway and peer-authenticated task broker, per-user state/workspaces, and six
+  digest-pinned profile images.
+- Kept the WebUI API fully sandboxed. Confined rootless Podman's approved
+  `newuidmap`/`newgidmap` exception to the broker with only `CAP_SETUID` and
+  `CAP_SETGID` in its bounding set and no ambient capabilities.
+- Activated restricted, public-Internet, LAN/VPN, and confirmed full-network
+  policy with rootless read-only, capability-free, bounded task containers.
+- Hardened global/per-user Codex credential fallback, file validation, serialized
+  OAuth refresh, and upstream-401 recovery; credentials never enter containers.
+- Corrected initial-prompt/steering startup ordering, stopped-task status, ACL
+  mask restoration, recoverable per-user trash ownership behavior, temporary
+  active-task catalog permission changes, and nonzero broker-exit reporting.
+- Validation passed 51 automated tests, Nemotron/Qwen/Codex canaries, persistence,
+  steering, stop, resume, temporary second-account isolation, live resource and
+  mount inspection, all network modes, zero-orphan cleanup, and rollback dry run.
+- Added [ADR-0054](decisions/0054-activate-peer-authenticated-rootless-runtime.md)
+  and immutable snapshot [v0081](versions/v0081.md). Release tag `v0.3.0` is the
+  intended source rollback point after publication.
+
 ## 2026-08-26 — v0080 — Publish portable WebUI release 0.2.0
 
 - Added a repository-root README with a synthetic screenshot, complete first-use

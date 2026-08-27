@@ -23,9 +23,9 @@ release-aware updates.
   effort control, and provider/model token and spend roll-ups.
 - Recoverable conversation deletion, isolated ownership metadata, uploads,
   activity logs, and administrative user lifecycle management.
-- Profile, execution, and network authorization controls. The rootless per-task
-  container runner remains a disabled preview until its credential gateway is
-  completed; the installer does not enable it.
+- Production rootless per-task execution under a dedicated service identity,
+  six immutable profile images, isolated per-user storage, a credential/model
+  gateway, four role-controlled network modes, and enforced resource limits.
 
 ## Supported systems
 
@@ -48,7 +48,7 @@ providers are used.
 Clone the release and run the installer as the account that should own Prime:
 
 ```bash
-git clone --branch v0.2.0 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
+git clone --branch v0.3.0 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
 cd prime_agent_webui
 ./install.sh --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
@@ -116,26 +116,43 @@ your service pack. If a package uses a service-pack-specific name, install its
 equivalent and use `--skip-packages`. DGX Spark's local NVFP4 recipes are not
 supported on SLES; use cloud or a remote OpenAI-compatible inference endpoint.
 
-### Optional rootless-container preparation
+### Rootless task-container installation
 
-The production release does not require Podman and does not enable container
-execution. To evaluate the gated rootless preview, install these separately:
+The base installer supports host-mode cloud/remote-model deployments. For the
+production DGX Spark configuration, install the rootless prerequisites after
+the base installer:
 
 ```bash
 # Ubuntu/Debian
-sudo apt-get install -y podman uidmap slirp4netns fuse-overlayfs
+sudo apt-get install -y podman uidmap slirp4netns fuse-overlayfs acl rsync
 
 # RHEL family
-sudo dnf install -y podman shadow-utils slirp4netns fuse-overlayfs
+sudo dnf install -y podman shadow-utils slirp4netns fuse-overlayfs acl rsync
 
 # SLES/openSUSE
-sudo zypper --non-interactive install podman shadow slirp4netns fuse-overlayfs
+sudo zypper --non-interactive install podman shadow slirp4netns fuse-overlayfs acl rsync
 ```
 
-Then verify subordinate UID/GID mappings, persistent user services, storage,
-network policy, credential brokering, and rollback as described in
-[ADR-0052](wiki/decisions/0052-rootless-per-task-execution.md). Do not turn on
-`PRIME_TASK_CONTAINER_IMAGE=1` until every acceptance gate passes.
+On the Spark, make sure the tracked Nemotron and Qwen loopback services are
+healthy, then provision and activate the complete rootless path as the WebUI
+owner:
+
+```bash
+./deploy/spark/container/install-rootless.sh
+./deploy/spark/container/activate-rootless.sh
+./deploy/spark/container/rollback-rootless.sh --check \
+  /var/backups/prime-rootless-v0081-20260826T161217-0500
+```
+
+The installer first creates and verifies a root-only recovery bundle, then
+creates `prime-runner`, subordinate mappings, persistent model
+gateway and task broker services, six digest-pinned images, and protected
+credential/storage roots. Activation migrates existing conversations without
+deleting newer rootless data and enables the API feature flag. See the
+[rootless operations guide](deploy/spark/container/README.md) and
+[ADR-0052](wiki/decisions/0052-rootless-per-task-execution.md). Pass the recovery
+path printed by the installer to the rollback check; the example path above is
+specific to the reference Spark deployment.
 
 ## Firewall examples
 
@@ -183,6 +200,7 @@ For a DGX Spark, use the tracked Nemotron and Qwen configurations under
 systemctl --user status prime-auth prime-dashboard-api
 systemctl --user restart prime-auth prime-dashboard-api
 journalctl --user -u prime-dashboard-api -f
+systemctl status prime-model-gateway prime-runner-broker
 prime-web-password
 ```
 
@@ -200,6 +218,9 @@ Configuration and data live under:
 - `~/prime-dgx-agent/` — workspace and uploads
 - `~/.prime/agent/` — Prime sessions/settings and WebUI metadata
 - `~/.config/prime-agent/web-auth.json` — mode-0600 password records
+- `/var/lib/prime-runner/users/USER/` — isolated Prime state and workspace
+- `/var/lib/prime-runner/credentials/` — protected global/per-user gateway credentials
+- `/var/lib/prime-runner/image-digests.json` — approved immutable profile images
 - `/var/www/prime-agent/` — static browser assets
 - `/etc/nginx/prime-agent-{ca,tls}/` — private CA and server certificate
 
@@ -219,7 +240,7 @@ For a manual upgrade:
 
 ```bash
 git fetch --tags origin
-git checkout v0.2.0
+git checkout v0.3.0
 ./install.sh --skip-packages --skip-prime --skip-password \
   --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
@@ -227,11 +248,13 @@ git checkout v0.2.0
 ## Security and limitations
 
 Read [Security posture](wiki/SECURITY.md) and
-[ADR-0052](wiki/decisions/0052-rootless-per-task-execution.md) before enabling
-untrusted users. In v0.2.0, WebUI users have isolated application ownership but
-Prime tasks still execute under the installation account. Treat users as trusted
-until the rootless per-task gateway migration is complete. Do not enable
-`PRIME_TASK_CONTAINER_IMAGE=1` in production yet.
+[ADR-0052](wiki/decisions/0052-rootless-per-task-execution.md). In v0.3.0,
+Prime tasks execute as rootless containers under `prime-runner`, with separate
+per-user state/workspaces and no host credentials. The broker alone permits the
+`newuidmap`/`newgidmap` setuid helpers and bounds them to `CAP_SETUID` and
+`CAP_SETGID`; the WebUI API retains no-new-privileges and task containers drop
+all capabilities. Full-network mode remains intentionally powerful and is
+limited to confirmed power-user/administrator tasks.
 
 This project provides research and workflow tooling, not investment advice or an
 unattended live-trading system. Keep broker credentials and deterministic risk

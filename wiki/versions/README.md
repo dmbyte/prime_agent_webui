@@ -6,6 +6,7 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0081](v0081.md) | 2026-08-26 | Activated peer-authenticated rootless task isolation, gateway, policy, and rollback |
 | [v0080](v0080.md) | 2026-08-26 | Published portable v0.2.0 install and operations path while retaining rootless gates |
 | [v0079](v0079.md) | 2026-08-26 | Staged policy-controlled rootless per-task execution and built the candidate image |
 | [v0078](v0078.md) | 2026-08-26 | Verified immediate echo, live progress, and RPC steering end to end |

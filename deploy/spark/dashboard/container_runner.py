@@ -3,6 +3,8 @@
 
 import os
 import re
+import base64
+import json
 from pathlib import Path
 
 
@@ -17,6 +19,7 @@ PROFILE_IMAGES = {
     "network-operations": "localhost/prime-task-network-operations:0.8.0",
     "review": "localhost/prime-task-review:0.8.0",
 }
+SAFE_IMAGE = re.compile(r"localhost/prime-task-[a-z-]+:0\.8\.0@sha256:[a-f0-9]{64}\Z")
 
 
 def _safe_path(root, child):
@@ -31,15 +34,16 @@ def prepare_user_storage(root, owner):
     if not SAFE_USER.fullmatch(str(owner)):
         raise ValueError("Invalid task owner")
     user_root = _safe_path(Path(root), owner)
-    agent = user_root / "agent"
+    prime = user_root / "prime"
+    agent = prime / "agent"
     workspace = user_root / "workspace"
-    for path in (user_root, agent, workspace):
-        path.mkdir(mode=0o700, parents=True, exist_ok=True)
-        os.chmod(path, 0o700)
+    for path, mode in ((user_root, 0o700), (prime, 0o700), (agent, 0o700), (workspace, 0o700)):
+        path.mkdir(mode=mode, parents=True, exist_ok=True)
+        os.chmod(path, mode)
     return agent, workspace
 
 
-def command(task_id, owner, authorization, provider, model, thinking, session_id=None, fork=False, storage_root=None):
+def command(task_id, owner, authorization, provider, model, thinking, session_id=None, fork=False, storage_root=None, image_manifest=None):
     if not SAFE_TASK.fullmatch(str(task_id)):
         raise ValueError("Invalid task identifier")
     if session_id and not SAFE_SESSION.fullmatch(str(session_id)):
@@ -48,6 +52,11 @@ def command(task_id, owner, authorization, provider, model, thinking, session_id
     image = PROFILE_IMAGES.get(profile)
     if not image:
         raise ValueError("Unsupported task container profile")
+    if image_manifest:
+        configured = json.loads(Path(image_manifest).read_text()).get(profile)
+        if not configured or not SAFE_IMAGE.fullmatch(configured):
+            raise ValueError("Profile image is not pinned by an approved digest")
+        image = configured
     limits = authorization.get("limits") or {}
     memory = int(limits["memoryGiB"])
     cpus = int(limits["cpus"])
@@ -70,8 +79,9 @@ def command(task_id, owner, authorization, provider, model, thinking, session_id
         "--user", f"{uid}:{gid}", "--memory", f"{memory}g", "--cpus", str(cpus),
         "--pids-limit", str(pids), "--ulimit", f"nofile={open_files}:{open_files}",
         "--tmpfs", f"/tmp:rw,noexec,nosuid,nodev,size={temporary}g,mode=1777",
-        "--mount", f"type=bind,src={agent},dst=/home/prime/.prime/agent,rw",
+        "--mount", f"type=bind,src={agent.parent},dst=/home/prime/.prime,rw",
         "--mount", f"type=bind,src={workspace},dst=/workspace,rw",
+        "--mount", f"type=bind,src={storage_root.parent / 'gateway' / owner / network},dst=/run/prime-gateway,ro",
         "--env", "HOME=/home/prime", "--workdir", "/workspace", image,
         "--cwd", "/workspace", "--mode", "rpc", "--provider", str(provider),
         "--model", str(model), "--thinking", str(thinking),
@@ -82,3 +92,10 @@ def command(task_id, owner, authorization, provider, model, thinking, session_id
         argv.extend(["--fork" if fork else "--resume", str(session_id)])
     return argv
 
+
+def broker_command(task_id, owner, authorization, provider, model, thinking, session_id=None, fork=False):
+    request = {"taskId": task_id, "owner": owner, "authorization": authorization,
+               "provider": provider, "model": model, "thinking": thinking,
+               "sessionId": session_id, "fork": bool(fork)}
+    encoded = base64.urlsafe_b64encode(json.dumps(request, separators=(",", ":")).encode()).decode()
+    return ["/usr/local/libexec/prime-runner-client", encoded]

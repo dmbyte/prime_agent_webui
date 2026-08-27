@@ -1,6 +1,23 @@
 # Prime WebUI
 
-Last verified: 2026-08-25
+Last verified: 2026-08-26
+
+## Rootless task execution
+
+Production conversations launch a fresh rootless Podman container through a
+peer-authenticated local broker. The selected profile, execution approval,
+network mode, model, and effort determine the immutable image and server-enforced
+limits. Restricted is the default; Internet excludes private addresses, LAN/VPN
+permits private destinations, and full rootless networking is available only to
+confirmed power-user/administrator tasks. Stop, steering, follow-up, and resume
+use Prime's RPC stream through the broker.
+
+Conversation state and workspaces live under account-specific
+`/var/lib/prime-runner/users/USER/` roots. The credential/model gateway uses a
+global ChatGPT/Codex credential unless a mode-0600 per-user override has been
+provisioned. Credentials are never returned to the UI or mounted into tasks.
+The optional Advanced console remains a shared host shell and is not equivalent
+to an isolated task container.
 
 ## User experience
 
@@ -16,6 +33,10 @@ The default view is a native chat surface rather than an embedded terminal. It
 polls persisted Prime JSONL messages while work runs and safely renders headings,
 lists, and fenced code. The optional **Advanced console** opens ttyd in a dialog;
 normal chat actions never send attach commands to ttyd.
+If Prime temporarily tightens its task-state directory permissions while a
+container is active, the API serves that user's last successfully read catalog
+instead of failing the state poll. A nonzero launcher exit also produces a safe
+failed-task event rather than a false completion.
 
 A newly submitted message is rendered immediately with its delivery state. While
 the task runs, a live assistant card shows bounded safe lifecycle/tool events,

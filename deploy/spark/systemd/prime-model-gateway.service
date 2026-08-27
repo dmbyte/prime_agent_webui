@@ -1,0 +1,23 @@
+[Unit]
+Description=Prime task credential and model gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=prime-runner
+Group=prime-runner
+Environment=PRIME_GATEWAY_ROOT=/var/lib/prime-runner
+Environment=PRIME_GATEWAY_USERS=dbyte
+ExecStart=/usr/bin/python3 /usr/local/lib/prime-runner/model_gateway.py
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/prime-runner
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

@@ -73,20 +73,24 @@ Spark IP, hostname, localhost, and loopback. Clients must install the downloadab
 - Upload archives reject traversal and links. Active-content previews are blocked;
   allowed PDF/text frames are sandboxed. Retention requires explicit confirmation.
 
-## Confirmed review gaps
+## Rootless remediation and residual boundaries
 
 - The loopback dashboard API treats `X-Prime-User` and `X-Prime-Role` as trusted
   proxy assertions but does not authenticate Nginx itself. Local processes can
   bypass Nginx and forge those headers; a read-only request using fabricated
   administrator headers returned HTTP 200 from `/api/admin` on 2026-08-26.
-- Per-user ownership enforcement exists in the WebUI APIs, but native Prime tasks
-  and the writable Advanced console execute as shared OS account `dbyte` with a
-  common home and agent environment. Nginx requires a valid session for the
-  console but does not require the admin role. These execution paths are not a
-  tenant boundary, so all enabled WebUI users must currently be mutually trusted.
-- The review was explicitly report-only. No security control was changed. The
-  recommended direction is authenticated/permissioned backend IPC, admin-only
-  console access, and per-user process/storage/credential sandboxing.
+- Native Prime tasks now run as fresh rootless containers under dedicated
+  `prime-runner`, with per-user state/workspaces, digest-pinned profiles, no host
+  credentials, no Podman socket, read-only roots, dropped capabilities,
+  no-new-privileges, resource limits, and role-confirmed network policy. A
+  peer-authenticated abstract Unix broker replaces API-to-sudo execution.
+- Rootless Podman requires `newuidmap`/`newgidmap`; only the broker disables
+  no-new-privileges/setuid restriction and bounds available capabilities to
+  `CAP_SETUID`/`CAP_SETGID`, with no ambient capabilities. The API retains both
+  restrictions and `/home` plus `/root` are inaccessible to the broker.
+- The writable Advanced console still executes as shared OS account `dbyte` and
+  is not a tenant boundary. It must remain limited to trusted administrative use;
+  ordinary work should use isolated task containers.
 - The installed generic security-review skill's final tools-disabled regression
   independently reproduced both confirmed boundaries with concrete attack paths
   after its semantic and account-awareness refinements.
@@ -115,7 +119,8 @@ OpenJDK 8, Vim, and dependencies), and fail2ban was installed. Validation passed
 - all Prime/dashboard/Nginx/fail2ban/model services active;
 - no NFS export or rpcbind/NFS listener;
 - unauthenticated HTTPS redirects to the login form and the broker returns 401;
-- seven upload/path/quota/archive tests plus JavaScript and shell checks pass;
+- 51 API/auth/storage/policy/gateway/container tests plus JavaScript and shell
+  checks pass;
 - no remaining upgradable package was reported.
 
 During hardening, `RestrictAddressFamilies` prevented ttyd from resolving the
@@ -168,6 +173,16 @@ The immediate pre-v0056 PAM broker, unit, policy, and login page are stored
 root-only with checksums at:
 
 `/var/backups/prime-local-auth-v0056-20260825T170500-0500`
+
+The authoritative pre-rootless activation state is stored root-only with a
+verified checksum manifest at:
+
+`/var/backups/prime-rootless-v0081-20260826T161217-0500`
+
+`deploy/spark/container/rollback-rootless.sh --check BUNDLE` validates it without
+mutation. `--apply BUNDLE` preserves post-activation conversations, restores the
+pre-rootless API/unit, disables the broker/gateway, and creates a fresh backup of
+the state it replaces.
 
 Prefer restoring only the affected file or service. Restoring the NFS export,
 default Nginx site, wildcard Hermes listener, or unredacted transcript would
