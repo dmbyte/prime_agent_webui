@@ -20,7 +20,7 @@ WebUI configuration:
 - A root-only private CA signs the WebUI certificate. Only its public certificate
   is copied into the authenticated static site for client trust installation.
 
-The root-only rollback bundle created before deployment is documented in the
-corresponding wiki version. Restore individual files from that bundle, reload
-systemd/Nginx as appropriate, and verify listeners before re-enabling any
-network service.
+The rootless installer prints the path to its root-only rollback bundle. Verify
+it with `deploy/spark/container/rollback-rootless.sh --check BUNDLE` before any
+restore. Restore individual files from the bundle, reload systemd/Nginx as
+appropriate, and verify listeners before re-enabling any network service.

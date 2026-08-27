@@ -89,7 +89,7 @@ sudo apt-get install -y nginx openssl python3 curl git
 
 DGX Spark local Nemotron/Qwen hosting additionally requires NVIDIA's supported
 Ubuntu image, driver/container stack, Docker, and the NVFP4 model artifacts. See
-[the Spark deployment guide](wiki/PRIME_DEPLOYMENT.md); do not apply those GPU
+[the Spark deployment guide](deploy/spark/README.md); do not apply those GPU
 steps to ordinary Ubuntu/Debian hosts.
 
 ### RHEL, Rocky, AlmaLinux, CentOS Stream, and Fedora
@@ -149,8 +149,7 @@ creates `prime-runner`, subordinate mappings, persistent model
 gateway and task broker services, six digest-pinned images, and protected
 credential/storage roots. Activation migrates existing conversations without
 deleting newer rootless data and enables the API feature flag. See the
-[rootless operations guide](deploy/spark/container/README.md) and
-[ADR-0052](wiki/decisions/0052-rootless-per-task-execution.md). Pass the recovery
+[rootless operations guide](deploy/spark/container/README.md). Pass the recovery
 path printed by the installer to the rollback check; the example path above is
 specific to the reference Spark deployment.
 
@@ -247,8 +246,8 @@ git checkout v0.3.0
 
 ## Security and limitations
 
-Read [Security posture](wiki/SECURITY.md) and
-[ADR-0052](wiki/decisions/0052-rootless-per-task-execution.md). In v0.3.0,
+Read the [security hardening guide](deploy/spark/security/README.md) and
+[rootless operations guide](deploy/spark/container/README.md). In v0.3.0,
 Prime tasks execute as rootless containers under `prime-runner`, with separate
 per-user state/workspaces and no host credentials. The broker alone permits the
 `newuidmap`/`newgidmap` setuid helpers and bounds them to `CAP_SETUID` and
@@ -268,9 +267,9 @@ node --check deploy/spark/dashboard/app-v2.js
 bash -n install.sh deploy/spark/update/update-prime-agent.sh
 ```
 
-The durable implementation history is in [the project wiki](wiki/README.md).
-Every material change must update Current State, CHANGELOG, an ADR when needed,
-and the next immutable version snapshot.
+Run `./scripts/validate-release.sh` before publishing a change. Keep operational
+history, private system notes, CAD projects, and specialized agent skills outside
+the deployable WebUI repository.
 
 ## License
 

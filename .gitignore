@@ -9,3 +9,12 @@ __pycache__/
 *.pem
 *.key
 *.crt
+
+# Production-local memory and specialized agent artifacts. Keep these on the
+# installed system, never in the deployable WebUI repository.
+/AGENTS.md
+/wiki/
+/cad/
+/deploy/spark/prime/AGENTS.md
+/deploy/spark/prime/EVALS.md
+/deploy/spark/prime/skills/
