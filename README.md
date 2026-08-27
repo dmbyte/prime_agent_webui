@@ -11,6 +11,13 @@ release-aware updates.
 > The screenshot contains synthetic sample data. No user conversations or
 > credentials are included.
 
+## Repository scope
+
+This repository contains only the files needed to install, operate, validate,
+and update Prime Agent WebUI and its service helpers. Production conversations,
+system history, private operating notes, CAD projects, and locally refined agent
+skills belong outside the repository and are excluded from version control.
+
 ## What this release includes
 
 - Dedicated WebUI passwords with `admin`, `power_user`, and `user` roles; Linux
@@ -48,7 +55,7 @@ providers are used.
 Clone the release and run the installer as the account that should own Prime:
 
 ```bash
-git clone --branch v0.3.0 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
+git clone --branch v0.3.1 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
 cd prime_agent_webui
 ./install.sh --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
@@ -239,7 +246,7 @@ For a manual upgrade:
 
 ```bash
 git fetch --tags origin
-git checkout v0.3.0
+git checkout v0.3.1
 ./install.sh --skip-packages --skip-prime --skip-password \
   --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
@@ -247,7 +254,7 @@ git checkout v0.3.0
 ## Security and limitations
 
 Read the [security hardening guide](deploy/spark/security/README.md) and
-[rootless operations guide](deploy/spark/container/README.md). In v0.3.0,
+[rootless operations guide](deploy/spark/container/README.md). In v0.3.1,
 Prime tasks execute as rootless containers under `prime-runner`, with separate
 per-user state/workspaces and no host credentials. The broker alone permits the
 `newuidmap`/`newgidmap` setuid helpers and bounds them to `CAP_SETUID` and

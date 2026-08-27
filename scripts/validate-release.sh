@@ -29,7 +29,7 @@ required=(
   deploy/spark/container/runner_launch.py
   deploy/spark/systemd/prime-model-gateway.service
   deploy/spark/systemd/prime-runner-broker.service
-  docs/releases/v0.3.0.md
+  docs/releases/v0.3.1.md
 )
 for path in "${required[@]}"; do
   [[ -f $path ]] || { echo "Missing release file: $path" >&2; exit 1; }
@@ -50,5 +50,5 @@ else
 fi
 
 grep -Fq 'docs/prime-webui-sample.jpg' README.md
-grep -Fq 'v0.3.0' README.md
+grep -Fq 'v0.3.1' README.md
 echo "Release validation passed."
