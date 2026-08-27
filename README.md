@@ -67,6 +67,28 @@ Do **not** run `install.sh` as root. It asks for sudo only for OS packages,
 private TLS, Nginx, and persistent user-service login. It then prompts for the
 initial WebUI password; use at least 12 characters.
 
+### Set the WebUI password
+
+Prime WebUI does **not** authenticate with PAM, `/etc/shadow`, or a Linux account
+password. The installer creates a separate salted password record and normally
+runs the password tool automatically. The initial WebUI username defaults to the
+name of the non-root account that ran the installer, but that name is only a
+WebUI identifier—it does not enable system-account authentication.
+
+If installation used `--skip-password`, or to rotate the password later, run
+the installed tool as the WebUI owner without `sudo`:
+
+```bash
+~/.local/bin/prime-web-password
+systemctl --user restart prime-auth.service
+```
+
+Enter and confirm a password of at least 12 characters at the masked prompts.
+The tool stores only a salted scrypt record in
+`~/.config/prime-agent/web-auth.json` with mode `0600`; it does not read or
+change the Linux password. Then sign in at `https://ADDRESS:8443` using the
+displayed WebUI username and the password you just set.
+
 The installer deliberately does not modify the firewall. When it finishes, open
 `https://ADDRESS:8443`, download `prime-webui-ca.crt`, and install that private CA
 on each trusted client.
@@ -185,8 +207,9 @@ The supplied Nginx configuration independently allows loopback, RFC1918, and
 
 ## First use
 
-1. Sign in with the Linux username used for installation and the dedicated
-   WebUI password.
+1. Sign in with the WebUI username created during installation (initially the
+   installer account's name) and the dedicated password set by
+   `prime-web-password`. This is not PAM or Linux-password authentication.
 2. Open **Settings → Add provider** to configure an API-key or custom
    OpenAI-compatible provider. Secrets are accepted write-only and are never
    returned to the browser.

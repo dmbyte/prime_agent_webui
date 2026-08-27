@@ -51,4 +51,6 @@ fi
 
 grep -Fq 'docs/prime-webui-sample.jpg' README.md
 grep -Fq 'v0.3.1' README.md
+grep -Fq 'does **not** authenticate with PAM' README.md
+grep -Fq 'prime-web-password' README.md
 echo "Release validation passed."
