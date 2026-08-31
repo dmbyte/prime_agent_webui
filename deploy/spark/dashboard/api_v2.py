@@ -285,6 +285,8 @@ def conversation_catalog(query="", include_archived=False, user=INITIAL_ADMIN):
         if extra.get("owner", INITIAL_ADMIN) != user:
             continue
         row.update({"pinned": bool(extra.get("pinned")), "archived": bool(extra.get("archived"))})
+        if isinstance(extra.get("taskPolicy"), dict):
+            row["taskPolicy"] = dict(extra["taskPolicy"])
         if extra.get("thinking"):
             row["thinking"] = extra["thinking"]
         if extra.get("routeProvider") == row.get("provider") and extra.get("routeModel") == row.get("model"):
@@ -668,10 +670,25 @@ def store_task_route(task):
             "routeReason": task.get("routeReason"),
             "owner": task.get("owner", INITIAL_ADMIN),
         })
+        if task.get("persistPolicyOnSessionCreate") and isinstance(task.get("policyPreference"), dict):
+            row["taskPolicy"] = dict(task["policyPreference"])
         legacy.atomic_json(META, data)
 
 
-def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITIAL_ADMIN, authorization=None):
+def policy_preference(payload, role):
+    payload = payload if isinstance(payload, dict) else {}
+    role = task_policy.normalize_role(role)
+    profile = str(payload.get("profile") or "general")
+    execution = str(payload.get("executionMode") or "prompt")
+    network = str(payload.get("networkMode") or "restricted")
+    if profile not in task_policy.PROFILES or execution not in task_policy.EXECUTION_MODES or network not in task_policy.NETWORK_MODES:
+        raise ValueError("Unsupported conversation policy")
+    if (profile == "network-operations" or network in {"lan", "full"}) and role not in {"power_user", "admin"}:
+        raise ValueError("This conversation policy requires power-user or administrator access")
+    return {"profile": profile, "executionMode": execution, "networkMode": network}
+
+
+def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITIAL_ADMIN, authorization=None, policy=None):
     message = str(message).strip()
     if not message or len(message) > 100000:
         raise ValueError("Message must contain between 1 and 100,000 characters")
@@ -707,7 +724,7 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITI
     before = session_stems(owner)
     process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=task_cwd, env=task_env, start_new_session=True)
     started = now_iso()
-    task = {"id": task_id, "sessionId": session_id if not fork else None, "agentSessionId": session_id if session_id and not fork else None, "rpcReady": True, "rpcResponses": {}, "owner": owner, "authorization": authorization or {}, "topic": legacy.safe_topic(message) or "Native task", **route, "thinking": thinking, "contextWindow": details.get("contextWindow"), "maxTokens": details.get("maxTokens"), "status": "running", "progress": "Starting Prime", "progressEvents": [{"at": started, "label": "Request received"}], "runtimeEvents": [{"at": started, "kind": "request", "label": "Request received"}], "liveLog": [], "liveLogBytes": 0, "liveResponse": "", "started": started, "startedEpoch": time.time(), "pid": process.pid, "process": process, "logAvailable": False}
+    task = {"id": task_id, "sessionId": session_id if not fork else None, "agentSessionId": session_id if session_id and not fork else None, "rpcReady": True, "rpcResponses": {}, "owner": owner, "authorization": authorization or {}, "policyPreference": policy or {}, "persistPolicyOnSessionCreate": not bool(session_id) or fork, "topic": legacy.safe_topic(message) or "Native task", **route, "thinking": thinking, "contextWindow": details.get("contextWindow"), "maxTokens": details.get("maxTokens"), "status": "running", "progress": "Starting Prime", "progressEvents": [{"at": started, "label": "Request received"}], "runtimeEvents": [{"at": started, "kind": "request", "label": "Request received"}], "liveLog": [], "liveLogBytes": 0, "liveResponse": "", "started": started, "startedEpoch": time.time(), "pid": process.pid, "process": process, "logAvailable": False}
     with TASK_LOCK:
         TASKS[task_id] = task
     with META_LOCK:
@@ -817,7 +834,7 @@ def message_native_task(task_id, message, mode="steer", owner=INITIAL_ADMIN):
     return {"delivered": True, "id": task_id, "mode": mode}
 
 
-def update_conversation(session_id, action, value=None, user=INITIAL_ADMIN):
+def update_conversation(session_id, action, value=None, user=INITIAL_ADMIN, role="user"):
     if not valid_id(session_id):
         raise ValueError("Conversation not found")
     legacy.session_path(session_id, session_root(user))
@@ -835,6 +852,8 @@ def update_conversation(session_id, action, value=None, user=INITIAL_ADMIN):
         if not container_mode():
             subprocess.run([str(legacy.PRIME_AGENT), "rename", session_id, title, "--json"], timeout=12, check=False, capture_output=True, env=prime_env())
         row["title"] = title
+    elif action == "policy":
+        row["taskPolicy"] = policy_preference(value, role)
     else:
         raise ValueError("Unsupported conversation action")
     save_metadata(data)
@@ -1251,6 +1270,7 @@ class Handler(legacy.Handler):
                 self.send_json(200, configure_provider(payload))
             elif path == "/api/tasks/start":
                 requested = payload.get("taskPolicy") or {}
+                preference = policy_preference(payload.get("conversationPolicy"), role)
                 authorization = task_policy.authorize_task(
                     requested,
                     role,
@@ -1258,7 +1278,7 @@ class Handler(legacy.Handler):
                     task_execution_confirmed=payload.get("executionConfirm") == "allow-execution-task",
                     network_confirmed=payload.get("networkConfirm") == f"allow-network-{requested.get('networkMode')}",
                 )
-                self.send_json(202, {"task": launch_task(payload.get("message"), payload.get("sessionId"), thinking=payload.get("thinking"), owner=user, authorization=authorization)})
+                self.send_json(202, {"task": launch_task(payload.get("message"), payload.get("sessionId"), thinking=payload.get("thinking"), owner=user, authorization=authorization, policy=preference)})
             elif path == "/api/tasks/stop":
                 self.send_json(200, stop_native_task(str(payload.get("id", "")), user))
             elif path == "/api/tasks/message":
@@ -1266,7 +1286,7 @@ class Handler(legacy.Handler):
             elif path == "/api/tasks/authorization":
                 self.send_json(200, grant_login_execution(user, self.headers, payload.get("confirm")))
             elif path == "/api/conversations/update":
-                self.send_json(200, update_conversation(str(payload.get("id", "")), str(payload.get("action", "")), payload.get("value"), user))
+                self.send_json(200, update_conversation(str(payload.get("id", "")), str(payload.get("action", "")), payload.get("value"), user, role))
             elif path == "/api/conversations/delete":
                 session_id = str(payload.get("id", ""))
                 require_conversation_owner(session_id, user)

@@ -102,6 +102,35 @@ class DashboardV2Tests(unittest.TestCase):
         with mock.patch.object(api.legacy, "session_catalog", return_value=rows), mock.patch.object(api, "metadata", return_value=meta), mock.patch.object(api.legacy, "session_path", side_effect=lambda value, root=None: Path(f"/tmp/{value}.jsonl")), mock.patch.object(api, "model_details", return_value={}):
             self.assertEqual([row["id"] for row in api.conversation_catalog(user="alice")], ["session-alice"])
 
+    def test_conversation_catalog_returns_saved_task_policy(self):
+        rows = [{"id": "session-alice", "topic": "Alice", "modified": "2026-01-01T00:00:00Z", "provider": "p", "model": "m"}]
+        policy = {"profile": "finance", "executionMode": "prompt", "networkMode": "internet"}
+        meta = {"conversations": {"session-alice": {"owner": "alice", "taskPolicy": policy}}}
+        with mock.patch.object(api.legacy, "session_catalog", return_value=rows), mock.patch.object(api, "metadata", return_value=meta), mock.patch.object(api.legacy, "session_path", side_effect=lambda value, root=None: Path(f"/tmp/{value}.jsonl")), mock.patch.object(api, "model_details", return_value={}):
+            self.assertEqual(api.conversation_catalog(user="alice")[0]["taskPolicy"], policy)
+
+    def test_conversation_policy_is_persisted_and_role_checked(self):
+        with tempfile.TemporaryDirectory() as directory:
+            meta_path = Path(directory) / "metadata.json"
+            meta_path.write_text(json.dumps({"conversations": {"session-alice": {"owner": "alice"}}}))
+            policy = {"profile": "development", "executionMode": "prompt", "networkMode": "internet"}
+            with mock.patch.object(api, "META", meta_path), mock.patch.object(api.legacy, "session_path", return_value=Path("/tmp/session-alice.jsonl")):
+                result = api.update_conversation("session-alice", "policy", policy, "alice", "user")
+                self.assertEqual(result["taskPolicy"], policy)
+                self.assertEqual(json.loads(meta_path.read_text())["conversations"]["session-alice"]["taskPolicy"], policy)
+                with self.assertRaisesRegex(ValueError, "power-user"):
+                    api.update_conversation("session-alice", "policy", {**policy, "networkMode": "full"}, "alice", "user")
+
+    def test_new_conversation_stores_original_policy_preference(self):
+        with tempfile.TemporaryDirectory() as directory:
+            meta_path = Path(directory) / "metadata.json"
+            meta_path.write_text('{"conversations":{}}')
+            task = {"sessionId": "session-new-1234", "thinking": "high", "provider": "p", "model": "m", "routingMode": "default", "routeReason": "default", "owner": "alice", "persistPolicyOnSessionCreate": True, "policyPreference": {"profile": "cad", "executionMode": "prompt", "networkMode": "restricted"}}
+            with mock.patch.object(api, "META", meta_path):
+                api.store_task_route(task)
+            saved = json.loads(meta_path.read_text())["conversations"]["session-new-1234"]
+            self.assertEqual(saved["taskPolicy"], task["policyPreference"])
+
     def test_conversation_catalog_uses_cache_during_temporary_permission_change(self):
         rows = [{"id": "session-alice", "topic": "Alice", "modified": "2026-01-01T00:00:00Z", "provider": "p", "model": "m"}]
         meta = {"conversations": {"session-alice": {"owner": "alice"}}}
