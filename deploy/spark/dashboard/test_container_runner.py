@@ -65,6 +65,26 @@ class ContainerRunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "owner"):
             self.build(owner="../root")
 
+    def test_selected_local_path_is_mounted_read_only(self):
+        with tempfile.TemporaryDirectory() as root:
+            source = os.path.join(root, "project")
+            os.mkdir(source)
+            authorization = policy()
+            authorization["localPaths"] = [source]
+            with mock.patch.object(container_runner, "LOCAL_PATH_ROOTS", (container_runner.Path(root).resolve(),)), mock.patch.object(os, "getuid", return_value=1200), mock.patch.object(os, "getgid", return_value=1200):
+                argv = container_runner.command("a" * 32, "alice", authorization, "openai", "example", "low", storage_root=os.path.join(root, "storage"))
+            self.assertIn(f"type=bind,src={container_runner.Path(source).resolve()},dst=/project-files/01-project,ro", argv)
+
+    def test_sensitive_and_outside_root_paths_are_rejected(self):
+        with tempfile.TemporaryDirectory() as root:
+            sensitive = os.path.join(root, ".ssh")
+            os.mkdir(sensitive)
+            with mock.patch.object(container_runner, "LOCAL_PATH_ROOTS", (container_runner.Path(root).resolve(),)):
+                with self.assertRaisesRegex(ValueError, "Sensitive"):
+                    container_runner.local_mounts([sensitive])
+            with self.assertRaisesRegex(ValueError, "approved data roots"):
+                container_runner.local_mounts([root])
+
 
 if __name__ == "__main__":
     unittest.main()

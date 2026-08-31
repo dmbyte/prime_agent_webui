@@ -30,6 +30,23 @@ class TaskPolicyTests(unittest.TestCase):
         self.assertFalse(authorize_task({"packageOverride": True}, "power_user")["packageOverride"])
         self.assertTrue(authorize_task({"packageOverride": True}, "admin")["packageOverride"])
 
+    def test_local_paths_require_role_and_per_task_confirmation(self):
+        with self.assertRaisesRegex(ValueError, "power-user"):
+            authorize_task({"localPaths": ["/home/alice/project"]}, "user")
+        with self.assertRaisesRegex(ValueError, "local-file approval"):
+            authorize_task({"localPaths": ["/home/alice/project"]}, "power_user")
+        result = authorize_task({"localPaths": ["/home/alice/project"]}, "power_user", files_confirmed=True)
+        self.assertEqual(result["localPaths"], ["/home/alice/project"])
+
+    def test_local_paths_are_absolute_bounded_and_deduplicated(self):
+        with self.assertRaisesRegex(ValueError, "absolute"):
+            authorize_task({"localPaths": ["relative/project"]}, "admin", files_confirmed=True)
+        values = [f"/home/alice/project-{index}" for index in range(9)]
+        with self.assertRaisesRegex(ValueError, "No more than"):
+            authorize_task({"localPaths": values}, "admin", files_confirmed=True)
+        result = authorize_task({"localPaths": ["/home/alice/project", "/home/alice/project"]}, "admin", files_confirmed=True)
+        self.assertEqual(result["localPaths"], ["/home/alice/project"])
+
 
 if __name__ == "__main__":
     unittest.main()

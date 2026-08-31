@@ -759,11 +759,15 @@ def policy_preference(payload, role):
     profile = str(payload.get("profile") or "general")
     execution = str(payload.get("executionMode") or "prompt")
     network = str(payload.get("networkMode") or "restricted")
+    local_paths = task_policy.normalize_local_paths(payload.get("localPaths"), role)
     if profile not in task_policy.PROFILES or execution not in task_policy.EXECUTION_MODES or network not in task_policy.NETWORK_MODES:
         raise ValueError("Unsupported conversation policy")
     if (profile == "network-operations" or network in {"lan", "full"}) and role not in {"power_user", "admin"}:
         raise ValueError("This conversation policy requires power-user or administrator access")
-    return {"profile": profile, "executionMode": execution, "networkMode": network}
+    result = {"profile": profile, "executionMode": execution, "networkMode": network}
+    if local_paths:
+        result["localPaths"] = local_paths
+    return result
 
 
 def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITIAL_ADMIN, authorization=None, policy=None):
@@ -774,6 +778,9 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITI
         raise ValueError("Invalid conversation identifier")
     if session_id:
         require_conversation_owner(session_id, owner)
+    prompt_message = message
+    if (authorization or {}).get("localPaths"):
+        prompt_message += "\n\nThe conversation's selected Spark-local inputs are mounted read-only under /project-files inside the task container."
     with TASK_LOCK:
         active = sum(1 for row in TASKS.values() if row["status"] == "running")
         if active >= MAX_NATIVE_TASKS:
@@ -813,7 +820,7 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITI
         store_task_route(task)
     try:
         process.stdin.write(json.dumps({"id": f"state-{task_id}", "type": "get_state"}, separators=(",", ":")) + "\n")
-        process.stdin.write(json.dumps({"id": f"prompt-{task_id}", "type": "prompt", "message": message}, separators=(",", ":")) + "\n")
+        process.stdin.write(json.dumps({"id": f"prompt-{task_id}", "type": "prompt", "message": prompt_message}, separators=(",", ":")) + "\n")
         process.stdin.flush()
     except (BrokenPipeError, OSError, ValueError) as error:
         process.terminate()
@@ -1224,6 +1231,8 @@ def task_capabilities(role):
         "defaults": task_policy.ROLE_DEFAULTS[role].__dict__,
         "maximums": task_policy.ROLE_MAXIMUMS[role].__dict__,
         "packageOverride": role == "admin",
+        "localPathAccess": role in {"power_user", "admin"},
+        "maxLocalPaths": task_policy.MAX_LOCAL_PATHS,
     }
 
 
@@ -1361,6 +1370,7 @@ class Handler(legacy.Handler):
                     login_execution=execution_grant(user, self.headers),
                     task_execution_confirmed=payload.get("executionConfirm") == "allow-execution-task",
                     network_confirmed=payload.get("networkConfirm") == f"allow-network-{requested.get('networkMode')}",
+                    files_confirmed=payload.get("filesConfirm") == "allow-local-files-task",
                 )
                 self.send_json(202, {"task": launch_task(payload.get("message"), payload.get("sessionId"), thinking=payload.get("thinking"), owner=user, authorization=authorization, policy=preference)})
             elif path == "/api/tasks/stop":

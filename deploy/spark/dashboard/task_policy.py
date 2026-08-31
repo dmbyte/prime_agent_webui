@@ -8,6 +8,7 @@ ROLES = {"user", "power_user", "admin"}
 EXECUTION_MODES = {"prompt", "task", "login", "deny"}
 NETWORK_MODES = {"restricted", "internet", "lan", "full"}
 PROFILES = {"general", "development", "cad", "finance", "network-operations", "review"}
+MAX_LOCAL_PATHS = 8
 
 
 @dataclass(frozen=True)
@@ -39,12 +40,29 @@ def normalize_role(value):
     return role
 
 
-def authorize_task(payload, role, login_execution=False, task_execution_confirmed=False, network_confirmed=False):
+def normalize_local_paths(value, role):
+    values = value if isinstance(value, list) else []
+    if values and role not in {"power_user", "admin"}:
+        raise ValueError("Spark-local path access requires power-user or administrator access")
+    if len(values) > MAX_LOCAL_PATHS:
+        raise ValueError(f"No more than {MAX_LOCAL_PATHS} local paths may be selected")
+    result = []
+    for item in values:
+        path = str(item or "").strip()
+        if not path.startswith("/") or len(path) > 512 or any(character in path for character in "\x00\r\n,"):
+            raise ValueError("Local paths must be valid absolute Spark paths")
+        if path not in result:
+            result.append(path)
+    return result
+
+
+def authorize_task(payload, role, login_execution=False, task_execution_confirmed=False, network_confirmed=False, files_confirmed=False):
     """Return an immutable, normalized policy or reject an unauthorized request."""
     role = normalize_role(role)
     profile = str(payload.get("profile") or "general")
     network = str(payload.get("networkMode") or "restricted")
     execution = str(payload.get("executionMode") or "prompt")
+    local_paths = normalize_local_paths(payload.get("localPaths"), role)
     if profile not in PROFILES:
         raise ValueError("Unsupported task profile")
     if network not in NETWORK_MODES:
@@ -64,6 +82,8 @@ def authorize_task(payload, role, login_execution=False, task_execution_confirme
         raise ValueError("Task execution approval is required")
     if network in {"lan", "full"} and not network_confirmed:
         raise ValueError("Explicit private-network approval is required")
+    if local_paths and not files_confirmed:
+        raise ValueError("Explicit local-file approval is required")
     requested = payload.get("limits") or {}
     defaults, maximums = ROLE_DEFAULTS[role], ROLE_MAXIMUMS[role]
     limits = ResourceLimits(
@@ -87,6 +107,7 @@ def authorize_task(payload, role, login_execution=False, task_execution_confirme
         "executionMode": execution,
         "executionApproved": approved_execution,
         "packageOverride": bool(payload.get("packageOverride") and role == "admin"),
+        "localPaths": local_paths,
         "limits": {
             "memoryGiB": limits.memory_gib,
             "cpus": limits.cpus,
