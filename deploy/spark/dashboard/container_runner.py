@@ -83,7 +83,10 @@ def command(task_id, owner, authorization, provider, model, thinking, session_id
         "--mount", f"type=bind,src={agent.parent},dst=/home/prime/.prime,rw",
         "--mount", f"type=bind,src={workspace},dst=/workspace,rw",
         "--mount", f"type=bind,src={storage_root.parent / 'gateway' / owner / network},dst=/run/prime-gateway,ro",
-        "--env", "HOME=/home/prime", "--workdir", "/workspace", image,
+        "--env", "HOME=/home/prime",
+        "--env", "NO_PROXY=127.0.0.1,localhost,::1",
+        "--env", "no_proxy=127.0.0.1,localhost,::1",
+        "--workdir", "/workspace", image,
         "--cwd", "/workspace", "--mode", "rpc", "--provider", str(provider),
         "--model", str(model), "--thinking", str(thinking),
     ]

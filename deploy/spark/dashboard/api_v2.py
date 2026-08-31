@@ -420,6 +420,24 @@ def add_task_progress(task, label):
     task["progress"] = label
 
 
+def sanitize_runtime_text(value, limit=1000):
+    value = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", str(value or ""))
+    value = re.sub(r"(?i)sk-(?:proj-)?[A-Za-z0-9_-]{20,}", "[REDACTED_API_KEY]", value)
+    value = re.sub(r"(?i)(authorization\s*[:=]\s*bearer\s+)[^\s\"']+", r"\1[REDACTED]", value)
+    return re.sub(r"\s+", " ", value).strip()[:limit]
+
+
+def add_runtime_event(task, kind, label, detail=""):
+    row = {"at": now_iso(), "kind": str(kind)[:32], "label": sanitize_runtime_text(label, 200)}
+    detail = sanitize_runtime_text(detail)
+    if detail:
+        row["detail"] = detail
+    previous = (task.get("runtimeEvents") or [{}])[-1]
+    if row["label"] and (previous.get("kind"), previous.get("label"), previous.get("detail")) != (row["kind"], row["label"], row.get("detail")):
+        task.setdefault("runtimeEvents", []).append(row)
+        task["runtimeEvents"] = task["runtimeEvents"][-200:]
+
+
 def apply_task_event(task_id, event):
     with TASK_LOCK:
         task = TASKS.get(task_id)
@@ -434,6 +452,7 @@ def apply_task_event(task_id, event):
             if not event.get("success", False) and request_id.startswith("prompt-"):
                 task["rpcError"] = "Prime rejected the initial prompt"
                 add_task_progress(task, "Prime rejected a command")
+                add_runtime_event(task, "error", "Command rejected", task["rpcError"])
             data = event.get("data") or {}
             session_id = data.get("sessionId") if isinstance(data, dict) else None
             if valid_id(session_id):
@@ -448,15 +467,23 @@ def apply_task_event(task_id, event):
         elif event_type == "agent_start":
             task["agentEnded"] = False
             add_task_progress(task, "Agent started")
+            add_runtime_event(task, "agent", "Agent started")
         elif event_type == "agent_end":
             task["agentEnded"] = True
             add_task_progress(task, "Finishing response")
+            add_runtime_event(task, "agent", "Agent finished its turn")
         elif event_type == "turn_start":
             add_task_progress(task, "Working on the request")
+            add_runtime_event(task, "turn", "Turn started")
         elif event_type in {"message_update", "message_end"}:
             message = event.get("message") or {}
             if message.get("role") != "assistant":
                 return
+            if message.get("stopReason") == "error" or message.get("errorMessage"):
+                error = sanitize_runtime_text(message.get("errorMessage") or "Model request failed")
+                task["rpcError"] = error
+                add_task_progress(task, "Model request failed")
+                add_runtime_event(task, "error", "Model request failed", error)
             for part in message.get("content") or []:
                 if not isinstance(part, dict):
                     continue
@@ -466,16 +493,27 @@ def apply_task_event(task_id, event):
                 elif part.get("type") in {"toolCall", "tool_call"}:
                     name = str(part.get("name") or part.get("toolName") or "tool")
                     add_task_progress(task, f"Using {name}")
+                    add_runtime_event(task, "tool", f"Using {name}")
+                elif part.get("type") in {"thinking", "reasoning"}:
+                    add_runtime_event(task, "reasoning", "Reasoning in progress")
             usage = message.get("usage") or event.get("usage")
             if isinstance(usage, dict) and usage:
                 task["usage"] = usage
         elif event_type == "tool_execution_start":
             add_task_progress(task, f"Using {event.get('toolName') or event.get('tool') or 'tool'}")
+            add_runtime_event(task, "tool", f"Started {event.get('toolName') or event.get('tool') or 'tool'}")
         elif event_type == "tool_execution_end":
             add_task_progress(task, f"Finished {event.get('toolName') or event.get('tool') or 'tool'}")
+            add_runtime_event(task, "tool", f"Finished {event.get('toolName') or event.get('tool') or 'tool'}")
+        elif event_type == "auto_retry_start":
+            attempt, maximum = int(event.get("attempt") or 0), int(event.get("maxAttempts") or 0)
+            error = sanitize_runtime_text(event.get("errorMessage") or "Request failed")
+            add_task_progress(task, f"Retrying model request ({attempt}/{maximum})")
+            add_runtime_event(task, "retry", f"Retry {attempt} of {maximum}", error)
         elif event_type == "broker_exit":
             task["rpcError"] = "Rootless task broker exited"
             add_task_progress(task, "Isolated task runtime failed")
+            add_runtime_event(task, "error", "Isolated task runtime failed")
 
 
 def monitor_task(task_id, before):
@@ -512,7 +550,10 @@ def monitor_task(task_id, before):
         try:
             apply_task_event(task_id, json.loads(line))
         except (json.JSONDecodeError, TypeError, ValueError):
-            pass
+            with TASK_LOCK:
+                current = TASKS.get(task_id)
+                if current:
+                    add_runtime_event(current, "console", "Runtime output", line)
         if len(line) <= 20000:
             log_lines.append(line)
             log_lines = log_lines[-200:]
@@ -532,7 +573,10 @@ def monitor_task(task_id, before):
         try:
             apply_task_event(task_id, json.loads(line))
         except (json.JSONDecodeError, TypeError, ValueError):
-            pass
+            with TASK_LOCK:
+                current = TASKS.get(task_id)
+                if current:
+                    add_runtime_event(current, "console", "Runtime output", line)
         if len(line) <= 20000:
             log_lines.append(line + "\n")
     output = "".join(log_lines[-200:])
@@ -617,7 +661,8 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITI
         task_env = prime_env()
     before = session_stems(owner)
     process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=task_cwd, env=task_env, start_new_session=True)
-    task = {"id": task_id, "sessionId": session_id if not fork else None, "agentSessionId": session_id if session_id and not fork else None, "rpcReady": True, "rpcResponses": {}, "owner": owner, "authorization": authorization or {}, "topic": legacy.safe_topic(message) or "Native task", **route, "thinking": thinking, "contextWindow": details.get("contextWindow"), "maxTokens": details.get("maxTokens"), "status": "running", "progress": "Starting Prime", "progressEvents": [{"at": now_iso(), "label": "Request received"}], "liveResponse": "", "started": now_iso(), "startedEpoch": time.time(), "pid": process.pid, "process": process, "logAvailable": False}
+    started = now_iso()
+    task = {"id": task_id, "sessionId": session_id if not fork else None, "agentSessionId": session_id if session_id and not fork else None, "rpcReady": True, "rpcResponses": {}, "owner": owner, "authorization": authorization or {}, "topic": legacy.safe_topic(message) or "Native task", **route, "thinking": thinking, "contextWindow": details.get("contextWindow"), "maxTokens": details.get("maxTokens"), "status": "running", "progress": "Starting Prime", "progressEvents": [{"at": started, "label": "Request received"}], "runtimeEvents": [{"at": started, "kind": "request", "label": "Request received"}], "liveResponse": "", "started": started, "startedEpoch": time.time(), "pid": process.pid, "process": process, "logAvailable": False}
     with TASK_LOCK:
         TASKS[task_id] = task
     with META_LOCK:

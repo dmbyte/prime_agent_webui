@@ -9,6 +9,9 @@ if test -S /run/prime-gateway/network.sock; then
   proxy_pid=$!
   export HTTP_PROXY=http://127.0.0.1:31080 HTTPS_PROXY=http://127.0.0.1:31080 ALL_PROXY=http://127.0.0.1:31080
   export http_proxy="$HTTP_PROXY" https_proxy="$HTTPS_PROXY" all_proxy="$ALL_PROXY"
+  # Keep the local model bridge out of the policy proxy. Proxy-aware clients
+  # otherwise send 127.0.0.1 through a proxy that correctly rejects loopback.
+  export NO_PROXY="127.0.0.1,localhost,::1" no_proxy="127.0.0.1,localhost,::1"
 fi
 trap 'kill "$bridge_pid" ${proxy_pid:-} 2>/dev/null || true' EXIT
 for attempt in 1 2 3 4 5; do

@@ -29,6 +29,7 @@ class ContainerRunnerTests(unittest.TestCase):
         self.assertIn("--cap-drop=all", argv)
         self.assertIn("no-new-privileges", argv)
         self.assertIn("--memory 8g", joined)
+        self.assertIn("NO_PROXY=127.0.0.1,localhost,::1", argv)
         self.assertNotIn("--privileged", argv)
 
     def test_denied_execution_disables_prime_tools(self):

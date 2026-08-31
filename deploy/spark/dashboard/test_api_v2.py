@@ -24,8 +24,26 @@ class DashboardV2Tests(unittest.TestCase):
             self.assertEqual(row["liveResponse"], "Visible draft")
             self.assertNotIn("private chain", json.dumps(row))
             self.assertEqual(row["progress"], "Using search")
+            self.assertIn("Reasoning in progress", json.dumps(row))
         finally:
             api.TASKS.pop(task_id, None)
+
+    def test_model_error_is_visible_and_marks_task_failed(self):
+        task_id = "d" * 32
+        api.TASKS[task_id] = {"id": task_id, "owner": "alice", "status": "running", "progressEvents": [], "runtimeEvents": []}
+        try:
+            api.apply_task_event(task_id, {"type": "message_end", "message": {"role": "assistant", "content": [], "stopReason": "error", "errorMessage": "Connection error."}})
+            row = api.TASKS[task_id]
+            self.assertEqual(row["rpcError"], "Connection error.")
+            self.assertEqual(row["progress"], "Model request failed")
+            self.assertEqual(row["runtimeEvents"][-1]["kind"], "error")
+        finally:
+            api.TASKS.pop(task_id, None)
+
+    def test_runtime_redaction_removes_credentials(self):
+        value = api.sanitize_runtime_text("Authorization: Bearer secret-token sk-proj-" + "x" * 30)
+        self.assertNotIn("secret-token", value)
+        self.assertNotIn("sk-proj-", value)
 
     def test_steering_is_owner_scoped_and_uses_rpc_channel(self):
         task_id = "b" * 32
