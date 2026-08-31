@@ -21,6 +21,7 @@ sudo install -d -o prime-runner -g prime-runner -m 0700 /var/lib/prime-runner/cr
 sudo chown prime-runner:prime-runner /var/lib/prime-runner /var/lib/prime-runner/users
 sudo chmod 0700 /var/lib/prime-runner /var/lib/prime-runner/users
 sudo setfacl -m "u:${USER}:--x,g:prime-web:--x,m::--x" /var/lib/prime-runner /var/lib/prime-runner/users
+sudo setfacl -m "u:prime-runner:--x,m::r-x" "$HOME"
 sudo install -d -o root -g root -m 0755 /usr/local/lib/prime-runner /usr/local/libexec
 sudo install -d -o prime-runner -g prime-runner -m 0700 /var/lib/prime-runner/build
 sudo install -o prime-runner -g prime-runner -m 0644 "$repo/deploy/spark/container/Containerfile" /var/lib/prime-runner/build/Containerfile
