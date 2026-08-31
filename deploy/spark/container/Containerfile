@@ -3,13 +3,19 @@ FROM docker.io/library/node:22.23.2-bookworm-slim
 ARG PRIME_AGENT_VERSION=0.8.0
 ARG PRIME_AGENT_SHA256=f5b0093c7e0fddb73f94773d74383585456adfa84f12a4082d3098f23bb8fab6
 ARG PROFILE=general
+ARG UV_VERSION=0.12.8
+ARG UV_AARCH64_SHA256=ba8661f4fd207c8e94814191598e619b355ac10d5014e851e21eb800f9ef2b00
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        bash ca-certificates curl fd-find git iproute2 jq openssh-client \
        procps python3 python3-venv ripgrep socat tini \
     && if [ "$PROFILE" = "development" ]; then \
-         apt-get install -y --no-install-recommends build-essential python3-dev; \
+         apt-get install -y --no-install-recommends build-essential python3-dev \
+         && curl -fsSL "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-aarch64-unknown-linux-gnu.tar.gz" -o /tmp/uv.tar.gz \
+         && echo "${UV_AARCH64_SHA256}  /tmp/uv.tar.gz" | sha256sum --check --strict \
+         && tar -xzf /tmp/uv.tar.gz -C /tmp \
+         && install -o root -g root -m 0755 /tmp/uv-aarch64-unknown-linux-gnu/uv /tmp/uv-aarch64-unknown-linux-gnu/uvx /usr/local/bin/; \
        elif [ "$PROFILE" = "cad" ]; then \
          apt-get install -y --no-install-recommends openscad; \
        elif [ "$PROFILE" = "network-operations" ]; then \
@@ -19,7 +25,7 @@ RUN apt-get update \
     && echo "${PRIME_AGENT_SHA256}  /tmp/prime-agent.tgz" | sha256sum --check --strict \
     && npm install --global --omit=dev /tmp/prime-agent.tgz \
     && npm cache clean --force \
-    && rm -rf /var/lib/apt/lists/* /tmp/prime-agent.tgz
+    && rm -rf /var/lib/apt/lists/* /tmp/prime-agent.tgz /tmp/uv.tar.gz /tmp/uv-aarch64-unknown-linux-gnu
 
 RUN groupmod --new-name prime node \
     && usermod --login prime --home /home/prime --move-home node \

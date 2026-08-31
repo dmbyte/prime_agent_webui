@@ -10,7 +10,8 @@ Prime's RPC channel through the socket.
 
 - `general`, `finance`, and `review` contain Prime, Python, Git, curl, jq, and
   ripgrep.
-- `development` adds native build tools and Python headers.
+- `development` adds native build tools, Python headers, and checksum-pinned
+  ARM64 `uv`/`uvx` 0.12.8.
 - `cad` adds OpenSCAD.
 - `network-operations` adds nmap, ping, DNS, and traceroute tools and is limited
   to power users and administrators.
