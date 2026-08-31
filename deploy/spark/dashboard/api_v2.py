@@ -33,6 +33,7 @@ container_runner = importlib.util.module_from_spec(RUNNER_SPEC)
 RUNNER_SPEC.loader.exec_module(container_runner)
 
 META = legacy.HOME / ".prime/agent/webui-metadata.json"
+ROUTING_RULES = legacy.HOME / ".prime/agent/webui-routing-rules.json"
 LEDGER = legacy.HOME / ".prime/agent/webui-usage-ledger.jsonl"
 TASK_LOGS = legacy.HOME / ".prime/agent/webui-task-logs"
 UPDATE_STATUS_DIR = legacy.HOME / ".prime/agent/update-status"
@@ -51,12 +52,96 @@ INITIAL_ADMIN = os.environ.get("PRIME_INITIAL_ADMIN", "dbyte")
 
 NEMOTRON_ROUTE = ("spark-nemotron", "nemotron-3.5-lightning")
 QWEN_ROUTE = ("spark-qwen", "qwen3.6-35b-a3b")
-QWEN_SPECIALIST_PATTERNS = (
-    r"\b(image|photo|screenshot|diagram|chart|graph|png|jpe?g|webp|pdf)\b",
-    r"\b(3d[ -]?print|cad|stl|step|mesh|slicer|printability|manufactur(?:e|ing)|clearance|enclosure|geometry|thermal|cfd)\b",
-    r"\b(portfolio|stock|equity|earnings|valuation|day[ -]?trad(?:e|ing)|trade setup|technical analysis|options|risk[- ]adjusted|drawdown|correlation|position sizing|financial statement|balance sheet|cash flow)\b",
-    r"\b(code review|security review|architecture review|independent review|second opinion|adversarial review|critique|refactor|debug)\b",
-)
+CODEX_ROUTE = ("openai-codex", "gpt-5.6-sol")
+ROUTING_SCOPES = {"always", "nemotron-default"}
+
+
+def default_routing_rules():
+    return [
+        {"id": "explicit-nemotron", "name": "Explicit Nemotron", "enabled": True, "priority": 1000, "scope": "always", "provider": NEMOTRON_ROUTE[0], "model": NEMOTRON_ROUTE[1], "triggers": ["use nemotron", "route to nemotron", "/nemotron"]},
+        {"id": "explicit-codex", "name": "Explicit Codex / ChatGPT", "enabled": True, "priority": 990, "scope": "always", "provider": CODEX_ROUTE[0], "model": CODEX_ROUTE[1], "triggers": ["use codex", "ask codex", "route to codex", "delegate to codex", "use chatgpt", "ask chatgpt", "/codex", "/chatgpt"]},
+        {"id": "explicit-qwen", "name": "Explicit Qwen", "enabled": True, "priority": 980, "scope": "always", "provider": QWEN_ROUTE[0], "model": QWEN_ROUTE[1], "triggers": ["use qwen", "ask qwen", "route to qwen", "delegate to qwen", "/qwen"]},
+        {"id": "codex-architecture", "name": "Codex architecture specialist", "enabled": True, "priority": 700, "scope": "nemotron-default", "provider": CODEX_ROUTE[0], "model": CODEX_ROUTE[1], "triggers": ["software architecture", "application architecture", "system architecture", "architecture recommendation", "architect the", "architecture plan"]},
+        {"id": "qwen-specialist", "name": "Qwen visual, CAD, finance, and engineering specialist", "enabled": True, "priority": 600, "scope": "nemotron-default", "provider": QWEN_ROUTE[0], "model": QWEN_ROUTE[1], "triggers": ["image", "photo", "screenshot", "diagram", "chart", "graph", "png", "jpeg", "webp", "pdf", "3d print", "cad", "stl", "step", "mesh", "slicer", "printability", "portfolio", "stock", "equity", "earnings", "valuation", "day trading", "trade setup", "technical analysis", "options", "code review", "security review", "independent review", "second opinion", "refactor", "debug"]},
+    ]
+
+
+def normalize_routing_rule(value, existing_id=None):
+    if not isinstance(value, dict):
+        raise ValueError("Routing rule is required")
+    rule_id = str(existing_id or value.get("id") or uuid.uuid4().hex)
+    if not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", rule_id):
+        raise ValueError("Invalid routing rule identifier")
+    name = re.sub(r"\s+", " ", str(value.get("name") or "")).strip()[:80]
+    provider = str(value.get("provider") or "")
+    model = str(value.get("model") or "")
+    scope = str(value.get("scope") or "nemotron-default")
+    try:
+        priority = int(value.get("priority", 500))
+    except (TypeError, ValueError) as error:
+        raise ValueError("Priority must be a number") from error
+    triggers = value.get("triggers")
+    if not name or scope not in ROUTING_SCOPES or not 0 <= priority <= 1000:
+        raise ValueError("Invalid routing rule name, scope, or priority")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{2,64}", provider) or not re.fullmatch(r"[A-Za-z0-9_.:/-]{1,160}", model):
+        raise ValueError("Invalid routing target")
+    available = {(row["provider"], row["model"]) for row in legacy.model_catalog() if row.get("configured")}
+    if (provider, model) not in available:
+        raise ValueError("Routing target is not a configured model")
+    if not isinstance(triggers, list) or not 1 <= len(triggers) <= 30:
+        raise ValueError("Provide between 1 and 30 trigger phrases")
+    clean = []
+    for trigger in triggers:
+        trigger = re.sub(r"\s+", " ", str(trigger)).strip().casefold()
+        if not 2 <= len(trigger) <= 80 or "\x00" in trigger:
+            raise ValueError("Trigger phrases must contain 2 to 80 characters")
+        if trigger not in clean:
+            clean.append(trigger)
+    return {"id": rule_id, "name": name, "enabled": bool(value.get("enabled", True)), "priority": priority, "scope": scope, "provider": provider, "model": model, "triggers": clean}
+
+
+def routing_rules():
+    value = legacy.read_json(ROUTING_RULES, None)
+    rows = value.get("rules") if isinstance(value, dict) else None
+    if not isinstance(rows, list):
+        return default_routing_rules()
+    valid = []
+    for row in rows[:50]:
+        try:
+            valid.append(normalize_routing_rule(row, row.get("id") if isinstance(row, dict) else None))
+        except ValueError:
+            continue
+    return sorted(valid, key=lambda row: (-row["priority"], row["name"].casefold()))
+
+
+def update_routing_rules(payload):
+    action = str(payload.get("action") or "")
+    if action == "reset":
+        if payload.get("confirm") != "reset-routing-rules":
+            raise ValueError("Exact reset confirmation is required")
+        rows = default_routing_rules()
+    else:
+        rows = routing_rules()
+        rule_id = str(payload.get("id") or "")
+        if action == "delete":
+            if payload.get("confirm") != f"delete-routing-rule-{rule_id}":
+                raise ValueError("Exact delete confirmation is required")
+            if not any(row["id"] == rule_id for row in rows):
+                raise ValueError("Routing rule not found")
+            rows = [row for row in rows if row["id"] != rule_id]
+        elif action in {"add", "update"}:
+            existing = next((row for row in rows if row["id"] == rule_id), None)
+            if action == "update" and not existing:
+                raise ValueError("Routing rule not found")
+            rule = normalize_routing_rule(payload.get("rule"), rule_id if existing else None)
+            rows = [row for row in rows if row["id"] != rule["id"]]
+            rows.append(rule)
+        else:
+            raise ValueError("Unsupported routing rule action")
+    rows = sorted(rows, key=lambda row: (-row["priority"], row["name"].casefold()))
+    legacy.atomic_json(ROUTING_RULES, {"version": 1, "rules": rows})
+    legacy.audit("routing_rules_updated", action=action, rule=payload.get("id") or "new")
+    return {"rules": rows}
 
 PROVIDER_AUTH = legacy.HOME / ".prime/agent/auth.json"
 API_KEY_PROVIDERS = (
@@ -172,24 +257,17 @@ def route_task(message, settings=None):
     settings = settings or legacy.settings_view()
     selected = (settings["provider"], settings["model"])
     enabled = set(settings.get("enabledModels") or [])
-    qwen_enabled = "/".join(QWEN_ROUTE) in enabled
     value = str(message).casefold()
-    explicit_qwen = bool(re.search(r"(?:\b(?:use|route|delegate|send)\b.{0,24}\bqwen\b|\bqwen\b.{0,24}\b(?:subagent|model)\b|/qwen\b)", value))
-    explicit_nemotron = bool(re.search(r"(?:\b(?:use|route|keep)\b.{0,24}\bnemotron\b|/nemotron\b)", value))
-    specialist = next((pattern for pattern in QWEN_SPECIALIST_PATTERNS if re.search(pattern, value)), None)
-    if explicit_nemotron:
-        provider, model = NEMOTRON_ROUTE
-        return {"provider": provider, "model": model, "routingMode": "explicit", "routeReason": "User explicitly requested Nemotron."}
-    if explicit_qwen:
-        if qwen_enabled:
-            provider, model = QWEN_ROUTE
-            return {"provider": provider, "model": model, "routingMode": "explicit", "routeReason": "User explicitly requested Qwen."}
-        return {"provider": selected[0], "model": selected[1], "routingMode": "fallback", "routeReason": "Qwen was requested but is disabled; using the selected default."}
-    if selected == NEMOTRON_ROUTE and specialist:
-        if qwen_enabled:
-            provider, model = QWEN_ROUTE
-            return {"provider": provider, "model": model, "routingMode": "automatic", "routeReason": "Qwen specialist route matched this task."}
-        return {"provider": selected[0], "model": selected[1], "routingMode": "fallback", "routeReason": "A Qwen specialist route matched, but Qwen is disabled."}
+    for rule in routing_rules():
+        if not rule["enabled"] or rule["scope"] == "nemotron-default" and selected != NEMOTRON_ROUTE:
+            continue
+        if not any(re.search(rf"(?<!\w){re.escape(trigger)}(?!\w)", value) for trigger in rule["triggers"]):
+            continue
+        target = (rule["provider"], rule["model"])
+        mode = "explicit" if rule["scope"] == "always" else "automatic"
+        if "/".join(target) in enabled:
+            return {"provider": target[0], "model": target[1], "routingMode": mode, "routeReason": f'Routing rule “{rule["name"]}” matched.'}
+        return {"provider": selected[0], "model": selected[1], "routingMode": "fallback", "routeReason": f'Routing rule “{rule["name"]}” matched, but its target is disabled.'}
     return {"provider": selected[0], "model": selected[1], "routingMode": "default", "routeReason": "Using the selected default model."}
 
 
@@ -1222,6 +1300,9 @@ class Handler(legacy.Handler):
             elif path == "/api/admin/releases":
                 self.require_admin()
                 self.send_json(200, {"releases": release_status()})
+            elif path == "/api/admin/routing-rules":
+                self.require_admin()
+                self.send_json(200, {"rules": routing_rules()})
             else:
                 super().do_GET()
         except ValueError as error:
@@ -1232,7 +1313,7 @@ class Handler(legacy.Handler):
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
-        v2 = {"/api/settings", "/api/tasks/start", "/api/tasks/stop", "/api/tasks/message", "/api/tasks/authorization", "/api/conversations/update", "/api/conversations/delete", "/api/conversations/duplicate", "/api/files/delete", "/api/admin/restart", "/api/admin/retention", "/api/admin/update", "/api/admin/user-cache", "/api/providers/configure", "/api/files/upload"}
+        v2 = {"/api/settings", "/api/tasks/start", "/api/tasks/stop", "/api/tasks/message", "/api/tasks/authorization", "/api/conversations/update", "/api/conversations/delete", "/api/conversations/duplicate", "/api/files/delete", "/api/admin/restart", "/api/admin/retention", "/api/admin/update", "/api/admin/user-cache", "/api/admin/routing-rules", "/api/providers/configure", "/api/files/upload"}
         if path not in v2:
             if not csrf_ok(self.headers):
                 self.send_json(403, {"error": "CSRF validation failed"})
@@ -1268,6 +1349,9 @@ class Handler(legacy.Handler):
             elif path == "/api/providers/configure":
                 self.require_admin()
                 self.send_json(200, configure_provider(payload))
+            elif path == "/api/admin/routing-rules":
+                self.require_admin()
+                self.send_json(200, update_routing_rules(payload))
             elif path == "/api/tasks/start":
                 requested = payload.get("taskPolicy") or {}
                 preference = policy_preference(payload.get("conversationPolicy"), role)

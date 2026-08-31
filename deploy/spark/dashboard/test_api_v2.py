@@ -213,10 +213,12 @@ class DashboardV2Tests(unittest.TestCase):
             self.assertEqual(saved["lab-model"]["apiKey"], "PRIME_CUSTOM_LAB_MODEL_API_KEY")
             self.assertEqual(json.loads(provider_settings.read_text())["PRIME_CUSTOM_LAB_MODEL_API_KEY"], "custom-private-key")
 
-    def settings(self, provider="spark-nemotron", model="nemotron-3.5-lightning", qwen=True):
+    def settings(self, provider="spark-nemotron", model="nemotron-3.5-lightning", qwen=True, codex=False):
         enabled = ["spark-nemotron/nemotron-3.5-lightning"]
         if qwen:
             enabled.append("spark-qwen/qwen3.6-35b-a3b")
+        if codex:
+            enabled.append("openai-codex/gpt-5.6-sol")
         return {"provider": provider, "model": model, "thinking": "low", "enabledModels": enabled}
 
     def test_specialist_prompt_routes_to_qwen(self):
@@ -228,6 +230,30 @@ class DashboardV2Tests(unittest.TestCase):
         route = api.route_task("Use Nemotron to review this portfolio", self.settings())
         self.assertEqual((route["provider"], route["model"]), api.NEMOTRON_ROUTE)
         self.assertEqual(route["routingMode"], "explicit")
+
+    def test_explicit_codex_route_uses_chatgpt_subscription_model(self):
+        route = api.route_task("Ask Codex to recommend the architecture", self.settings(codex=True))
+        self.assertEqual((route["provider"], route["model"]), api.CODEX_ROUTE)
+        self.assertEqual(route["routingMode"], "explicit")
+
+    def test_architecture_rule_routes_to_codex_when_nemotron_is_default(self):
+        route = api.route_task("Create the software architecture plan", self.settings(codex=True))
+        self.assertEqual((route["provider"], route["model"]), api.CODEX_ROUTE)
+        self.assertEqual(route["routingMode"], "automatic")
+
+    def test_routing_rule_crud_is_atomic_and_validated(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "rules.json"
+            model = {"provider": "openai-codex", "model": "gpt-5.6-sol", "configured": True}
+            rule = {"name": "Architecture", "priority": 750, "scope": "nemotron-default", "provider": model["provider"], "model": model["model"], "triggers": ["architecture plan"], "enabled": True}
+            with mock.patch.object(api, "ROUTING_RULES", path), mock.patch.object(api.legacy, "model_catalog", return_value=[model]), mock.patch.object(api.legacy, "audit"):
+                added = api.update_routing_rules({"action": "add", "rule": rule})["rules"]
+                created = next(row for row in added if row["name"] == "Architecture")
+                self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+                with self.assertRaisesRegex(ValueError, "confirmation"):
+                    api.update_routing_rules({"action": "delete", "id": created["id"]})
+                result = api.update_routing_rules({"action": "delete", "id": created["id"], "confirm": f'delete-routing-rule-{created["id"]}'})
+                self.assertFalse(any(row["id"] == created["id"] for row in result["rules"]))
 
     def test_disabled_qwen_falls_back_visibly(self):
         route = api.route_task("Use Qwen for this chart", self.settings(qwen=False))
