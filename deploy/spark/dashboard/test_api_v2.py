@@ -45,6 +45,18 @@ class DashboardV2Tests(unittest.TestCase):
         self.assertNotIn("secret-token", value)
         self.assertNotIn("sk-proj-", value)
 
+    def test_full_live_log_redacts_private_reasoning_and_secrets(self):
+        task = {}
+        api.append_live_log(task, json.dumps({"type": "message_update", "authorization": "Bearer private", "message": {"content": [{"type": "thinking", "thinking": "hidden chain", "text": "also hidden"}, {"type": "text", "text": "visible answer"}]}, "assistantMessageEvent": {"type": "thinking_delta", "delta": "hidden fragment", "content": "hidden ending"}}))
+        logged = task["liveLog"][0]["line"]
+        self.assertIn("visible answer", logged)
+        self.assertIn("[PRIVATE_REASONING]", logged)
+        self.assertIn("[REDACTED]", logged)
+        self.assertNotIn("hidden chain", logged)
+        self.assertNotIn("hidden fragment", logged)
+        self.assertNotIn("hidden ending", logged)
+        self.assertNotIn("Bearer private", logged)
+
     def test_steering_is_owner_scoped_and_uses_rpc_channel(self):
         task_id = "b" * 32
         stdin = mock.Mock()

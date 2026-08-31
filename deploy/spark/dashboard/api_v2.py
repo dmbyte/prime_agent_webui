@@ -365,7 +365,7 @@ def task_snapshot(user=None):
         for task_id, task in TASKS.items():
             if user is not None and task.get("owner", INITIAL_ADMIN) != user:
                 continue
-            row = {key: value for key, value in task.items() if key not in {"process", "usage", "rpcResponses", "agentEnded"}}
+            row = {key: value for key, value in task.items() if key not in {"process", "usage", "rpcResponses", "agentEnded", "liveLogBytes"}}
             if row.get("status") == "running":
                 row["elapsedSeconds"] = round(time.time() - row["startedEpoch"], 1)
             rows.append(row)
@@ -425,6 +425,43 @@ def sanitize_runtime_text(value, limit=1000):
     value = re.sub(r"(?i)sk-(?:proj-)?[A-Za-z0-9_-]{20,}", "[REDACTED_API_KEY]", value)
     value = re.sub(r"(?i)(authorization\s*[:=]\s*bearer\s+)[^\s\"']+", r"\1[REDACTED]", value)
     return re.sub(r"\s+", " ", value).strip()[:limit]
+
+
+def redact_runtime_value(value, key=""):
+    normalized = re.sub(r"[^a-z]", "", str(key).lower())
+    if normalized in {"thinking", "reasoning", "chainofthought", "thinkingsignature"}:
+        return "[PRIVATE_REASONING]"
+    if any(token in normalized for token in ("authorization", "apikey", "password", "secret", "refreshtoken", "accesstoken", "cookie")):
+        return "[REDACTED]"
+    if isinstance(value, dict):
+        event_type = str(value.get("type") or "").lower()
+        private_part = event_type in {"thinking", "reasoning"} or event_type.startswith("thinking_") or event_type.startswith("reasoning_")
+        allowed_private = {"type", "contentindex"}
+        return {str(child_key): ("[PRIVATE_REASONING]" if private_part and re.sub(r"[^a-z]", "", str(child_key).lower()) not in allowed_private else redact_runtime_value(child_value, child_key)) for child_key, child_value in value.items()}
+    if isinstance(value, list):
+        return [redact_runtime_value(item) for item in value]
+    if isinstance(value, str):
+        return sanitize_runtime_text(value, 20000)
+    return value
+
+
+def safe_runtime_line(line):
+    try:
+        return json.dumps(redact_runtime_value(json.loads(line)), separators=(",", ":"), ensure_ascii=False)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return sanitize_runtime_text(line, 20000)
+
+
+def append_live_log(task, line):
+    line = safe_runtime_line(line)
+    if not line:
+        return
+    size = len(line.encode("utf-8", errors="replace"))
+    task.setdefault("liveLog", []).append({"at": now_iso(), "line": line})
+    task["liveLogBytes"] = task.get("liveLogBytes", 0) + size
+    while len(task["liveLog"]) > 5000 or task["liveLogBytes"] > 2 * 1024 * 1024:
+        removed = task["liveLog"].pop(0)["line"]
+        task["liveLogBytes"] -= len(removed.encode("utf-8", errors="replace"))
 
 
 def add_runtime_event(task, kind, label, detail=""):
@@ -547,6 +584,10 @@ def monitor_task(task_id, before):
                 if task:
                     add_task_progress(task, "Discarded an oversized runtime event")
             continue
+        with TASK_LOCK:
+            current = TASKS.get(task_id)
+            if current:
+                append_live_log(current, line)
         try:
             apply_task_event(task_id, json.loads(line))
         except (json.JSONDecodeError, TypeError, ValueError):
@@ -555,7 +596,7 @@ def monitor_task(task_id, before):
                 if current:
                     add_runtime_event(current, "console", "Runtime output", line)
         if len(line) <= 20000:
-            log_lines.append(line)
+            log_lines.append(safe_runtime_line(line) + "\n")
             log_lines = log_lines[-200:]
         with TASK_LOCK:
             ended = bool(TASKS.get(task_id, {}).get("agentEnded"))
@@ -570,6 +611,10 @@ def monitor_task(task_id, before):
         os.killpg(process.pid, signal.SIGKILL)
         remainder, _ = process.communicate(timeout=5)
     for line in remainder.splitlines():
+        with TASK_LOCK:
+            current = TASKS.get(task_id)
+            if current:
+                append_live_log(current, line)
         try:
             apply_task_event(task_id, json.loads(line))
         except (json.JSONDecodeError, TypeError, ValueError):
@@ -578,7 +623,7 @@ def monitor_task(task_id, before):
                 if current:
                     add_runtime_event(current, "console", "Runtime output", line)
         if len(line) <= 20000:
-            log_lines.append(line + "\n")
+            log_lines.append(safe_runtime_line(line) + "\n")
     output = "".join(log_lines[-200:])
     with TASK_LOCK:
         current = TASKS.get(task_id, {})
@@ -662,7 +707,7 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITI
     before = session_stems(owner)
     process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=task_cwd, env=task_env, start_new_session=True)
     started = now_iso()
-    task = {"id": task_id, "sessionId": session_id if not fork else None, "agentSessionId": session_id if session_id and not fork else None, "rpcReady": True, "rpcResponses": {}, "owner": owner, "authorization": authorization or {}, "topic": legacy.safe_topic(message) or "Native task", **route, "thinking": thinking, "contextWindow": details.get("contextWindow"), "maxTokens": details.get("maxTokens"), "status": "running", "progress": "Starting Prime", "progressEvents": [{"at": started, "label": "Request received"}], "runtimeEvents": [{"at": started, "kind": "request", "label": "Request received"}], "liveResponse": "", "started": started, "startedEpoch": time.time(), "pid": process.pid, "process": process, "logAvailable": False}
+    task = {"id": task_id, "sessionId": session_id if not fork else None, "agentSessionId": session_id if session_id and not fork else None, "rpcReady": True, "rpcResponses": {}, "owner": owner, "authorization": authorization or {}, "topic": legacy.safe_topic(message) or "Native task", **route, "thinking": thinking, "contextWindow": details.get("contextWindow"), "maxTokens": details.get("maxTokens"), "status": "running", "progress": "Starting Prime", "progressEvents": [{"at": started, "label": "Request received"}], "runtimeEvents": [{"at": started, "kind": "request", "label": "Request received"}], "liveLog": [], "liveLogBytes": 0, "liveResponse": "", "started": started, "startedEpoch": time.time(), "pid": process.pid, "process": process, "logAvailable": False}
     with TASK_LOCK:
         TASKS[task_id] = task
     with META_LOCK:
@@ -690,7 +735,7 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITI
         raise RuntimeError("Prime could not accept the initial prompt") from error
     threading.Thread(target=monitor_task, args=(task_id, before), daemon=True).start()
     legacy.audit("native_task_started", task=task_id, session=session_id)
-    return {key: value for key, value in task.items() if key not in {"process", "rpcResponses", "agentEnded"}}
+    return {key: value for key, value in task.items() if key not in {"process", "rpcResponses", "agentEnded", "liveLogBytes"}}
 
 
 def stop_native_task(task_id, owner=INITIAL_ADMIN):
