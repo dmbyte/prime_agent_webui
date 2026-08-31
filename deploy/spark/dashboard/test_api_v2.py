@@ -81,6 +81,12 @@ class DashboardV2Tests(unittest.TestCase):
             self.assertEqual([row["id"] for row in api.conversation_catalog(user="alice")], ["session-alice"])
         api.SESSION_CACHE.pop("alice", None)
 
+    def test_session_stems_tolerates_temporarily_inaccessible_tree(self):
+        inaccessible = mock.Mock()
+        inaccessible.glob.side_effect = PermissionError("temporarily protected")
+        with mock.patch.object(api, "session_root", return_value=inaccessible):
+            self.assertEqual(api.session_stems("alice"), set())
+
     def test_broker_exit_marks_task_failed_without_exposing_details(self):
         task_id = "c" * 32
         api.TASKS[task_id] = {"id": task_id, "owner": "alice", "status": "running", "progressEvents": []}

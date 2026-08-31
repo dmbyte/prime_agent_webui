@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Validated sudo boundary that launches one rootless container as prime-runner."""
-import base64, json, os, subprocess, sys, time
+import base64, json, os, signal, subprocess, sys, time
 from pathlib import Path
 
 sys.path.insert(0, "/usr/local/lib/prime-runner")
@@ -42,11 +42,24 @@ def main():
     os.environ["HOME"] = str(ROOT)
     os.environ.setdefault("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
     argv=container_runner.command(request["taskId"],request["owner"],request["authorization"],request["provider"],request["model"],request["thinking"],request["sessionId"],request["fork"],ROOT/"users",ROOT/"image-digests.json")
+    child = None
+    stop_requested = False
+    def stop_child(_signum, _frame):
+        nonlocal stop_requested
+        stop_requested = True
+        if child and child.poll() is None:
+            try: os.killpg(child.pid, signal.SIGTERM)
+            except ProcessLookupError: pass
+    signal.signal(signal.SIGTERM, stop_child)
+    signal.signal(signal.SIGINT, stop_child)
     try:
-        result = subprocess.run(argv, check=False)
+        child = subprocess.Popen(argv, start_new_session=True)
+        if stop_requested and child.poll() is None:
+            os.killpg(child.pid, signal.SIGTERM)
+        returncode = child.wait()
     finally:
         # Prime protects its state with chmod(0700) while it runs. Restore the
         # API's named ACL only after the isolated task has released the tree.
         configure(request["owner"])
-    raise SystemExit(result.returncode)
+    raise SystemExit(returncode)
 if __name__=="__main__": main()

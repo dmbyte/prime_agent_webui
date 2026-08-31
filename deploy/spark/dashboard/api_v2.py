@@ -251,6 +251,14 @@ def cached_session_catalog(user):
     return rows
 
 
+def session_stems(user):
+    """Return visible session stems without letting a stale ACL break requests."""
+    try:
+        return {path.stem for path in session_root(user).glob("*.jsonl")}
+    except OSError:
+        return set()
+
+
 def usage_for_user(user):
     paths = []
     root = session_root(user)
@@ -535,8 +543,11 @@ def monitor_task(task_id, before):
     stopped = bool(current.get("stopRequested"))
     status = "timed_out" if timed_out else "stopped" if stopped else "failed" if rpc_error else "completed" if agent_ended or process.returncode == 0 else "failed"
     root = session_root(task.get("owner", INITIAL_ADMIN))
-    after = {path.stem for path in root.glob("*.jsonl")}
-    created = sorted(after - before, key=lambda value: (root / f"{value}.jsonl").stat().st_mtime, reverse=True)
+    after = session_stems(task.get("owner", INITIAL_ADMIN))
+    try:
+        created = sorted(after - before, key=lambda value: (root / f"{value}.jsonl").stat().st_mtime, reverse=True)
+    except OSError:
+        created = []
     with TASK_LOCK:
         task = TASKS[task_id]
         if not task.get("sessionId") and created:
@@ -604,7 +615,7 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITI
             command.extend(["--fork" if fork else "--resume", session_id])
         task_cwd = legacy.HOME / "prime-dgx-agent"
         task_env = prime_env()
-    before = {path.stem for path in session_root(owner).glob("*.jsonl")}
+    before = session_stems(owner)
     process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=task_cwd, env=task_env, start_new_session=True)
     task = {"id": task_id, "sessionId": session_id if not fork else None, "agentSessionId": session_id if session_id and not fork else None, "rpcReady": True, "rpcResponses": {}, "owner": owner, "authorization": authorization or {}, "topic": legacy.safe_topic(message) or "Native task", **route, "thinking": thinking, "contextWindow": details.get("contextWindow"), "maxTokens": details.get("maxTokens"), "status": "running", "progress": "Starting Prime", "progressEvents": [{"at": now_iso(), "label": "Request received"}], "liveResponse": "", "started": now_iso(), "startedEpoch": time.time(), "pid": process.pid, "process": process, "logAvailable": False}
     with TASK_LOCK:
