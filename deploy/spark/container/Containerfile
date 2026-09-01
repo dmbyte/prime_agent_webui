@@ -10,12 +10,12 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        bash ca-certificates curl fd-find git iproute2 jq openssh-client \
        procps python3 python3-venv ripgrep socat tini \
+    && curl -fsSL "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-aarch64-unknown-linux-gnu.tar.gz" -o /tmp/uv.tar.gz \
+    && echo "${UV_AARCH64_SHA256}  /tmp/uv.tar.gz" | sha256sum --check --strict \
+    && tar -xzf /tmp/uv.tar.gz -C /tmp \
+    && install -o root -g root -m 0755 /tmp/uv-aarch64-unknown-linux-gnu/uv /tmp/uv-aarch64-unknown-linux-gnu/uvx /usr/local/bin/ \
     && if [ "$PROFILE" = "development" ]; then \
-         apt-get install -y --no-install-recommends build-essential python3-dev \
-         && curl -fsSL "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-aarch64-unknown-linux-gnu.tar.gz" -o /tmp/uv.tar.gz \
-         && echo "${UV_AARCH64_SHA256}  /tmp/uv.tar.gz" | sha256sum --check --strict \
-         && tar -xzf /tmp/uv.tar.gz -C /tmp \
-         && install -o root -g root -m 0755 /tmp/uv-aarch64-unknown-linux-gnu/uv /tmp/uv-aarch64-unknown-linux-gnu/uvx /usr/local/bin/; \
+         apt-get install -y --no-install-recommends build-essential python3-dev; \
        elif [ "$PROFILE" = "cad" ]; then \
          apt-get install -y --no-install-recommends openscad; \
        elif [ "$PROFILE" = "network-operations" ]; then \
@@ -24,6 +24,11 @@ RUN apt-get update \
     && curl -fsSL "https://pub-728493de92a943e2a9b2d17b4719f318.r2.dev/releases/v${PRIME_AGENT_VERSION}/prime-agent-${PRIME_AGENT_VERSION}.tgz" -o /tmp/prime-agent.tgz \
     && echo "${PRIME_AGENT_SHA256}  /tmp/prime-agent.tgz" | sha256sum --check --strict \
     && npm install --global --omit=dev /tmp/prime-agent.tgz \
+    && uv python install 3.11 \
+    && uv venv --python 3.11 /opt/prime-kernel \
+    && uv pip install --python /opt/prime-kernel/bin/python \
+       ipykernel prime-agent-runtime dill requests httpx pyyaml tomli \
+       python-dotenv pandas numpy scipy beautifulsoup4 lxml pydantic tyro \
     && npm cache clean --force \
     && rm -rf /var/lib/apt/lists/* /tmp/prime-agent.tgz /tmp/uv.tar.gz /tmp/uv-aarch64-unknown-linux-gnu
 
@@ -33,6 +38,7 @@ RUN groupmod --new-name prime node \
 
 ENV HOME=/home/prime \
     PATH=/usr/local/bin:/usr/bin:/bin \
+    PRIME_AGENT_KERNEL_PYTHON=/opt/prime-kernel/bin/python \
     NODE_ENV=production
 WORKDIR /workspace
 USER prime

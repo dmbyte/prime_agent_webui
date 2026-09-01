@@ -2,6 +2,7 @@
 import os
 import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 import container_runner
@@ -14,6 +15,15 @@ def policy(network="restricted", execution="task", profile="general"):
 
 
 class ContainerRunnerTests(unittest.TestCase):
+    def test_image_preprovisions_prime_kernel_runtime(self):
+        containerfile = (Path(__file__).parents[1] / "container" / "Containerfile").read_text()
+        self.assertIn("PRIME_AGENT_KERNEL_PYTHON=/opt/prime-kernel/bin/python", containerfile)
+        self.assertIn("ipykernel prime-agent-runtime dill", containerfile)
+        self.assertLess(
+            containerfile.index("uv-aarch64-unknown-linux-gnu.tar.gz"),
+            containerfile.index('if [ "$PROFILE" = "development" ]'),
+        )
+
     def build(self, authorization=None, owner="alice"):
         with tempfile.TemporaryDirectory() as root, mock.patch.object(os, "getuid", return_value=1200), mock.patch.object(os, "getgid", return_value=1200):
             return container_runner.command("a" * 32, owner, authorization or policy(), "openai", "example", "low", storage_root=root)
