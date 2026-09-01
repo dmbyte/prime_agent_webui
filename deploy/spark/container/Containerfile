@@ -24,8 +24,7 @@ RUN apt-get update \
     && curl -fsSL "https://pub-728493de92a943e2a9b2d17b4719f318.r2.dev/releases/v${PRIME_AGENT_VERSION}/prime-agent-${PRIME_AGENT_VERSION}.tgz" -o /tmp/prime-agent.tgz \
     && echo "${PRIME_AGENT_SHA256}  /tmp/prime-agent.tgz" | sha256sum --check --strict \
     && npm install --global --omit=dev /tmp/prime-agent.tgz \
-    && uv python install 3.11 \
-    && uv venv --python 3.11 /opt/prime-kernel \
+    && uv venv --python /usr/bin/python3.11 /opt/prime-kernel \
     && uv pip install --python /opt/prime-kernel/bin/python \
        ipykernel /usr/local/lib/node_modules/prime-agent/dist/prime-agent-runtime \
        dill requests httpx pyyaml tomli \

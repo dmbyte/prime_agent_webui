@@ -19,6 +19,7 @@ class ContainerRunnerTests(unittest.TestCase):
         containerfile = (Path(__file__).parents[1] / "container" / "Containerfile").read_text()
         self.assertIn("PRIME_AGENT_KERNEL_PYTHON=/opt/prime-kernel/bin/python", containerfile)
         self.assertIn("ipykernel /usr/local/lib/node_modules/prime-agent/dist/prime-agent-runtime", containerfile)
+        self.assertIn("uv venv --python /usr/bin/python3.11 /opt/prime-kernel", containerfile)
         self.assertLess(
             containerfile.index("uv-aarch64-unknown-linux-gnu.tar.gz"),
             containerfile.index('if [ "$PROFILE" = "development" ]'),
