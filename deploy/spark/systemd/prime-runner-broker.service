@@ -1,7 +1,7 @@
 [Unit]
 Description=Prime rootless task runner broker
-After=prime-model-gateway.service
-Requires=prime-model-gateway.service
+After=prime-model-gateway.service var-lib-prime\x2drunner-local\x2dhome.mount
+Requires=prime-model-gateway.service var-lib-prime\x2drunner-local\x2dhome.mount
 
 [Service]
 Type=simple
@@ -13,7 +13,7 @@ RuntimeDirectoryMode=0750
 Environment=XDG_RUNTIME_DIR=/run/user/@RUNNER_UID@
 Environment=PRIME_WEB_OWNER=@WEB_OWNER@
 Environment=PRIME_LOCAL_HOME_SOURCE=/home/@WEB_OWNER@
-Environment=PRIME_LOCAL_HOME_MIRROR=/run/prime-local
+Environment=PRIME_LOCAL_HOME_MIRROR=/var/lib/prime-runner/local-home
 ExecStart=/usr/bin/python3 /usr/local/lib/prime-runner/runner_broker.py
 Restart=on-failure
 RestartSec=2
@@ -25,7 +25,6 @@ PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=no
 InaccessiblePaths=/home /root
-BindReadOnlyPaths=/home/@WEB_OWNER@:/run/prime-local
 ReadWritePaths=/var/lib/prime-runner /run/prime-runner
 CapabilityBoundingSet=CAP_SETUID CAP_SETGID
 AmbientCapabilities=
