@@ -159,7 +159,7 @@ class DashboardV2Tests(unittest.TestCase):
         meta = {"conversations": {"session-alice": {"owner": "alice"}}, "sessionCatalogCache": {"alice": rows}}
         api.SESSION_CACHE.pop("alice", None)
         try:
-            with mock.patch.dict(api.os.environ, {"PRIME_TASK_CONTAINER_IMAGE": "1"}), mock.patch.object(api.os, "access", return_value=False), mock.patch.object(api, "metadata", return_value=meta), mock.patch.object(api.legacy, "session_path", side_effect=lambda value, root=None: Path(f"/tmp/{value}.jsonl")), mock.patch.object(api, "model_details", return_value={}):
+            with mock.patch.dict(api.os.environ, {"PRIME_TASK_CONTAINER_IMAGE": "1"}), mock.patch.object(api.os, "access", return_value=False), mock.patch.object(api, "metadata", return_value=meta), mock.patch.object(api.legacy, "session_path", side_effect=PermissionError("protected")), mock.patch.object(api, "model_details", return_value={}):
                 self.assertEqual([row["id"] for row in api.conversation_catalog(user="alice")], ["session-alice"])
         finally:
             api.SESSION_CACHE.pop("alice", None)

@@ -384,7 +384,7 @@ def conversation_catalog(query="", include_archived=False, user=INITIAL_ADMIN):
     for row in rows:
         try:
             storage_id = legacy.session_path(row["id"], root).stem
-        except ValueError:
+        except (ValueError, OSError):
             storage_id = row["id"]
         extra = data.get(row["id"], data.get(storage_id, {}))
         if extra.get("owner", INITIAL_ADMIN) != user:
