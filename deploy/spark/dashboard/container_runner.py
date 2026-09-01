@@ -52,17 +52,27 @@ def local_mounts(paths):
         source = Path(value)
         if not source.is_absolute() or any(character in str(source) for character in "\x00\r\n,"):
             raise ValueError("Invalid local path")
+        mount_source = source
+        home_source = Path(os.environ.get("PRIME_LOCAL_HOME_SOURCE", "/nonexistent-prime-local-home"))
+        home_mirror = Path(os.environ.get("PRIME_LOCAL_HOME_MIRROR", "/nonexistent-prime-local-mirror"))
+        mirrored_home = source == home_source or home_source in source.parents
+        if mirrored_home:
+            mount_source = home_mirror / source.relative_to(home_source)
         try:
-            resolved = source.resolve(strict=True)
+            resolved = mount_source.resolve(strict=True)
+            mirror_root = home_mirror.resolve(strict=True) if mirrored_home else None
         except (OSError, RuntimeError) as error:
             raise ValueError(f"Local path is unavailable: {source}") from error
-        if not any(resolved == root or root in resolved.parents for root in LOCAL_PATH_ROOTS):
+        if mirrored_home and not (resolved == mirror_root or mirror_root in resolved.parents):
+            raise ValueError("Local path escapes the approved home mirror")
+        approved = mirrored_home or any(resolved == root or root in resolved.parents for root in LOCAL_PATH_ROOTS)
+        if not approved:
             raise ValueError("Local path is outside approved data roots")
         if any(part in SENSITIVE_PARTS for part in resolved.parts):
             raise ValueError("Sensitive credential and agent-state paths cannot be mounted")
         if not (resolved.is_file() or resolved.is_dir()):
             raise ValueError("Local path must be a regular file or directory")
-        safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "-", resolved.name).strip("-.")[:48] or "data"
+        safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "-", source.name).strip("-.")[:48] or "data"
         mounts.append((resolved, f"/project-files/{index:02d}-{safe_name}"))
     return mounts
 

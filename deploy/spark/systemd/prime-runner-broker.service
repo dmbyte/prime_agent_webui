@@ -7,11 +7,13 @@ Requires=prime-model-gateway.service
 Type=simple
 User=prime-runner
 Group=prime-runner
-SupplementaryGroups=prime-web
+SupplementaryGroups=prime-web prime-local-access
 RuntimeDirectory=prime-runner
 RuntimeDirectoryMode=0750
 Environment=XDG_RUNTIME_DIR=/run/user/@RUNNER_UID@
 Environment=PRIME_WEB_OWNER=@WEB_OWNER@
+Environment=PRIME_LOCAL_HOME_SOURCE=/home/@WEB_OWNER@
+Environment=PRIME_LOCAL_HOME_MIRROR=/run/prime-local
 ExecStart=/usr/bin/python3 /usr/local/lib/prime-runner/runner_broker.py
 Restart=on-failure
 RestartSec=2
@@ -23,6 +25,7 @@ PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=no
 InaccessiblePaths=/home /root
+BindReadOnlyPaths=/home/@WEB_OWNER@:/run/prime-local
 ReadWritePaths=/var/lib/prime-runner /run/prime-runner
 CapabilityBoundingSet=CAP_SETUID CAP_SETGID
 AmbientCapabilities=
