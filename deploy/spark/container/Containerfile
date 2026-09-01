@@ -27,7 +27,8 @@ RUN apt-get update \
     && uv python install 3.11 \
     && uv venv --python 3.11 /opt/prime-kernel \
     && uv pip install --python /opt/prime-kernel/bin/python \
-       ipykernel prime-agent-runtime dill requests httpx pyyaml tomli \
+       ipykernel /usr/local/lib/node_modules/prime-agent/dist/prime-agent-runtime \
+       dill requests httpx pyyaml tomli \
        python-dotenv pandas numpy scipy beautifulsoup4 lxml pydantic tyro \
     && npm cache clean --force \
     && rm -rf /var/lib/apt/lists/* /tmp/prime-agent.tgz /tmp/uv.tar.gz /tmp/uv-aarch64-unknown-linux-gnu
