@@ -140,6 +140,27 @@ class DashboardV2Tests(unittest.TestCase):
             self.assertEqual([row["id"] for row in api.conversation_catalog(user="alice")], ["session-alice"])
         api.SESSION_CACHE.pop("alice", None)
 
+    def test_conversation_catalog_does_not_replace_cache_with_empty_during_task(self):
+        rows = [{"id": "session-alice", "topic": "Alice", "modified": "2026-01-01T00:00:00Z", "provider": "p", "model": "m"}]
+        meta = {"conversations": {"session-alice": {"owner": "alice"}}}
+        task_id = "d" * 32
+        api.SESSION_CACHE.pop("alice", None)
+        api.TASKS[task_id] = {"owner": "alice", "status": "running"}
+        try:
+            with mock.patch.object(api.legacy, "session_catalog", side_effect=[rows, []]), mock.patch.object(api, "metadata", return_value=meta), mock.patch.object(api.legacy, "session_path", side_effect=lambda value, root=None: Path(f"/tmp/{value}.jsonl")), mock.patch.object(api, "model_details", return_value={}):
+                self.assertEqual([row["id"] for row in api.conversation_catalog(user="alice")], ["session-alice"])
+                self.assertEqual([row["id"] for row in api.conversation_catalog(user="alice")], ["session-alice"])
+        finally:
+            api.TASKS.pop(task_id, None)
+            api.SESSION_CACHE.pop("alice", None)
+
+    def test_known_conversation_update_does_not_stat_protected_session(self):
+        meta = {"conversations": {"session-alice": {"owner": "alice"}}}
+        with mock.patch.object(api, "metadata", return_value=meta), mock.patch.object(api, "save_metadata") as save, mock.patch.object(api.legacy, "session_path", side_effect=PermissionError("protected")):
+            result = api.update_conversation("session-alice", "pin", True, "alice", "user")
+        self.assertTrue(result["pinned"])
+        save.assert_called_once()
+
     def test_session_stems_tolerates_temporarily_inaccessible_tree(self):
         inaccessible = mock.Mock()
         inaccessible.glob.side_effect = PermissionError("temporarily protected")

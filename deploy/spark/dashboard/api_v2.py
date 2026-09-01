@@ -324,7 +324,17 @@ def cached_session_catalog(user):
         with SESSION_CACHE_LOCK:
             return [dict(row) for row in SESSION_CACHE.get(user, [])]
     rows = [dict(row) for row in rows]
+    # Prime temporarily chmods its state parent while a task is active. Some
+    # catalog implementations turn that inaccessible tree into [] instead of
+    # raising, which must not erase the last known-good sidebar contents.
+    with TASK_LOCK:
+        owner_active = any(
+            task.get("owner") == user and task.get("status") == "running"
+            for task in TASKS.values()
+        )
     with SESSION_CACHE_LOCK:
+        if owner_active and not rows and SESSION_CACHE.get(user):
+            return [dict(row) for row in SESSION_CACHE[user]]
         SESSION_CACHE[user] = [dict(row) for row in rows]
     return rows
 
@@ -922,9 +932,13 @@ def message_native_task(task_id, message, mode="steer", owner=INITIAL_ADMIN):
 def update_conversation(session_id, action, value=None, user=INITIAL_ADMIN, role="user"):
     if not valid_id(session_id):
         raise ValueError("Conversation not found")
-    legacy.session_path(session_id, session_root(user))
     require_conversation_owner(session_id, user)
     data = metadata()
+    # Metadata is the authenticated ownership authority for known conversations.
+    # Avoid touching Prime's temporarily protected session file while a task is
+    # running; unknown/legacy rows still require physical-file validation.
+    if session_id not in data.get("conversations", {}):
+        legacy.session_path(session_id, session_root(user))
     row = data.setdefault("conversations", {}).setdefault(session_id, {})
     if action == "pin":
         row["pinned"] = bool(value)
