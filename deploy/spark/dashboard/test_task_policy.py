@@ -32,11 +32,11 @@ class TaskPolicyTests(unittest.TestCase):
 
     def test_local_paths_require_role_and_per_task_confirmation(self):
         with self.assertRaisesRegex(ValueError, "power-user"):
-            authorize_task({"localPaths": ["/home/alice/project"]}, "user")
+            authorize_task({"localPaths": ["/srv/project"]}, "user")
         with self.assertRaisesRegex(ValueError, "local-file approval"):
-            authorize_task({"localPaths": ["/home/alice/project"]}, "power_user")
-        result = authorize_task({"localPaths": ["/home/alice/project"]}, "power_user", files_confirmed=True)
-        self.assertEqual(result["localPaths"], ["/home/alice/project"])
+            authorize_task({"localPaths": ["/srv/project"]}, "power_user")
+        result = authorize_task({"localPaths": ["/srv/project"]}, "power_user", files_confirmed=True)
+        self.assertEqual(result["localPaths"], ["/srv/project"])
 
     def test_local_paths_are_absolute_bounded_and_deduplicated(self):
         with self.assertRaisesRegex(ValueError, "absolute"):
@@ -44,8 +44,12 @@ class TaskPolicyTests(unittest.TestCase):
         values = [f"/home/alice/project-{index}" for index in range(9)]
         with self.assertRaisesRegex(ValueError, "No more than"):
             authorize_task({"localPaths": values}, "admin", files_confirmed=True)
-        result = authorize_task({"localPaths": ["/home/alice/project", "/home/alice/project"]}, "admin", files_confirmed=True)
-        self.assertEqual(result["localPaths"], ["/home/alice/project"])
+        result = authorize_task({"localPaths": ["/srv/project", "/srv/project"]}, "admin", files_confirmed=True)
+        self.assertEqual(result["localPaths"], ["/srv/project"])
+
+    def test_home_paths_are_rejected_while_broker_masks_home(self):
+        with self.assertRaisesRegex(ValueError, "under /mnt"):
+            authorize_task({"localPaths": ["/home/alice/project"]}, "admin", files_confirmed=True)
 
 
 if __name__ == "__main__":

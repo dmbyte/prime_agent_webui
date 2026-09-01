@@ -9,6 +9,7 @@ EXECUTION_MODES = {"prompt", "task", "login", "deny"}
 NETWORK_MODES = {"restricted", "internet", "lan", "full"}
 PROFILES = {"general", "development", "cad", "finance", "network-operations", "review"}
 MAX_LOCAL_PATHS = 8
+LOCAL_PATH_ROOTS = ("/mnt", "/media", "/srv", "/opt")
 
 
 @dataclass(frozen=True)
@@ -51,6 +52,8 @@ def normalize_local_paths(value, role):
         path = str(item or "").strip()
         if not path.startswith("/") or len(path) > 512 or any(character in path for character in "\x00\r\n,"):
             raise ValueError("Local paths must be valid absolute Spark paths")
+        if not any(path == root or path.startswith(root + "/") for root in LOCAL_PATH_ROOTS):
+            raise ValueError("Spark-local paths must be under /mnt, /media, /srv, or /opt")
         if path not in result:
             result.append(path)
     return result

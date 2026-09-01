@@ -20,7 +20,7 @@ PROFILE_IMAGES = {
     "review": "localhost/prime-task-review:0.8.0",
 }
 SAFE_IMAGE = re.compile(r"localhost/prime-task-[a-z-]+:0\.8\.0@sha256:[a-f0-9]{64}\Z")
-LOCAL_PATH_ROOTS = tuple(Path(value) for value in ("/home", "/mnt", "/media", "/srv", "/opt"))
+LOCAL_PATH_ROOTS = tuple(Path(value) for value in ("/mnt", "/media", "/srv", "/opt"))
 SENSITIVE_PARTS = {".ssh", ".gnupg", ".aws", ".kube", ".prime", "prime-agent"}
 
 
