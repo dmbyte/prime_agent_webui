@@ -85,19 +85,5 @@ class ContainerRunnerTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "approved data roots"):
                 container_runner.local_mounts([root])
 
-    def test_home_source_uses_private_read_only_mirror(self):
-        with tempfile.TemporaryDirectory() as root:
-            mirror = container_runner.Path(root) / "mirror"
-            project = mirror / "projects" / "sample"
-            project.mkdir(parents=True)
-            (container_runner.Path(root) / "outside").mkdir()
-            environment = {"PRIME_LOCAL_HOME_SOURCE": "/home/alice", "PRIME_LOCAL_HOME_MIRROR": str(mirror)}
-            with mock.patch.dict(os.environ, environment):
-                mounts = container_runner.local_mounts(["/home/alice/projects/sample"])
-                self.assertEqual(mounts, [(project.resolve(), "/project-files/01-sample")])
-                with self.assertRaisesRegex(ValueError, "escapes"):
-                    container_runner.local_mounts(["/home/alice/../outside"])
-
-
 if __name__ == "__main__":
     unittest.main()

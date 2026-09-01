@@ -19,7 +19,7 @@ grep -q '^prime-runner:' /etc/subgid || echo 'prime-runner:165536:65536' | sudo 
 runner_uid=$(id -u prime-runner)
 sudo loginctl enable-linger prime-runner
 sudo systemctl restart "user@${runner_uid}.service"
-sudo install -d -o prime-runner -g prime-runner -m 0700 /var/lib/prime-runner/credentials/global /var/lib/prime-runner/credentials/users /var/lib/prime-runner/users /var/lib/prime-runner/gateway /var/lib/prime-runner/local-home
+sudo install -d -o prime-runner -g prime-runner -m 0700 /var/lib/prime-runner/credentials/global /var/lib/prime-runner/credentials/users /var/lib/prime-runner/users /var/lib/prime-runner/gateway
 sudo chown prime-runner:prime-runner /var/lib/prime-runner /var/lib/prime-runner/users
 sudo chmod 0700 /var/lib/prime-runner /var/lib/prime-runner/users
 sudo setfacl -m "u:${USER}:--x,g:prime-web:--x,m::--x" /var/lib/prime-runner /var/lib/prime-runner/users
@@ -34,10 +34,6 @@ sudo install -o root -g root -m 0755 "$repo/deploy/spark/container/runner_launch
 sudo install -o root -g root -m 0755 "$repo/deploy/spark/container/runner_client.py" /usr/local/libexec/prime-runner-client
 sudo install -o root -g root -m 0644 "$repo/deploy/spark/container/runner_broker.py" /usr/local/lib/prime-runner/runner_broker.py
 sudo install -o root -g root -m 0644 "$repo/deploy/spark/systemd/prime-model-gateway.service" /etc/systemd/system/
-local_home_unit=$(mktemp)
-sed -e "s/@WEB_OWNER@/${USER}/g" "$repo/deploy/spark/systemd/prime-local-home.mount" >"$local_home_unit"
-sudo install -o root -g root -m 0644 "$local_home_unit" '/etc/systemd/system/var-lib-prime\x2drunner-local\x2dhome.mount'
-rm -f "$local_home_unit"
 broker_unit=$(mktemp)
 sed -e "s/@RUNNER_UID@/${runner_uid}/g" -e "s/@WEB_OWNER@/${USER}/g" "$repo/deploy/spark/systemd/prime-runner-broker.service" >"$broker_unit"
 sudo install -o root -g root -m 0644 "$broker_unit" /etc/systemd/system/prime-runner-broker.service
@@ -49,7 +45,6 @@ else
   echo "No global ChatGPT/Codex credential found; local models remain available." >&2
 fi
 sudo systemctl daemon-reload
-sudo systemctl enable --now 'var-lib-prime\x2drunner-local\x2dhome.mount'
 sudo systemctl enable prime-model-gateway.service
 sudo systemctl restart prime-model-gateway.service
 sudo systemctl enable --now prime-runner-broker.service
