@@ -154,6 +154,16 @@ class DashboardV2Tests(unittest.TestCase):
             api.TASKS.pop(task_id, None)
             api.SESSION_CACHE.pop("alice", None)
 
+    def test_conversation_catalog_uses_persisted_cache_after_api_restart(self):
+        rows = [{"id": "session-alice", "topic": "Alice", "modified": "2026-01-01T00:00:00Z", "provider": "p", "model": "m"}]
+        meta = {"conversations": {"session-alice": {"owner": "alice"}}, "sessionCatalogCache": {"alice": rows}}
+        api.SESSION_CACHE.pop("alice", None)
+        try:
+            with mock.patch.dict(api.os.environ, {"PRIME_TASK_CONTAINER_IMAGE": "1"}), mock.patch.object(api.os, "access", return_value=False), mock.patch.object(api, "metadata", return_value=meta), mock.patch.object(api.legacy, "session_path", side_effect=lambda value, root=None: Path(f"/tmp/{value}.jsonl")), mock.patch.object(api, "model_details", return_value={}):
+                self.assertEqual([row["id"] for row in api.conversation_catalog(user="alice")], ["session-alice"])
+        finally:
+            api.SESSION_CACHE.pop("alice", None)
+
     def test_known_conversation_update_does_not_stat_protected_session(self):
         meta = {"conversations": {"session-alice": {"owner": "alice"}}}
         with mock.patch.object(api, "metadata", return_value=meta), mock.patch.object(api, "save_metadata") as save, mock.patch.object(api.legacy, "session_path", side_effect=PermissionError("protected")):

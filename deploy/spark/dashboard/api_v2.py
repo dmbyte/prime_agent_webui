@@ -318,11 +318,21 @@ def require_conversation_owner(session_id, user):
 
 def cached_session_catalog(user):
     """Keep state polling available while Prime temporarily protects its tree."""
-    try:
-        rows = legacy.session_catalog(session_root(user))
-    except OSError:
+    def fallback():
         with SESSION_CACHE_LOCK:
-            return [dict(row) for row in SESSION_CACHE.get(user, [])]
+            cached = SESSION_CACHE.get(user, [])
+        if cached:
+            return [dict(row) for row in cached]
+        persisted = metadata().get("sessionCatalogCache", {}).get(user, [])
+        return [dict(row) for row in persisted if isinstance(row, dict)]
+
+    try:
+        root = session_root(user)
+        if container_mode() and not os.access(root, os.R_OK | os.X_OK):
+            raise PermissionError("Prime session tree is temporarily protected")
+        rows = legacy.session_catalog(root)
+    except OSError:
+        return fallback()
     rows = [dict(row) for row in rows]
     # Prime temporarily chmods its state parent while a task is active. Some
     # catalog implementations turn that inaccessible tree into [] instead of
@@ -336,6 +346,13 @@ def cached_session_catalog(user):
         if owner_active and not rows and SESSION_CACHE.get(user):
             return [dict(row) for row in SESSION_CACHE[user]]
         SESSION_CACHE[user] = [dict(row) for row in rows]
+    if rows and container_mode():
+        with META_LOCK:
+            data = metadata()
+            catalogs = data.setdefault("sessionCatalogCache", {})
+            if catalogs.get(user) != rows:
+                catalogs[user] = rows
+                legacy.atomic_json(META, data)
     return rows
 
 
