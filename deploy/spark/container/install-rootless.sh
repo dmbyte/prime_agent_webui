@@ -8,9 +8,11 @@ done
 recovery_bundle=$("$repo/deploy/spark/container/create-rootless-backup.sh")
 echo "Pre-rootless recovery bundle: $recovery_bundle"
 if ! getent group prime-web >/dev/null; then sudo groupadd --system prime-web; fi
+if ! getent group prime-local-access >/dev/null; then sudo groupadd --system prime-local-access; fi
 if ! id prime-runner >/dev/null 2>&1; then sudo useradd --system --create-home --home-dir /var/lib/prime-runner --shell /usr/sbin/nologin prime-runner; fi
 sudo usermod -a -G prime-web "$USER"
 sudo usermod -a -G prime-web prime-runner
+sudo usermod -a -G prime-local-access prime-runner
 sudo usermod -g prime-runner prime-runner
 grep -q '^prime-runner:' /etc/subuid || echo 'prime-runner:165536:65536' | sudo tee -a /etc/subuid >/dev/null
 grep -q '^prime-runner:' /etc/subgid || echo 'prime-runner:165536:65536' | sudo tee -a /etc/subgid >/dev/null
@@ -21,7 +23,8 @@ sudo install -d -o prime-runner -g prime-runner -m 0700 /var/lib/prime-runner/cr
 sudo chown prime-runner:prime-runner /var/lib/prime-runner /var/lib/prime-runner/users
 sudo chmod 0700 /var/lib/prime-runner /var/lib/prime-runner/users
 sudo setfacl -m "u:${USER}:--x,g:prime-web:--x,m::--x" /var/lib/prime-runner /var/lib/prime-runner/users
-sudo setfacl -m "u:prime-runner:--x,m::r-x" "$HOME"
+sudo setfacl -x u:prime-runner "$HOME" 2>/dev/null || true
+sudo setfacl -m "g:prime-local-access:r-x,m::r-x" "$HOME"
 sudo install -d -o root -g root -m 0755 /usr/local/lib/prime-runner /usr/local/libexec
 sudo install -d -o prime-runner -g prime-runner -m 0700 /var/lib/prime-runner/build
 sudo install -o prime-runner -g prime-runner -m 0644 "$repo/deploy/spark/container/Containerfile" /var/lib/prime-runner/build/Containerfile

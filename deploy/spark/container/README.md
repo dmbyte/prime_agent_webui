@@ -12,6 +12,9 @@ Prime's RPC channel through the socket.
   ripgrep.
 - `development` adds native build tools, Python headers, and checksum-pinned
   ARM64 `uv`/`uvx` 0.12.8.
+- `prime-local-access` is a dedicated supplementary group for the runner. Its
+  `r-x` ACL on the installer account's home boundary satisfies Podman's mount
+  preparation without coupling local data access to the WebUI service group.
 - `cad` adds OpenSCAD.
 - `network-operations` adds nmap, ping, DNS, and traceroute tools and is limited
   to power users and administrators.
