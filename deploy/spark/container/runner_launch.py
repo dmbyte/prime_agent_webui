@@ -34,14 +34,6 @@ def main():
     allowed={"taskId","owner","authorization","provider","model","thinking","sessionId","fork"}
     if set(request)!=allowed: raise SystemExit(2)
     configure(request["owner"])
-    gateway=ROOT/"gateway"/request["owner"]/request["authorization"].get("networkMode","restricted")/"model.sock"
-    for _ in range(30):
-        if gateway.is_socket(): break
-        time.sleep(0.1)
-    else: raise SystemExit("Task gateway is unavailable")
-    os.environ["HOME"] = str(ROOT)
-    os.environ.setdefault("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
-    argv=container_runner.command(request["taskId"],request["owner"],request["authorization"],request["provider"],request["model"],request["thinking"],request["sessionId"],request["fork"],ROOT/"users",ROOT/"image-digests.json")
     child = None
     stop_requested = False
     def stop_child(_signum, _frame):
@@ -53,6 +45,17 @@ def main():
     signal.signal(signal.SIGTERM, stop_child)
     signal.signal(signal.SIGINT, stop_child)
     try:
+        gateway=ROOT/"gateway"/request["owner"]/request["authorization"].get("networkMode","restricted")/"model.sock"
+        for _ in range(30):
+            if gateway.is_socket(): break
+            time.sleep(0.1)
+        else: raise SystemExit("Task gateway is unavailable")
+        os.environ["HOME"] = str(ROOT)
+        os.environ.setdefault("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+        # Path validation and argv construction can fail before Podman starts.
+        # Keep them inside the restoration boundary so a rejected local path
+        # cannot leave the WebUI unable to traverse its conversation storage.
+        argv=container_runner.command(request["taskId"],request["owner"],request["authorization"],request["provider"],request["model"],request["thinking"],request["sessionId"],request["fork"],ROOT/"users",ROOT/"image-digests.json")
         child = subprocess.Popen(argv, start_new_session=True)
         if stop_requested and child.poll() is None:
             os.killpg(child.pid, signal.SIGTERM)
