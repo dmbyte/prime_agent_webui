@@ -741,6 +741,55 @@ def task_snapshot(user=None):
         return sorted(rows, key=lambda row: row["started"], reverse=True)[:50]
 
 
+def recover_failed_task_conversation(task, status):
+    if status not in {"failed", "timed_out", "stopped"} or task.get("sessionId") or not task.get("submittedMessage"):
+        return None
+    owner = task.get("owner", INITIAL_ADMIN)
+    session_id = f"recovered-{task['id'][:32]}"
+    root = session_root(owner)
+    root.mkdir(mode=0o770, parents=True, exist_ok=True)
+    path = root / f"{session_id}.jsonl"
+    timestamp = now_iso()
+    millis = int(time.time() * 1000)
+    failure = task.get("rpcError") or f"Task {status.replace('_', ' ')} before Prime could save the conversation."
+    if not path.exists():
+        records = [
+            {"type": "session", "id": session_id, "timestamp": timestamp},
+            {"type": "model_change", "provider": task.get("provider"), "modelId": task.get("model"), "timestamp": timestamp},
+            {"type": "thinking_level_change", "thinkingLevel": task.get("thinking"), "timestamp": timestamp},
+            {"type": "message", "message": {"id": f"user-{task['id']}", "role": "user", "content": [{"type": "text", "text": task["submittedMessage"]}], "timestamp": millis}},
+            {"type": "message", "message": {"id": f"error-{task['id']}", "role": "assistant", "content": [{"type": "text", "text": failure}], "timestamp": millis + 1}},
+        ]
+        temporary = path.with_suffix(".tmp")
+        temporary.write_text("".join(json.dumps(record, separators=(",", ":"), ensure_ascii=False) + "\n" for record in records))
+        os.chmod(temporary, 0o660)
+        os.replace(temporary, path)
+    with META_LOCK:
+        data = metadata()
+        row = data.setdefault("conversations", {}).setdefault(session_id, {})
+        row.update({
+            "owner": owner,
+            "recoveredFromTask": task["id"],
+            "recoveredAt": timestamp,
+            "thinking": task.get("thinking"),
+            "routeProvider": task.get("provider"),
+            "routeModel": task.get("model"),
+            "routingMode": task.get("routingMode"),
+            "routeReason": task.get("routeReason"),
+        })
+        if task.get("projectId"):
+            row["projectId"] = task["projectId"]
+        if task.get("fileIds"):
+            row["fileIds"] = list(dict.fromkeys([*(row.get("fileIds") or []), *task["fileIds"]]))
+        if task.get("persistPolicyOnSessionCreate") and isinstance(task.get("policyPreference"), dict):
+            row["taskPolicy"] = dict(task["policyPreference"])
+        data.setdefault("tasks", {}).setdefault(task["id"], {})["sessionId"] = session_id
+        data["tasks"][task["id"]]["status"] = status
+        data["tasks"][task["id"]]["finishedAt"] = timestamp
+        legacy.atomic_json(META, data)
+    return session_id
+
+
 def append_ledger(task, status, output=""):
     record = {"at": now_iso(), "taskId": task["id"], "owner": task.get("owner", INITIAL_ADMIN), "sessionId": task.get("sessionId"), "provider": task.get("provider"), "model": task.get("model"), "status": status, "elapsedSeconds": round(time.time() - task["startedEpoch"], 2)}
     if task.get("usage"):
@@ -1019,6 +1068,10 @@ def monitor_task(task_id, before):
         log_path.write_text(sanitized)
         os.chmod(log_path, 0o600)
         task["logAvailable"] = True
+        recovered = recover_failed_task_conversation(task, status)
+        if recovered:
+            task["sessionId"] = recovered
+            task["agentSessionId"] = recovered
         append_ledger(task, status, output)
         if task.get("sessionId"):
             store_task_route(task)
@@ -1115,12 +1168,13 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITI
     process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=task_cwd, env=task_env, start_new_session=True)
     started = now_iso()
     runtime = "openshell" if container_mode() else "host"
-    task = {"id": task_id, "sessionId": session_id if not fork else None, "agentSessionId": session_id if session_id and not fork else None, "rpcReady": True, "rpcResponses": {}, "owner": owner, "projectId": project_id, "fileIds": file_ids, "authorization": authorization or {}, "policyPreference": policy or {}, "persistPolicyOnSessionCreate": not bool(session_id) or fork, "topic": legacy.safe_topic(message) or "Native task", **route, "thinking": thinking, "contextWindow": details.get("contextWindow"), "maxTokens": details.get("maxTokens"), "runtime": runtime, "sandboxName": f"pt-{task_id[:16]}" if runtime == "openshell" else None, "policyRevision": 1 if runtime == "openshell" else None, "status": "running", "progress": "Starting Prime", "progressEvents": [{"at": started, "label": "Request received"}], "runtimeEvents": [{"at": started, "kind": "request", "label": "Request received"}], "liveLog": [], "liveLogBytes": 0, "liveResponse": "", "started": started, "startedEpoch": time.time(), "pid": process.pid, "process": process, "logAvailable": False}
+    topic = legacy.safe_topic(message) or "Native task"
+    task = {"id": task_id, "sessionId": session_id if not fork else None, "agentSessionId": session_id if session_id and not fork else None, "rpcReady": True, "rpcResponses": {}, "owner": owner, "projectId": project_id, "fileIds": file_ids, "authorization": authorization or {}, "policyPreference": policy or {}, "persistPolicyOnSessionCreate": not bool(session_id) or fork, "submittedMessage": message, "submittedAt": started, "topic": topic, **route, "thinking": thinking, "contextWindow": details.get("contextWindow"), "maxTokens": details.get("maxTokens"), "runtime": runtime, "sandboxName": f"pt-{task_id[:16]}" if runtime == "openshell" else None, "policyRevision": 1 if runtime == "openshell" else None, "status": "running", "progress": "Starting Prime", "progressEvents": [{"at": started, "label": "Request received"}], "runtimeEvents": [{"at": started, "kind": "request", "label": "Request received"}], "liveLog": [], "liveLogBytes": 0, "liveResponse": "", "started": started, "startedEpoch": time.time(), "pid": process.pid, "process": process, "logAvailable": False}
     with TASK_LOCK:
         TASKS[task_id] = task
     with META_LOCK:
         data = metadata()
-        data.setdefault("tasks", {})[task_id] = {"owner": owner, "createdAt": task["started"]}
+        data.setdefault("tasks", {})[task_id] = {"owner": owner, "createdAt": task["started"], "status": "running", "topic": topic, "prompt": message, "sessionId": task.get("sessionId"), "projectId": project_id}
         legacy.atomic_json(META, data)
     if task.get("sessionId"):
         store_task_route(task)

@@ -312,6 +312,34 @@ class DashboardV2Tests(unittest.TestCase):
         finally:
             api.TASKS.pop(task_id, None)
 
+    def test_failed_pretranscript_task_recovers_submitted_prompt_as_conversation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            meta_path = root / "metadata.json"
+            meta_path.write_text(json.dumps({"conversations": {}, "tasks": {}}))
+            task = {
+                "id": "f" * 32,
+                "owner": "alice",
+                "submittedMessage": "Please do not lose this prompt.",
+                "rpcError": "OpenShell task runtime exited",
+                "provider": "spark-nemotron",
+                "model": "nemotron-3.5-lightning",
+                "thinking": "low",
+                "startedEpoch": api.time.time(),
+                "policyPreference": {"profile": "development", "executionMode": "deny", "networkMode": "restricted"},
+                "persistPolicyOnSessionCreate": True,
+            }
+            with mock.patch.object(api, "META", meta_path), mock.patch.object(api, "session_root", return_value=root / "sessions"):
+                session_id = api.recover_failed_task_conversation(task, "failed")
+                messages = api.conversation_messages(session_id, "alice")
+            self.assertEqual(messages[0]["role"], "user")
+            self.assertEqual(messages[0]["text"], "Please do not lose this prompt.")
+            self.assertEqual(messages[1]["role"], "assistant")
+            self.assertIn("OpenShell task runtime exited", messages[1]["text"])
+            saved = json.loads(meta_path.read_text())
+            self.assertEqual(saved["conversations"][session_id]["recoveredFromTask"], task["id"])
+            self.assertEqual(saved["conversations"][session_id]["taskPolicy"]["profile"], "development")
+
     def test_admin_status_checks_openshell_broker_as_system_service(self):
         calls = []
         def fake_run(args, **kwargs):

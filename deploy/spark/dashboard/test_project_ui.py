@@ -23,6 +23,12 @@ class ProjectUiTests(unittest.TestCase):
         self.assertIn("Add to project…", app)
         self.assertIn("border:1px solid var(--line)", css)
 
+    def test_failed_task_keeps_submitted_prompt_visible(self):
+        app = (ROOT / "app-v2.js").read_text()
+        self.assertIn("task.submittedMessage", app)
+        self.assertIn("Task failed before it could be saved", app)
+        self.assertIn("pendingMessages=failedPrompt?[failedPrompt]:[]", app)
+
 
 if __name__ == "__main__":
     unittest.main()
