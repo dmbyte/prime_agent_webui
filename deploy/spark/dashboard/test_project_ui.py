@@ -29,6 +29,25 @@ class ProjectUiTests(unittest.TestCase):
         self.assertIn("Task failed before it could be saved", app)
         self.assertIn("pendingMessages=failedPrompt?[failedPrompt]:[]", app)
 
+    def test_task_progress_renders_in_collapsible_conversation_trace(self):
+        app = (ROOT / "app-v2.js").read_text()
+        css = (ROOT / "enhancements.css").read_text()
+
+        self.assertIn("taskTrace=null", app)
+        self.assertIn("function appendTaskTrace", app)
+        self.assertIn("prime-nemotron", app)
+        self.assertIn("prime-codex", app)
+        self.assertIn("prime-qwen", app)
+        self.assertIn('event.kind==="reasoning"?"reasoning in progress"', app)
+        self.assertIn("appendTaskTrace(box,task,true)", app)
+        self.assertIn("if(taskTrace&&!liveTask)appendTaskTrace(box,taskTrace,false)", app)
+        self.assertIn("taskTrace=task", app)
+        self.assertNotIn('task.progress||"Working…"', app)
+        self.assertNotIn('"Working…"', app)
+        self.assertIn(".task-trace-message", css)
+        self.assertIn(".trace-event", css)
+        self.assertIn(".collapsed-trace", css)
+
 
 if __name__ == "__main__":
     unittest.main()
