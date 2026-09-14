@@ -917,7 +917,7 @@ def apply_task_event(task_id, event):
             add_task_progress(task, f"Retrying model request ({attempt}/{maximum})")
             add_runtime_event(task, "retry", f"Retry {attempt} of {maximum}", error)
         elif event_type == "broker_exit":
-            task["rpcError"] = "Rootless task broker exited"
+            task["rpcError"] = "OpenShell task runtime exited"
             add_task_progress(task, "Isolated task runtime failed")
             add_runtime_event(task, "error", "Isolated task runtime failed")
 
@@ -1398,8 +1398,13 @@ def inspect_archive(path):
 
 def admin_status():
     services = {}
-    for name in ("prime-auth", "prime-dashboard-api", "prime-web", "openshell-gateway", "vllm-nemotron35", "llama-qwen38"):
+    user_services = ("prime-auth", "prime-dashboard-api", "prime-web", "openshell-gateway", "vllm-nemotron35", "llama-qwen38")
+    system_services = ("prime-model-gateway", "prime-runner-broker")
+    for name in user_services:
         result = subprocess.run(["systemctl", "--user", "is-active", name], capture_output=True, text=True, timeout=4)
+        services[name] = result.stdout.strip() or "unknown"
+    for name in system_services:
+        result = subprocess.run(["systemctl", "is-active", name], capture_output=True, text=True, timeout=4)
         services[name] = result.stdout.strip() or "unknown"
     disk = shutil.disk_usage(legacy.HOME)
     return {"services": services, "updates": update_status(), "disk": {"total": disk.total, "used": disk.used, "free": disk.free}, "uploads": {"used": legacy.upload_storage_bytes(), "limit": legacy.MAX_UPLOAD_STORAGE_BYTES, "files": len(upload_rows()), "retentionDays": int(metadata().get("retentionDays", 30))}, "tasks": {"running": sum(1 for row in task_snapshot() if row["status"] == "running"), "limit": MAX_NATIVE_TASKS}, "certificate": {"authorityDownload": "/prime-webui-ca.crt", "trustedAfterInstall": True}, "generatedAt": now_iso()}

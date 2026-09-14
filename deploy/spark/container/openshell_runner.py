@@ -12,6 +12,9 @@ import task_common
 SAFE_OPEN_SHELL_IMAGE = re.compile(
     r"local/prime-openshell-[a-z-]+:0\.8\.0-[a-f0-9]{12}\Z"
 )
+DEFAULT_LIMITS = {"memoryGiB": 8, "cpus": 4, "runtimeMinutes": 30}
+
+
 def image_for_profile(profile, manifest):
     record = json.loads(Path(manifest).read_text()).get(profile)
     image = record.get("image") if isinstance(record, dict) else None
@@ -60,12 +63,13 @@ def task_spec(task_id, owner, authorization, provider, model, thinking,
     approval = authorization.get("approvalMode", "manual")
     if approval not in {"manual", "auto"}:
         raise ValueError("Unsupported OpenShell approval mode")
-    limits = authorization.get("limits") or {}
+    limits = {**DEFAULT_LIMITS, **(authorization.get("limits") or {})}
     memory = int(limits["memoryGiB"])
     cpus = int(limits["cpus"])
     runtime = int(limits["runtimeMinutes"])
     image = image_for_profile(profile, image_manifest)
     sandbox = f"pt-{task_id[:16]}"
+    input_fifo = f"/tmp/prime-rpc-{task_id[:16]}.fifo"
     # These pre-provisioned Docker volumes are local-driver bind volumes. They
     # preserve Prime's /var/lib ownership boundary without granting the
     # unprivileged OpenShell gateway process access to that host tree.
@@ -110,14 +114,27 @@ def task_spec(task_id, owner, authorization, provider, model, thinking,
         prime.append("--no-tools")
     if session_id:
         prime.extend(["--fork" if fork else "--resume", str(session_id)])
+    relay = (
+        "import fcntl,os,subprocess,sys; "
+        "r=os.open(sys.argv[1],os.O_RDONLY|os.O_NONBLOCK); "
+        "w=os.open(sys.argv[1],os.O_WRONLY|os.O_NONBLOCK); "
+        "fcntl.fcntl(r,fcntl.F_SETFL,fcntl.fcntl(r,fcntl.F_GETFL)&~os.O_NONBLOCK); "
+        "raise SystemExit(subprocess.Popen(sys.argv[2:],stdin=os.fdopen(r,'rb',buffering=0)).wait())"
+    )
     execute = [
         "/usr/bin/timeout", "--signal=TERM", "--kill-after=15s", f"{runtime}m",
         *common, "sandbox", "exec", "--name", sandbox, "--workdir", "/project", "--no-tty",
         "--env", "HOME=/home/prime", "--env", "NO_PROXY=127.0.0.1,localhost,::1",
         "--env", "no_proxy=127.0.0.1,localhost,::1", "--env", "TINI_SUBREAPER=1",
         "--env", "PRIME_AGENT_KERNEL_PYTHON=/opt/prime-kernel/bin/python",
-        "--env", "IPYTHONDIR=/home/prime/.prime/ipython", "--", *prime,
+        "--env", "IPYTHONDIR=/home/prime/.prime/ipython", "--",
+        "/usr/bin/python3", "-c", relay, input_fifo, *prime,
+    ]
+    prepare_input = common + [
+        "sandbox", "exec", "--name", sandbox, "--no-tty", "--",
+        "/bin/sh", "-lc", f"rm -f {input_fifo}; mkfifo -m 600 {input_fifo}",
     ]
     delete = common + ["sandbox", "delete", sandbox]
     return {"name": sandbox, "create": create, "execute": execute, "delete": delete,
+            "prepareInput": prepare_input, "inputFifo": input_fifo,
             "policy": policy_path, "image": image}

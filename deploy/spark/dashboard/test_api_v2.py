@@ -307,10 +307,22 @@ class DashboardV2Tests(unittest.TestCase):
         api.TASKS[task_id] = {"id": task_id, "owner": "alice", "status": "running", "progressEvents": []}
         try:
             api.apply_task_event(task_id, {"type": "broker_exit", "exitCode": 17})
-            self.assertEqual(api.TASKS[task_id]["rpcError"], "Rootless task broker exited")
+            self.assertEqual(api.TASKS[task_id]["rpcError"], "OpenShell task runtime exited")
             self.assertNotIn("exitCode", api.TASKS[task_id])
         finally:
             api.TASKS.pop(task_id, None)
+
+    def test_admin_status_checks_openshell_broker_as_system_service(self):
+        calls = []
+        def fake_run(args, **kwargs):
+            calls.append(args)
+            return mock.Mock(stdout="active\n", returncode=0)
+        with mock.patch.object(api.subprocess, "run", side_effect=fake_run), mock.patch.object(api.shutil, "disk_usage", return_value=mock.Mock(total=10, used=4, free=6)), mock.patch.object(api.legacy, "upload_storage_bytes", return_value=0), mock.patch.object(api, "upload_rows", return_value=[]), mock.patch.object(api, "metadata", return_value={}), mock.patch.object(api, "task_snapshot", return_value=[]), mock.patch.object(api, "update_status", return_value={}):
+            services = api.admin_status()["services"]
+        self.assertEqual(services["prime-runner-broker"], "active")
+        self.assertIn(["systemctl", "is-active", "prime-runner-broker"], calls)
+        self.assertIn(["systemctl", "is-active", "prime-model-gateway"], calls)
+        self.assertIn(["systemctl", "--user", "is-active", "prime-dashboard-api"], calls)
 
     def test_container_sessions_are_resolved_per_authenticated_owner(self):
         with tempfile.TemporaryDirectory() as directory, mock.patch.dict(api.os.environ, {"PRIME_TASK_RUNTIME":"openshell", "PRIME_RUNNER_STORAGE":directory}):

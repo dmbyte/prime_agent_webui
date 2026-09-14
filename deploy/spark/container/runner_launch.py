@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Validated runner boundary that launches one OpenShell task sandbox."""
-import base64, json, os, signal, subprocess, sys, time
+import base64, json, os, signal, subprocess, sys, threading, time
 from pathlib import Path
 
 sys.path.insert(0, "/usr/local/lib/prime-runner")
@@ -8,6 +8,7 @@ import openshell_runner
 import task_common
 
 ROOT=Path("/var/lib/prime-runner")
+OPENSHELL_COMMON = ["/usr/bin/openshell", "--gateway", "spark-local"]
 def fake_jwt():
     enc=lambda value: base64.urlsafe_b64encode(json.dumps(value,separators=(",", ":")).encode()).decode().rstrip("=")
     return f"{enc({'alg':'none'})}.{enc({'https://api.openai.com/auth':{'chatgpt_account_id':'gateway'}})}.gateway"
@@ -44,6 +45,20 @@ def configure(owner):
     for name,value in (("models.json",models),("auth.json",{"openai-codex":{"type":"oauth","access":fake_jwt(),"refresh":"gateway","expires":4102444800000,"accountId":"gateway"}})):
         path=agent/name; temporary=agent/(name+".tmp"); temporary.write_text(json.dumps(value)); os.chmod(temporary,0o600); os.replace(temporary,path)
 
+def forward_stdin_to_fifo(sandbox, fifo_path):
+    writer = [
+        *OPENSHELL_COMMON, "sandbox", "exec", "--name", sandbox, "--no-tty", "--",
+        "/usr/bin/python3", "-c",
+        "import base64,pathlib,sys; pathlib.Path(sys.argv[1]).open('ab', buffering=0).write(base64.b64decode(sys.argv[2]))",
+        fifo_path,
+    ]
+    while True:
+        chunk = sys.stdin.buffer.readline()
+        if not chunk:
+            return
+        payload = base64.b64encode(chunk).decode()
+        subprocess.run([*writer, payload], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30, check=False)
+
 def main():
     if len(sys.argv)!=2 or len(sys.argv[1])>32768: raise SystemExit(2)
     request=json.loads(base64.urlsafe_b64decode(sys.argv[1]+"=="))
@@ -78,7 +93,9 @@ def main():
         child = subprocess.Popen(spec["create"], stdin=subprocess.DEVNULL, start_new_session=True)
         if child.wait() != 0:
             raise SystemExit("OpenShell could not create the task sandbox")
-        child = subprocess.Popen(spec["execute"], start_new_session=True)
+        subprocess.run(spec["prepareInput"], stdin=subprocess.DEVNULL, check=True)
+        child = subprocess.Popen(spec["execute"], stdin=subprocess.DEVNULL, start_new_session=True)
+        threading.Thread(target=forward_stdin_to_fifo, args=(sandbox, spec["inputFifo"]), daemon=True).start()
         if stop_requested and child.poll() is None:
             os.killpg(child.pid, signal.SIGTERM)
         returncode = child.wait()

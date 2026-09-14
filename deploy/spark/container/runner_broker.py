@@ -40,6 +40,7 @@ def handle(conn):
                         process.stdin.write(data); process.stdin.flush()
                     else:
                         process.stdin.close(); selector.unregister(conn)
+                        return
                 else:
                     data = os.read(process.stdout.fileno(), 65536)
                     if data:

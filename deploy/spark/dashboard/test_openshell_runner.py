@@ -36,6 +36,8 @@ class OpenShellRunnerTests(unittest.TestCase):
         self.assertIn("/run/prime-gateway", create)
         self.assertIn("sandbox exec", execute)
         self.assertIn("--workdir /project", execute)
+        self.assertIn("os.O_RDONLY|os.O_NONBLOCK", execute)
+        self.assertIn("subprocess.Popen(sys.argv[2:]", execute)
         self.assertIn("TINI_SUBREAPER=1", execute)
         self.assertIn("PRIME_AGENT_KERNEL_PYTHON=/opt/prime-kernel/bin/python", execute)
         self.assertIn("IPYTHONDIR=/home/prime/.prime/ipython", execute)
@@ -46,6 +48,30 @@ class OpenShellRunnerTests(unittest.TestCase):
         self.assertEqual(volumes[2]["source"], "prime-alice-gateway-restricted")
         self.assertIn("network_policies: {}", spec["policy"].read_text())
         self.assertIn("compatibility: hard_requirement", spec["policy"].read_text())
+        self.assertIn("mkfifo -m 600 /tmp/prime-rpc-", " ".join(spec["prepareInput"]))
+        self.assertTrue(spec["inputFifo"].startswith("/tmp/prime-rpc-"))
+
+    def test_missing_resource_limits_use_bounded_defaults(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        manifest = root / "images.json"
+        manifest.write_text(json.dumps({"general": {"image": "local/prime-openshell-general:0.8.0-" + "a" * 12}}))
+        spec = openshell_runner.task_spec(
+            "b" * 32,
+            "alice",
+            {"profile": "general", "networkMode": "restricted", "executionMode": "deny", "approvalMode": "manual"},
+            "spark-nemotron",
+            "example",
+            "low",
+            storage_root=root / "users",
+            image_manifest=manifest,
+            policy_root=root / "policies",
+        )
+        create = " ".join(spec["create"])
+        self.assertIn("--memory 8Gi", create)
+        self.assertIn("--cpu 4", create)
+        self.assertIn("timeout --signal=TERM --kill-after=15s 30m", " ".join(spec["execute"]))
 
     def test_local_path_is_read_only_volume_subpath_and_landlock_policy(self):
         with tempfile.TemporaryDirectory() as source_root:

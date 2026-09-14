@@ -65,6 +65,18 @@ if [[ -f $HOME/.prime/agent/auth.json ]]; then
 else
   echo "No global ChatGPT/Codex credential found; local models remain available." >&2
 fi
+stale_unit_backup=""
+for stale_unit in prime-model-gateway.service prime-runner-broker.service; do
+  stale_path="${HOME}/.config/systemd/user/${stale_unit}"
+  if [[ -f "$stale_path" ]]; then
+    if [[ -z "$stale_unit_backup" ]]; then
+      stale_unit_backup="${HOME}/.prime/agent/recovery/stale-openshell-user-units-$(date --utc +%Y%m%dT%H%M%SZ)"
+      install -d -m 0700 "$stale_unit_backup"
+    fi
+    mv "$stale_path" "$stale_unit_backup/"
+  fi
+done
+systemctl --user daemon-reload
 sudo systemctl daemon-reload
 sudo systemctl enable prime-model-gateway.service
 sudo systemctl restart prime-model-gateway.service

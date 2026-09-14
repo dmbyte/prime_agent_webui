@@ -19,14 +19,20 @@ class RunnerLaunchRegressionTests(unittest.TestCase):
         self.assertLess(command_at, finally_at)
         self.assertLess(finally_at, restore_at)
 
-    def test_sandbox_create_cannot_consume_prime_rpc_stdin(self):
+    def test_openshell_cli_never_inherits_prime_rpc_stdin(self):
         source = (Path(__file__).parents[1] / "container" / "runner_launch.py").read_text()
         create_at = source.index('subprocess.Popen(spec["create"]')
         execute_at = source.index('subprocess.Popen(spec["execute"]')
         create_call = source[create_at:source.index(")", create_at)]
         execute_call = source[execute_at:source.index(")", execute_at)]
         self.assertIn("stdin=subprocess.DEVNULL", create_call)
-        self.assertNotIn("stdin=subprocess.DEVNULL", execute_call)
+        self.assertIn("stdin=subprocess.DEVNULL", execute_call)
+
+    def test_prime_rpc_input_is_forwarded_through_sandbox_fifo(self):
+        source = (Path(__file__).parents[1] / "container" / "runner_launch.py").read_text()
+        self.assertIn("def forward_stdin_to_fifo", source)
+        self.assertIn('spec["prepareInput"]', source)
+        self.assertIn('spec["inputFifo"]', source)
 
     def test_nemotron_memory_target_preserves_qwen_coresidency(self):
         root = Path(__file__).parents[3]
