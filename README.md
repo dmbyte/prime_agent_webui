@@ -28,8 +28,8 @@ skills belong outside the repository and are excluded from version control.
   `/steer`, `/follow-up`, and explicit stop.
 - Account-scoped collapsible projects and chats in the sidebar, with shared
   project instructions and uploaded sources, inherited conversation-control
-  defaults, pinning, remove chat actions, and promotion of existing chats into
-  new or existing projects.
+  defaults, pinning, boxed `...` chat actions, and visible promotion of existing
+  chats into new or existing projects.
 - Persistent sandbox, tool, egress, proposal, and local-path controls directly
   below the conversation header; saved chats retain their own overrides.
 - Configured-provider discovery, write-only credential forms, model selection,

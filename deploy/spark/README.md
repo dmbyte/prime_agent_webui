@@ -63,8 +63,10 @@ shared instructions plus selected uploaded sources and default
 sandbox/tool/network/proposal/local-path controls. New project chats copy those
 defaults and can then override them independently. Existing conversations can be
 promoted into a new project, or added to an existing project while preserving
-that project's defaults. Conversation controls remain visible below the chat
-header and persist for the whole chat. Source copies are refreshed lazily
+that project's defaults, from either the boxed `...` button beside each sidebar
+chat or the chat header's **Add to project** / **Move project** button.
+Conversation controls remain visible below the chat header and persist for the
+whole chat. Source copies are refreshed lazily
 beneath the owner's mounted Prime state and are read-only under the OpenShell
 filesystem policy. Deleting a project detaches its conversations instead of
 deleting them.
