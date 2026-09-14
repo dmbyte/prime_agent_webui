@@ -62,7 +62,7 @@ providers are used.
 Clone the release and run the installer as the account that should own Prime:
 
 ```bash
-git clone --branch v0.5.7 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
+git clone --branch v0.5.8 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
 cd prime_agent_webui
 ./install.sh --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
@@ -300,7 +300,7 @@ For a manual upgrade:
 
 ```bash
 git fetch --tags origin
-git checkout v0.5.7
+git checkout v0.5.8
 ./install.sh --skip-packages --skip-prime --skip-password \
   --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
@@ -309,12 +309,14 @@ git checkout v0.5.7
 
 Read the [security hardening guide](deploy/spark/security/README.md),
 [OpenShell runtime-image guide](deploy/spark/container/README.md), and
-[OpenShell operations guide](deploy/spark/openshell/README.md). In v0.5.7,
+[OpenShell operations guide](deploy/spark/openshell/README.md). In v0.5.8,
 Prime tasks execute inside OpenShell sandboxes launched by the dedicated
 `prime-runner` service identity, with separate per-user state/workspaces and no
-host credentials. The API retains no-new-privileges, the gateway is loopback-only
-with mTLS, and full-network mode remains intentionally powerful and limited to
-confirmed power-user/administrator tasks.
+host credentials. Each task also uses its own sandbox-local Prime control socket
+so stale OpenShell worker records cannot poison later resumes. The API retains
+no-new-privileges, the gateway is loopback-only with mTLS, and full-network mode
+remains intentionally powerful and limited to confirmed power-user/administrator
+tasks.
 
 This project provides research and workflow tooling, not investment advice or an
 unattended live-trading system. Keep broker credentials and deterministic risk

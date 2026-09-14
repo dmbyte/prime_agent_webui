@@ -106,8 +106,10 @@ def task_spec(task_id, owner, authorization, provider, model, thinking,
         "--label", f"prime.network={network}", "--label", f"prime.task={task_id}",
         "--detach", "--no-auto-providers", "--no-tty", "--", "/bin/sleep", "infinity",
     ]
+    daemon_socket = f"/tmp/prime-daemon-{task_id[:16]}.sock"
     prime = [
         "/usr/local/bin/prime-container-entrypoint", "--cwd", "/project", "--mode", "rpc",
+        "--daemon-socket", daemon_socket,
         "--provider", str(provider), "--model", str(model), "--thinking", str(thinking),
     ]
     if authorization.get("executionMode") == "deny":
@@ -137,4 +139,4 @@ def task_spec(task_id, owner, authorization, provider, model, thinking,
     delete = common + ["sandbox", "delete", sandbox]
     return {"name": sandbox, "create": create, "execute": execute, "delete": delete,
             "prepareInput": prepare_input, "inputFifo": input_fifo,
-            "policy": policy_path, "image": image}
+            "daemonSocket": daemon_socket, "policy": policy_path, "image": image}

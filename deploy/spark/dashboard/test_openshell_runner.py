@@ -41,6 +41,8 @@ class OpenShellRunnerTests(unittest.TestCase):
         self.assertIn("TINI_SUBREAPER=1", execute)
         self.assertIn("PRIME_AGENT_KERNEL_PYTHON=/opt/prime-kernel/bin/python", execute)
         self.assertIn("IPYTHONDIR=/home/prime/.prime/ipython", execute)
+        self.assertIn("--daemon-socket /tmp/prime-daemon-aaaaaaaaaaaaaaaa.sock", execute)
+        self.assertEqual(spec["daemonSocket"], "/tmp/prime-daemon-aaaaaaaaaaaaaaaa.sock")
         config = json.loads(spec["create"][spec["create"].index("--driver-config-json") + 1])
         volumes = config["docker"]["mounts"][:3]
         self.assertEqual([row["type"] for row in volumes], ["volume", "volume", "volume"])

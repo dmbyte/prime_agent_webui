@@ -790,6 +790,23 @@ def recover_failed_task_conversation(task, status):
     return session_id
 
 
+def record_task_finished(task, status):
+    task_id = str(task.get("id", ""))
+    if not task_id:
+        return
+    with META_LOCK:
+        data = metadata()
+        row = data.setdefault("tasks", {}).setdefault(task_id, {})
+        row.update({
+            "owner": task.get("owner", row.get("owner", INITIAL_ADMIN)),
+            "status": status,
+            "sessionId": task.get("sessionId") or row.get("sessionId"),
+            "projectId": task.get("projectId") or row.get("projectId"),
+            "finishedAt": task.get("finished") or now_iso(),
+        })
+        legacy.atomic_json(META, data)
+
+
 def append_ledger(task, status, output=""):
     record = {"at": now_iso(), "taskId": task["id"], "owner": task.get("owner", INITIAL_ADMIN), "sessionId": task.get("sessionId"), "provider": task.get("provider"), "model": task.get("model"), "status": status, "elapsedSeconds": round(time.time() - task["startedEpoch"], 2)}
     if task.get("usage"):
@@ -1075,6 +1092,7 @@ def monitor_task(task_id, before):
         append_ledger(task, status, output)
         if task.get("sessionId"):
             store_task_route(task)
+        record_task_finished(task, status)
     legacy.audit("native_task_finished", task=task_id, session=task.get("sessionId"), status=status)
 
 

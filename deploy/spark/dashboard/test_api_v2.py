@@ -340,6 +340,19 @@ class DashboardV2Tests(unittest.TestCase):
             self.assertEqual(saved["conversations"][session_id]["recoveredFromTask"], task["id"])
             self.assertEqual(saved["conversations"][session_id]["taskPolicy"]["profile"], "development")
 
+    def test_finished_task_status_is_written_to_metadata(self):
+        with tempfile.TemporaryDirectory() as directory:
+            meta_path = Path(directory) / "metadata.json"
+            meta_path.write_text(json.dumps({"conversations": {}, "tasks": {"t1": {"owner": "alice", "status": "running", "prompt": "resume"}}}))
+            task = {"id": "t1", "owner": "alice", "sessionId": "session-alice", "projectId": "project-1", "finished": "2026-09-14T16:00:00Z"}
+            with mock.patch.object(api, "META", meta_path):
+                api.record_task_finished(task, "failed")
+            saved = json.loads(meta_path.read_text())["tasks"]["t1"]
+            self.assertEqual(saved["status"], "failed")
+            self.assertEqual(saved["sessionId"], "session-alice")
+            self.assertEqual(saved["projectId"], "project-1")
+            self.assertEqual(saved["finishedAt"], "2026-09-14T16:00:00Z")
+
     def test_admin_status_checks_openshell_broker_as_system_service(self):
         calls = []
         def fake_run(args, **kwargs):
