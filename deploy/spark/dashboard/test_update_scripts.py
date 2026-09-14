@@ -12,6 +12,11 @@ class UpdateScriptTests(unittest.TestCase):
         self.assertIn('deploy/spark/container/task_common.py', script)
         self.assertIn('"$live/task_common.py"', script)
 
+    def test_webui_update_installs_privileged_runner_launcher(self):
+        script = (ROOT / "deploy/spark/update/update-webui.sh").read_text()
+        self.assertIn('deploy/spark/container/runner_launch.py', script)
+        self.assertIn('/usr/local/libexec/prime-runner-launch', script)
+
 
 if __name__ == "__main__":
     unittest.main()

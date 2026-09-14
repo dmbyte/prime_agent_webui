@@ -44,6 +44,7 @@ install -d -m 0755 "$live"
 install -m 0644 "$source_dir"/*.py "$source_dir"/*.js "$source_dir"/*.css "$source_dir"/*.html "$live"/
 install -m 0644 "$repo/deploy/spark/container/task_common.py" "$live/task_common.py"
 install -m 0755 "$source_dir/install-static.sh" "$live/install-static.sh"
+sudo install -o root -g root -m 0755 "$repo/deploy/spark/container/runner_launch.py" /usr/local/libexec/prime-runner-launch
 
 install -d -m 0755 "${HOME}/prime-update" "${HOME}/.config/systemd/user"
 install -m 0755 "$repo/deploy/spark/update/update-prime-agent.sh" "$repo/deploy/spark/update/update-webui.sh" "$repo/deploy/spark/update/update-openshell.sh" "${HOME}/prime-update/"
