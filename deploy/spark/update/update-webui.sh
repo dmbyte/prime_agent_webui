@@ -42,6 +42,7 @@ python3 -m py_compile "$source_dir/api.py" "$source_dir/api_v2.py" "$source_dir/
 python3 -m unittest discover -s "$source_dir" -p 'test*.py'
 install -d -m 0755 "$live"
 install -m 0644 "$source_dir"/*.py "$source_dir"/*.js "$source_dir"/*.css "$source_dir"/*.html "$live"/
+install -m 0644 "$repo/deploy/spark/container/task_common.py" "$live/task_common.py"
 install -m 0755 "$source_dir/install-static.sh" "$live/install-static.sh"
 
 install -d -m 0755 "${HOME}/prime-update" "${HOME}/.config/systemd/user"
