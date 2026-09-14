@@ -51,6 +51,11 @@ class TaskPolicyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "under /mnt"):
             authorize_task({"localPaths": ["/home/alice/project"]}, "admin", files_confirmed=True)
 
+    def test_openshell_auto_approval_is_admin_only(self):
+        with self.assertRaisesRegex(ValueError, "administrator"):
+            authorize_task({"approvalMode": "auto"}, "power_user")
+        self.assertEqual(authorize_task({"approvalMode": "auto"}, "admin")["approvalMode"], "auto")
+
 
 if __name__ == "__main__":
     unittest.main()

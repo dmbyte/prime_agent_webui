@@ -5,11 +5,13 @@ ARG PRIME_AGENT_SHA256=f5b0093c7e0fddb73f94773d74383585456adfa84f12a4082d3098f23
 ARG PROFILE=general
 ARG UV_VERSION=0.12.8
 ARG UV_AARCH64_SHA256=ba8661f4fd207c8e94814191598e619b355ac10d5014e851e21eb800f9ef2b00
+ARG PRIME_UID=1000
+ARG PRIME_GID=1000
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        bash ca-certificates curl fd-find git iproute2 jq openssh-client \
-       procps python3 python3-venv ripgrep socat tini \
+       nftables procps python3 python3-venv ripgrep socat tini \
     && curl -fsSL "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-aarch64-unknown-linux-gnu.tar.gz" -o /tmp/uv.tar.gz \
     && echo "${UV_AARCH64_SHA256}  /tmp/uv.tar.gz" | sha256sum --check --strict \
     && tar -xzf /tmp/uv.tar.gz -C /tmp \
@@ -34,7 +36,10 @@ RUN apt-get update \
 
 RUN groupmod --new-name prime node \
     && usermod --login prime --home /home/prime --move-home node \
-    && install -d -o prime -g prime -m 0700 /home/prime/.prime/agent /workspace
+    && groupmod --gid "${PRIME_GID}" prime \
+    && usermod --uid "${PRIME_UID}" --gid "${PRIME_GID}" prime \
+    && chown -R prime:prime /home/prime \
+    && install -d -o prime -g prime -m 0700 /home/prime/.prime/agent /workspace /sandbox
 
 ENV HOME=/home/prime \
     PATH=/usr/local/bin:/usr/bin:/bin \

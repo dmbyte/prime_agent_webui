@@ -8,6 +8,7 @@ ROLES = {"user", "power_user", "admin"}
 EXECUTION_MODES = {"prompt", "task", "login", "deny"}
 NETWORK_MODES = {"restricted", "internet", "lan", "full"}
 PROFILES = {"general", "development", "cad", "finance", "network-operations", "review"}
+APPROVAL_MODES = {"manual", "auto"}
 MAX_LOCAL_PATHS = 8
 LOCAL_PATH_ROOTS = ("/mnt", "/media", "/srv", "/opt")
 
@@ -65,6 +66,7 @@ def authorize_task(payload, role, login_execution=False, task_execution_confirme
     profile = str(payload.get("profile") or "general")
     network = str(payload.get("networkMode") or "restricted")
     execution = str(payload.get("executionMode") or "prompt")
+    approval = str(payload.get("approvalMode") or "manual")
     local_paths = normalize_local_paths(payload.get("localPaths"), role)
     if profile not in PROFILES:
         raise ValueError("Unsupported task profile")
@@ -72,6 +74,10 @@ def authorize_task(payload, role, login_execution=False, task_execution_confirme
         raise ValueError("Unsupported network mode")
     if execution not in EXECUTION_MODES:
         raise ValueError("Unsupported execution mode")
+    if approval not in APPROVAL_MODES:
+        raise ValueError("Unsupported OpenShell approval mode")
+    if approval == "auto" and role != "admin":
+        raise ValueError("Automatic OpenShell policy approval requires administrator access")
     if network in {"lan", "full"} and role not in {"power_user", "admin"}:
         raise ValueError("LAN and full-network tasks require power-user or administrator access")
     if profile == "network-operations" and role not in {"power_user", "admin"}:
@@ -108,6 +114,7 @@ def authorize_task(payload, role, login_execution=False, task_execution_confirme
         "profile": profile,
         "networkMode": network,
         "executionMode": execution,
+        "approvalMode": approval,
         "executionApproved": approved_execution,
         "packageOverride": bool(payload.get("packageOverride") and role == "admin"),
         "localPaths": local_paths,

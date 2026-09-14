@@ -39,7 +39,7 @@ ALLOWED_ORIGINS = {
 } or DEFAULT_ALLOWED_ORIGINS
 MODELS = {
     "spark-nemotron": {"nemotron-3.5-lightning"},
-    "spark-qwen": {"qwen3.6-35b-a3b"},
+    "spark-qwen": {"qwen3.8-flash-next"},
     "openai": {"gpt-5.4"},
 }
 THINKING = {"off", "minimal", "low", "medium", "high", "xhigh", "max"}

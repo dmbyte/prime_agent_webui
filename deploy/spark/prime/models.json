@@ -12,7 +12,7 @@
       "api": "openai-completions",
       "apiKey": "EMPTY",
       "compat": {"supportsDeveloperRole": false, "supportsReasoningEffort": false},
-      "models": [{"id": "qwen3.6-35b-a3b", "name": "Qwen 3.6 35B A3B NVFP4", "reasoning": true, "input": ["text", "image"], "contextWindow": 65536, "maxTokens": 16384}]
+      "models": [{"id": "qwen3.8-flash-next", "name": "Qwen 3.8 Flash Next UD-IQ4_XS", "reasoning": true, "input": ["text", "image"], "contextWindow": 32768, "maxTokens": 8192}]
     }
   }
 }

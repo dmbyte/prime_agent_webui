@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unprivileged full-duplex client for the local rootless runner broker."""
+"""Unprivileged full-duplex client for the local OpenShell runner broker."""
 import os, selectors, socket, sys
 
 SOCKET = "\0prime-runner-broker-v1"

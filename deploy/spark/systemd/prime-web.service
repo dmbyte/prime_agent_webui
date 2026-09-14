@@ -1,6 +1,6 @@
 [Unit]
 Description=Private browser terminal for DGX Spark Prime Agent
-After=network.target vllm-nemotron35.service vllm-qwen36.service
+After=network.target vllm-nemotron35.service llama-qwen38.service
 
 [Service]
 Type=simple

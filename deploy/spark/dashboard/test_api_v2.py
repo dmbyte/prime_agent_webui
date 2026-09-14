@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import importlib.util
+import base64
 import json
 import tempfile
 import unittest
@@ -93,6 +94,16 @@ class DashboardV2Tests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "already running"):
                 api.start_update("agent", "update-agent")
 
+    def test_openshell_update_starts_expected_service(self):
+        calls = []
+        def fake_run(args, **kwargs):
+            calls.append(args)
+            return mock.Mock(returncode=0, stdout="")
+        with mock.patch.object(api, "update_status", return_value={"openshell": {"active": False}}), mock.patch.object(api.subprocess, "run", side_effect=fake_run), mock.patch.object(api.legacy, "audit"):
+            result = api.start_update("openshell", "update-openshell")
+        self.assertEqual(result["unit"], "prime-update-openshell.service")
+        self.assertIn(["systemctl", "--user", "start", "--no-block", "prime-update-openshell.service"], calls)
+
     def test_conversation_catalog_is_filtered_by_owner(self):
         rows = [
             {"id": "session-alice", "topic": "Alice", "modified": "2026-01-01T00:00:00Z", "provider": "p", "model": "m"},
@@ -121,15 +132,129 @@ class DashboardV2Tests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "power-user"):
                     api.update_conversation("session-alice", "policy", {**policy, "networkMode": "full"}, "alice", "user")
 
+    def test_projects_are_owner_scoped_and_count_their_chats(self):
+        alice_id = "p_" + "a" * 24
+        bob_id = "p_" + "b" * 24
+        meta = {"projects": {alice_id: {"owner": "alice", "name": "Alpha", "pinned": True}, bob_id: {"owner": "bob", "name": "Private"}}, "conversations": {"session-alice": {"owner": "alice", "projectId": alice_id}, "session-bob-12": {"owner": "bob", "projectId": bob_id}}}
+        with mock.patch.object(api, "metadata", return_value=meta):
+            projects = api.project_catalog("alice")
+        self.assertEqual([row["id"] for row in projects], [alice_id])
+        self.assertEqual(projects[0]["conversationCount"], 1)
+
+    def test_project_crud_moves_and_safely_detaches_conversations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            meta_path = Path(directory) / "metadata.json"
+            meta_path.write_text(json.dumps({"projects": {}, "conversations": {"session-alice": {"owner": "alice"}}}))
+            with mock.patch.object(api, "META", meta_path), mock.patch.object(api.legacy, "audit"), mock.patch.dict(api.os.environ, {"PRIME_TASK_RUNTIME": "openshell", "PRIME_RUNNER_STORAGE": str(Path(directory) / "users")}):
+                project = api.create_project({"name": "Spark work", "icon": "code", "color": "violet", "instructions": "Keep tests green.", "taskPolicy": {"profile": "development", "executionMode": "deny", "networkMode": "internet", "approvalMode": "manual"}}, "alice")
+                api.update_conversation("session-alice", "project", project["id"], "alice", "user")
+                updated = api.update_project(project["id"], {"name": "Spark UI", "pinned": True}, "alice")
+                self.assertEqual(updated["name"], "Spark UI")
+                self.assertTrue(updated["pinned"])
+                self.assertEqual(updated["taskPolicy"], {"profile": "development", "executionMode": "deny", "networkMode": "internet", "approvalMode": "manual", "localPaths": []})
+                with self.assertRaisesRegex(ValueError, "Project not found"):
+                    api.update_project(project["id"], {"name": "Stolen"}, "bob")
+                result = api.delete_project(project["id"], "alice")
+            saved = json.loads(meta_path.read_text())
+            self.assertEqual(result["detachedConversations"], 1)
+            self.assertNotIn("projectId", saved["conversations"]["session-alice"])
+            self.assertNotIn(project["id"], saved["projects"])
+
+    def test_promote_conversation_to_new_project_moves_assets_and_policy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            uploads = root / "uploads"
+            (uploads / "alice").mkdir(parents=True)
+            source = uploads / "alice/source.txt"
+            source.write_text("reference")
+            file_id = base64.urlsafe_b64encode("alice/source.txt".encode()).decode().rstrip("=")
+            policy = {"profile": "development", "executionMode": "prompt", "networkMode": "restricted", "approvalMode": "manual", "localPaths": []}
+            meta_path = root / "metadata.json"
+            meta_path.write_text(json.dumps({"projects": {}, "conversations": {"session-alice": {"owner": "alice", "taskPolicy": policy, "fileIds": [file_id]}}, "files": {"alice/source.txt": {"owner": "alice"}}}))
+            with mock.patch.object(api, "META", meta_path), mock.patch.object(api.legacy, "UPLOADS", uploads), mock.patch.object(api.legacy, "audit"):
+                result = api.promote_conversation({"id": "session-alice", "project": {"name": "Promoted Work", "icon": "code", "color": "green"}}, "alice", "user")
+            saved = json.loads(meta_path.read_text())
+            self.assertTrue(result["created"])
+            self.assertEqual(result["relatedFiles"], 1)
+            self.assertEqual(result["project"]["taskPolicy"], policy)
+            self.assertEqual(result["project"]["fileIds"], [file_id])
+            self.assertEqual(saved["conversations"]["session-alice"]["projectId"], result["project"]["id"])
+            self.assertEqual(saved["conversations"]["session-alice"]["fileIds"], [file_id])
+
+    def test_promote_conversation_to_existing_project_preserves_defaults(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            uploads = root / "uploads"
+            (uploads / "alice").mkdir(parents=True)
+            (uploads / "alice/project.txt").write_text("project")
+            (uploads / "alice/chat.txt").write_text("chat")
+            project_file = base64.urlsafe_b64encode("alice/project.txt".encode()).decode().rstrip("=")
+            chat_file = base64.urlsafe_b64encode("alice/chat.txt".encode()).decode().rstrip("=")
+            project_id = "p_" + "d" * 24
+            project_policy = {"profile": "finance", "executionMode": "deny", "networkMode": "restricted", "approvalMode": "manual", "localPaths": []}
+            conversation_policy = {"profile": "development", "executionMode": "prompt", "networkMode": "restricted", "approvalMode": "manual", "localPaths": []}
+            meta_path = root / "metadata.json"
+            meta_path.write_text(json.dumps({
+                "projects": {project_id: {"owner": "alice", "name": "Existing", "fileIds": [project_file], "taskPolicy": project_policy}},
+                "conversations": {"session-alice": {"owner": "alice", "taskPolicy": conversation_policy, "fileIds": [chat_file]}},
+                "files": {"alice/project.txt": {"owner": "alice"}, "alice/chat.txt": {"owner": "alice"}},
+            }))
+            with mock.patch.object(api, "META", meta_path), mock.patch.object(api.legacy, "UPLOADS", uploads), mock.patch.object(api.legacy, "audit"):
+                result = api.promote_conversation({"id": "session-alice", "projectId": project_id}, "alice", "user")
+            saved = json.loads(meta_path.read_text())
+            self.assertFalse(result["created"])
+            self.assertEqual(result["project"]["taskPolicy"], project_policy)
+            self.assertEqual(result["project"]["fileIds"], [project_file, chat_file])
+            self.assertEqual(saved["projects"][project_id]["taskPolicy"], project_policy)
+            self.assertEqual(saved["conversations"]["session-alice"]["projectId"], project_id)
+
+    def test_project_policy_defaults_respect_role_limits(self):
+        with tempfile.TemporaryDirectory() as directory:
+            meta_path = Path(directory) / "metadata.json"
+            meta_path.write_text(json.dumps({"projects": {}, "conversations": {}}))
+            with mock.patch.object(api, "META", meta_path), mock.patch.object(api.legacy, "audit"), mock.patch.dict(api.os.environ, {"PRIME_TASK_RUNTIME": "openshell", "PRIME_RUNNER_STORAGE": str(Path(directory) / "users")}):
+                with self.assertRaisesRegex(ValueError, "power-user"):
+                    api.create_project({"name": "Too broad", "taskPolicy": {"networkMode": "full"}}, "alice", "user")
+                project = api.create_project({"name": "Admin project", "taskPolicy": {"profile": "finance", "executionMode": "login", "networkMode": "lan", "approvalMode": "auto", "localPaths": ["/srv/research"]}}, "admin", "admin")
+            self.assertEqual(project["taskPolicy"]["localPaths"], ["/srv/research"])
+            self.assertEqual(project["taskPolicy"]["approvalMode"], "auto")
+
+    def test_project_context_uses_container_visible_source_paths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            uploads = root / "uploads"
+            uploads.mkdir()
+            source = uploads / "alice-reference.txt"
+            source.write_text("reference")
+            file_id = base64.urlsafe_b64encode(source.name.encode()).decode().rstrip("=")
+            project_id = "p_" + "c" * 24
+            (root / "users/alice/prime/agent/project-sources").mkdir(parents=True)
+            meta = {"projects": {project_id: {"owner": "alice", "name": "Alpha", "instructions": "Be concise", "fileIds": [file_id]}}, "files": {source.name: {"owner": "alice"}}}
+            with mock.patch.object(api, "metadata", return_value=meta), mock.patch.object(api.legacy, "UPLOADS", uploads), mock.patch.dict(api.os.environ, {"PRIME_TASK_RUNTIME": "openshell", "PRIME_RUNNER_STORAGE": str(root / "users")}):
+                context = api.project_context(project_id, "alice")
+            self.assertIn("Project instructions", context)
+            self.assertIn(f"/home/prime/.prime/agent/project-sources/{project_id}/01-alice-reference.txt", context)
+            self.assertNotIn(str(uploads), context)
+
+    def test_hidden_project_context_is_removed_from_visible_user_message(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            session = root / "session-alice.jsonl"
+            session.write_text(json.dumps({"type": "message", "message": {"id": "m1", "role": "user", "content": [{"type": "text", "text": "Visible request\n\n<prime_project_context>\nSecret instructions\n</prime_project_context>"}]}}) + "\n")
+            with mock.patch.object(api, "metadata", return_value={"conversations": {"session-alice": {"owner": "alice"}}}), mock.patch.object(api, "session_root", return_value=root):
+                rows = api.conversation_messages("session-alice", "alice")
+            self.assertEqual(rows[0]["text"], "Visible request")
+
     def test_new_conversation_stores_original_policy_preference(self):
         with tempfile.TemporaryDirectory() as directory:
             meta_path = Path(directory) / "metadata.json"
             meta_path.write_text('{"conversations":{}}')
-            task = {"sessionId": "session-new-1234", "thinking": "high", "provider": "p", "model": "m", "routingMode": "default", "routeReason": "default", "owner": "alice", "persistPolicyOnSessionCreate": True, "policyPreference": {"profile": "cad", "executionMode": "prompt", "networkMode": "restricted"}}
+            task = {"sessionId": "session-new-1234", "thinking": "high", "provider": "p", "model": "m", "routingMode": "default", "routeReason": "default", "owner": "alice", "fileIds": ["upload-a"], "persistPolicyOnSessionCreate": True, "policyPreference": {"profile": "cad", "executionMode": "prompt", "networkMode": "restricted"}}
             with mock.patch.object(api, "META", meta_path):
                 api.store_task_route(task)
             saved = json.loads(meta_path.read_text())["conversations"]["session-new-1234"]
             self.assertEqual(saved["taskPolicy"], task["policyPreference"])
+            self.assertEqual(saved["fileIds"], ["upload-a"])
 
     def test_conversation_catalog_uses_cache_during_temporary_permission_change(self):
         rows = [{"id": "session-alice", "topic": "Alice", "modified": "2026-01-01T00:00:00Z", "provider": "p", "model": "m"}]
@@ -159,7 +284,7 @@ class DashboardV2Tests(unittest.TestCase):
         meta = {"conversations": {"session-alice": {"owner": "alice"}}, "sessionCatalogCache": {"alice": rows}}
         api.SESSION_CACHE.pop("alice", None)
         try:
-            with mock.patch.dict(api.os.environ, {"PRIME_TASK_CONTAINER_IMAGE": "1"}), mock.patch.object(api.os, "access", return_value=False), mock.patch.object(api, "metadata", return_value=meta), mock.patch.object(api.legacy, "session_path", side_effect=PermissionError("protected")), mock.patch.object(api, "model_details", return_value={}):
+            with mock.patch.dict(api.os.environ, {"PRIME_TASK_RUNTIME": "openshell"}), mock.patch.object(api.os, "access", return_value=False), mock.patch.object(api, "metadata", return_value=meta), mock.patch.object(api.legacy, "session_path", side_effect=PermissionError("protected")), mock.patch.object(api, "model_details", return_value={}):
                 self.assertEqual([row["id"] for row in api.conversation_catalog(user="alice")], ["session-alice"])
         finally:
             api.SESSION_CACHE.pop("alice", None)
@@ -188,7 +313,7 @@ class DashboardV2Tests(unittest.TestCase):
             api.TASKS.pop(task_id, None)
 
     def test_container_sessions_are_resolved_per_authenticated_owner(self):
-        with tempfile.TemporaryDirectory() as directory, mock.patch.dict(api.os.environ, {"PRIME_TASK_CONTAINER_IMAGE":"1", "PRIME_RUNNER_STORAGE":directory}):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.dict(api.os.environ, {"PRIME_TASK_RUNTIME":"openshell", "PRIME_RUNNER_STORAGE":directory}):
             self.assertEqual(api.session_root("alice"), Path(directory)/"alice/prime/agent/sessions")
             self.assertNotEqual(api.session_root("alice"), api.session_root("bob"))
             with self.assertRaisesRegex(ValueError, "owner"):
@@ -247,7 +372,7 @@ class DashboardV2Tests(unittest.TestCase):
     def settings(self, provider="spark-nemotron", model="nemotron-3.5-lightning", qwen=True, codex=False):
         enabled = ["spark-nemotron/nemotron-3.5-lightning"]
         if qwen:
-            enabled.append("spark-qwen/qwen3.6-35b-a3b")
+            enabled.append("spark-qwen/qwen3.8-flash-next")
         if codex:
             enabled.append("openai-codex/gpt-5.6-sol")
         return {"provider": provider, "model": model, "thinking": "low", "enabledModels": enabled}

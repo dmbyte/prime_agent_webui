@@ -45,8 +45,8 @@ install -m 0644 "$source_dir"/*.py "$source_dir"/*.js "$source_dir"/*.css "$sour
 install -m 0755 "$source_dir/install-static.sh" "$live/install-static.sh"
 
 install -d -m 0755 "${HOME}/prime-update" "${HOME}/.config/systemd/user"
-install -m 0755 "$repo/deploy/spark/update/update-prime-agent.sh" "$repo/deploy/spark/update/update-webui.sh" "${HOME}/prime-update/"
-install -m 0644 "$repo/deploy/spark/systemd/prime-update-agent.service" "$repo/deploy/spark/systemd/prime-update-webui.service" "${HOME}/.config/systemd/user/"
+install -m 0755 "$repo/deploy/spark/update/update-prime-agent.sh" "$repo/deploy/spark/update/update-webui.sh" "$repo/deploy/spark/update/update-openshell.sh" "${HOME}/prime-update/"
+install -m 0644 "$repo/deploy/spark/systemd/prime-update-agent.service" "$repo/deploy/spark/systemd/prime-update-webui.service" "$repo/deploy/spark/systemd/prime-update-openshell.service" "${HOME}/.config/systemd/user/"
 [[ $repo != *'"'* && $repo != *$'\n'* ]]
 printf 'Environment="PRIME_WEBUI_REPO=%s"\n' "$repo" >>"${HOME}/.config/systemd/user/prime-update-webui.service"
 systemctl --user daemon-reload

@@ -17,28 +17,37 @@ required=(
   deploy/spark/nginx/prime-security.conf
   deploy/spark/update/update-prime-agent.sh
   deploy/spark/update/update-webui.sh
+  deploy/spark/update/update-openshell.sh
   deploy/spark/container/Containerfile
-  deploy/spark/container/install-rootless.sh
-  deploy/spark/container/activate-rootless.sh
-  deploy/spark/container/create-rootless-backup.sh
-  deploy/spark/container/rollback-rootless.sh
   deploy/spark/container/install-user-codex-credential.sh
+  deploy/spark/container/task_common.py
   deploy/spark/container/model_gateway.py
+  deploy/spark/container/openshell_runner.py
   deploy/spark/container/runner_broker.py
   deploy/spark/container/runner_client.py
   deploy/spark/container/runner_launch.py
   deploy/spark/systemd/prime-model-gateway.service
   deploy/spark/systemd/prime-runner-broker.service
-  docs/releases/v0.3.1.md
+  deploy/spark/openshell/gateway.toml
+  deploy/spark/openshell/image-digests.json
+  deploy/spark/openshell/install.sh
+  deploy/spark/openshell/provision-volumes.sh
+  deploy/spark/openshell/README.md
+  deploy/spark/vllm-nemotron35/README.md
+  deploy/spark/llama-qwen38/README.md
+  deploy/spark/llama-qwen38/build-image.sh
+  deploy/spark/llama-qwen38/llama.env.template
+  deploy/spark/llama-qwen38/start.sh
+  deploy/spark/systemd/llama-qwen38.service
+  docs/releases/v0.5.0.md
 )
 for path in "${required[@]}"; do
   [[ -f $path ]] || { echo "Missing release file: $path" >&2; exit 1; }
 done
 
-bash -n install.sh deploy/spark/update/update-prime-agent.sh deploy/spark/update/update-webui.sh \
-  deploy/spark/container/install-rootless.sh deploy/spark/container/activate-rootless.sh \
-  deploy/spark/container/create-rootless-backup.sh deploy/spark/container/rollback-rootless.sh \
+bash -n install.sh deploy/spark/update/update-prime-agent.sh deploy/spark/update/update-webui.sh deploy/spark/update/update-openshell.sh \
   deploy/spark/container/install-user-codex-credential.sh \
+  deploy/spark/openshell/install.sh deploy/spark/openshell/provision-volumes.sh \
   deploy/spark/container/prime-container-entrypoint.sh
 python3 -m compileall -q deploy/spark/dashboard
 python3 -m unittest discover -s deploy/spark/dashboard -p 'test*.py'
@@ -50,7 +59,7 @@ else
 fi
 
 grep -Fq 'docs/prime-webui-sample.jpg' README.md
-grep -Fq 'v0.3.1' README.md
+grep -Fq 'v0.5.0' README.md
 grep -Fq 'does **not** authenticate with PAM' README.md
 grep -Fq 'prime-web-password' README.md
 echo "Release validation passed."

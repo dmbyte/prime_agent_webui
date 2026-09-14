@@ -1,0 +1,17 @@
+[openshell]
+version = 1
+
+[openshell.gateway]
+bind_address = "127.0.0.1:17670"
+log_level = "info"
+compute_drivers = ["docker"]
+
+[openshell.drivers.docker]
+socket_path = "/var/run/docker.sock"
+image_pull_policy = "IfNotPresent"
+sandbox_namespace = "prime-agent"
+grpc_endpoint = "https://host.openshell.internal:17670"
+network_name = "openshell-docker"
+host_gateway_ip = "172.17.0.1"
+enable_bind_mounts = true
+sandbox_pids_limit = 256

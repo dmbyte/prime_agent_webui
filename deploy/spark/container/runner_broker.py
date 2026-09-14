@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Group-restricted Unix broker owning the rootless Podman boundary."""
+"""Group-restricted Unix broker for OpenShell task sandboxes."""
 import grp, json, os, pwd, selectors, socket, struct, subprocess, threading
 
 SOCKET = "\0prime-runner-broker-v1"

@@ -1,0 +1,20 @@
+[Unit]
+Description=llama.cpp Qwen 3.8 Flash-Next with lazy NVMe PLE
+Documentation=../llama-qwen38/README.md
+After=docker.service network-online.target vllm-nemotron35.service
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=2
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# The launcher owns model-file checks, loopback binding, mmap/direct-read mode,
+# Q8 K/V cache selection, and the reviewed shared-Q8 MTP draft head.
+ExecStart=%h/llama-qwen38/start.sh
+ExecStop=/usr/bin/docker stop llama-qwen38
+TimeoutStartSec=0
+TimeoutStopSec=120
+
+[Install]
+WantedBy=default.target

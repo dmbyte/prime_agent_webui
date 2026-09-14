@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+test "${EUID}" -ne 0 || { echo "Run as the Docker/WebUI owner, not root." >&2; exit 2; }
+repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
+version=0.0.116
+deb_sha256=d39e93477e8a160012fc199ae1d08ddea15a2e76ba700dcf7c485593a9bd6e1b
+asset="openshell_${version}_arm64.deb"
+asset_url="https://github.com/NVIDIA/OpenShell/releases/download/v${version}/${asset}"
+staging=$(mktemp -d)
+trap 'rm -rf "$staging"' EXIT
+
+for command in docker jq setfacl rsync curl; do
+  command -v "$command" >/dev/null || { echo "Missing OpenShell prerequisite: $command" >&2; exit 1; }
+done
+test "$(dpkg --print-architecture)" = arm64 || { echo "This pinned OpenShell package is for ARM64." >&2; exit 1; }
+docker_major=$(docker version --format '{{.Server.Version}}' | cut -d. -f1)
+test "$docker_major" -ge 28 || { echo "OpenShell requires Docker 28 or newer." >&2; exit 1; }
+
+if ! getent group prime-web >/dev/null; then sudo groupadd --system prime-web; fi
+if ! id prime-runner >/dev/null 2>&1; then sudo useradd --system --create-home --home-dir /var/lib/prime-runner --shell /usr/sbin/nologin prime-runner; fi
+sudo usermod -a -G prime-web "$USER"
+sudo usermod -a -G prime-web prime-runner
+sudo usermod -g prime-runner prime-runner
+runner_uid=$(id -u prime-runner)
+runner_gid=$(id -g prime-runner)
+sudo loginctl enable-linger prime-runner
+sudo systemctl restart "user@${runner_uid}.service"
+
+sudo install -d -o prime-runner -g prime-runner -m 0700 /var/lib/prime-runner/credentials/global /var/lib/prime-runner/credentials/users /var/lib/prime-runner/users /var/lib/prime-runner/gateway /var/lib/prime-runner/openshell-policies
+sudo chown prime-runner:prime-runner /var/lib/prime-runner /var/lib/prime-runner/users
+sudo chmod 0700 /var/lib/prime-runner /var/lib/prime-runner/users
+sudo setfacl -m "u:${USER}:--x,g:prime-web:--x,m::--x" /var/lib/prime-runner /var/lib/prime-runner/users
+
+owner_agent="/var/lib/prime-runner/users/${USER}/prime/agent"
+owner_workspace="/var/lib/prime-runner/users/${USER}/workspace"
+sudo install -d -o prime-runner -g prime-runner -m 0700 "$owner_agent" "$owner_workspace"
+for name in sessions skills session-artifacts; do
+  if [[ -d ${HOME}/.prime/agent/$name ]]; then
+    sudo rsync -a "${HOME}/.prime/agent/$name/" "$owner_agent/$name/"
+  fi
+done
+if [[ -d ${HOME}/prime-dgx-agent ]]; then
+  sudo rsync -a --exclude uploads "${HOME}/prime-dgx-agent/" "$owner_workspace/"
+fi
+sudo chown -R prime-runner:prime-runner "/var/lib/prime-runner/users/${USER}"
+sudo setfacl -m "u:${USER}:--x,g:prime-web:--x,m::--x" "/var/lib/prime-runner/users/${USER}" "/var/lib/prime-runner/users/${USER}/prime" "$owner_agent"
+sudo install -d -o prime-runner -g prime-runner -m 0770 "$owner_agent/sessions" "$owner_agent/trash" "$owner_agent/project-sources"
+sudo setfacl -Rm "u:${USER}:rwx,g:prime-web:rwx,m::rwx,o::---" "$owner_agent/sessions" "$owner_agent/trash" "$owner_agent/project-sources"
+sudo find "$owner_agent/sessions" "$owner_agent/trash" "$owner_agent/project-sources" -type d -exec setfacl -m "d:u:${USER}:rwx,d:g:prime-web:rwx,d:m::rwx,d:o::---" {} +
+
+sudo install -d -o root -g root -m 0755 /usr/local/lib/prime-runner /usr/local/libexec
+sudo install -o root -g root -m 0644 "$repo/deploy/spark/container/task_common.py" "$repo/deploy/spark/container/model_gateway.py" "$repo/deploy/spark/container/openshell_runner.py" /usr/local/lib/prime-runner/
+install -m 0644 "$repo/deploy/spark/container/task_common.py" "${HOME}/prime-dgx-dashboard/task_common.py"
+sudo install -o root -g root -m 0755 "$repo/deploy/spark/container/runner_launch.py" /usr/local/libexec/prime-runner-launch
+sudo install -o root -g root -m 0755 "$repo/deploy/spark/container/runner_client.py" /usr/local/libexec/prime-runner-client
+sudo install -o root -g root -m 0644 "$repo/deploy/spark/container/runner_broker.py" /usr/local/lib/prime-runner/runner_broker.py
+sudo install -o root -g root -m 0644 "$repo/deploy/spark/systemd/prime-model-gateway.service" /etc/systemd/system/
+broker_unit=$(mktemp)
+sed -e "s/@RUNNER_UID@/${runner_uid}/g" -e "s/@WEB_OWNER@/${USER}/g" "$repo/deploy/spark/systemd/prime-runner-broker.service" >"$broker_unit"
+sudo install -o root -g root -m 0644 "$broker_unit" /etc/systemd/system/prime-runner-broker.service
+rm -f "$broker_unit"
+if [[ -f $HOME/.prime/agent/auth.json ]]; then
+  sudo install -o prime-runner -g prime-runner -m 0600 "$HOME/.prime/agent/auth.json" /var/lib/prime-runner/credentials/global/auth.json
+else
+  echo "No global ChatGPT/Codex credential found; local models remain available." >&2
+fi
+sudo systemctl daemon-reload
+sudo systemctl enable prime-model-gateway.service
+sudo systemctl restart prime-model-gateway.service
+sudo systemctl enable --now prime-runner-broker.service
+
+install -d -m 0755 "${HOME}/.config/systemd/user/prime-dashboard-api.service.d"
+install -m 0644 /dev/stdin "${HOME}/.config/systemd/user/prime-dashboard-api.service.d/openshell.conf" <<EOF
+[Service]
+Environment=PRIME_TASK_RUNTIME=openshell
+Environment=PRIME_OPENSHELL_VERSION=${version}
+Environment=PRIME_RUNNER_STORAGE=/var/lib/prime-runner/users
+ReadWritePaths=/var/lib/prime-runner/users
+EOF
+
+curl -fL "$asset_url" -o "$staging/$asset"
+echo "$deb_sha256  $staging/$asset" | sha256sum --check --strict
+sudo apt-get install -y "$staging/$asset"
+
+install -d -m 0700 "$HOME/.config/openshell" "$HOME/.config/systemd/user/openshell-gateway.service.d"
+install -m 0600 "$repo/deploy/spark/openshell/gateway.toml" "$HOME/.config/openshell/gateway.toml"
+install -m 0600 /dev/stdin "$HOME/.config/systemd/user/openshell-gateway.service.d/10-spark.conf" <<'EOF'
+[Service]
+Environment=OPENSHELL_GATEWAY_CONFIG=%h/.config/openshell/gateway.toml
+Environment=OPENSHELL_TELEMETRY_ENABLED=false
+EOF
+systemctl --user daemon-reload
+systemctl --user enable --now openshell-gateway.service
+
+if ! openshell gateway list | grep -q 'spark-local'; then
+  openshell gateway add https://127.0.0.1:17670 --local --name spark-local
+fi
+openshell --gateway spark-local status
+openshell --gateway spark-local settings set --global --key agent_policy_proposals_enabled --value true --yes
+
+for profile in general development cad finance network-operations review; do
+  expected_image=$(jq -r --arg profile "$profile" '.[$profile].image' "$repo/deploy/spark/openshell/image-digests.json")
+  expected_id=$(jq -r --arg profile "$profile" '.[$profile].imageId' "$repo/deploy/spark/openshell/image-digests.json")
+  build_image="local/prime-openshell-${profile}:0.8.0-build"
+  docker build --build-arg "PROFILE=$profile" --build-arg "PRIME_UID=$runner_uid" --build-arg "PRIME_GID=$runner_gid" -t "$build_image" "$repo/deploy/spark/container"
+  actual_id=$(docker image inspect "$build_image" --format '{{.Id}}')
+  test "$actual_id" = "$expected_id" || {
+    echo "OpenShell image review required for $profile: expected $expected_id, built $actual_id" >&2
+    exit 1
+  }
+  docker tag "$build_image" "$expected_image"
+done
+
+sudo install -d -o prime-runner -g prime-runner -m 0700 /var/lib/prime-runner/.config/openshell
+sudo cp -a "$HOME/.config/openshell/." /var/lib/prime-runner/.config/openshell/
+sudo chown -R prime-runner:prime-runner /var/lib/prime-runner/.config/openshell
+sudo find /var/lib/prime-runner/.config/openshell -type d -exec chmod 0700 {} +
+sudo find /var/lib/prime-runner/.config/openshell -type f -exec chmod 0600 {} +
+
+"$repo/deploy/spark/openshell/provision-volumes.sh"
+sudo install -o prime-runner -g prime-runner -m 0400 "$repo/deploy/spark/openshell/image-digests.json" /var/lib/prime-runner/openshell-image-digests.json
+sudo -u prime-runner env HOME=/var/lib/prime-runner openshell --gateway spark-local status

@@ -117,6 +117,7 @@ def allowed_address(host, mode):
         address=ipaddress.ip_address(row[4][0])
         forbidden=address.is_loopback or address.is_link_local or address.is_multicast or address.is_unspecified or address.is_reserved
         if forbidden or (mode == "internet" and address.is_private): continue
+        if mode == "lan" and not address.is_private: continue
         result.append(row[4][0])
     return result
 
@@ -178,7 +179,7 @@ def main():
         sock=directory/"model.sock"; sock.unlink(missing_ok=True)
         server=Server(str(sock), user); os.chmod(sock,0o600); servers.append(server)
         threading.Thread(target=server.serve_forever,daemon=True).start()
-        if mode in {"internet","lan"}:
+        if mode in {"internet","lan","full"}:
             proxy_sock=directory/"network.sock"; proxy_sock.unlink(missing_ok=True)
             proxy=ProxyServer(str(proxy_sock),mode); os.chmod(proxy_sock,0o600); servers.append(proxy)
             threading.Thread(target=proxy.serve_forever,daemon=True).start()

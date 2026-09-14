@@ -1,0 +1,499 @@
+{"kind":"deck","id":"pr/ifskg4","name":"Deck"}
+{"kind":"layout","layoutId":"/ppt/slideMasters/slideMaster1.xml","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout1.xml","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/y90nupkv","slide":1,"title":"Governed AI makes Linux operations conversational","textShapes":38}
+{"kind":"textbox","id":"sh/3m547yxw","slide":1,"name":"slide-title","text":"Governed AI makes Linux operations conversational","textPreview":"Governed AI makes Linux operations conversational","textChars":49,"textLines":1,"bbox":[42,33,1000,47]}
+{"kind":"textbox","id":"sh/547294r6","slide":1,"name":"slide-subtitle","text":"Reference architecture for heterogeneous enterprise Linux — fleet operations plus opt-in, per-host diagnosis","textPreview":"Reference architecture for heterogeneous enterprise Linux — fleet operations plus opt-in, per-host diagnosis","textChars":108,"textLines":1,"bbox":[44,94,1000,25]}
+{"kind":"textbox","id":"sh/k3yl0zql","slide":1,"name":"slide-kicker","text":"REFERENCE ARCHITECTURE  •  2026","textPreview":"REFERENCE ARCHITECTURE  •  2026","textChars":31,"textLines":1,"bbox":[1030,98,205,18]}
+{"kind":"textbox","id":"sh/7qp4be9c","slide":1,"name":"ops-heading","text":"1  OPERATIONS & GOVERNANCE","textPreview":"1  OPERATIONS & GOVERNANCE","textChars":26,"textLines":1,"bbox":[45,145,245,25]}
+{"kind":"textbox","id":"sh/65g3298r","slide":1,"name":"agent-heading","text":"2  AGENT CONTROL PLANE","textPreview":"2  AGENT CONTROL PLANE","textChars":22,"textLines":1,"bbox":[325,145,470,25]}
+{"kind":"textbox","id":"sh/ts7md4r2","slide":1,"name":"estate-heading","text":"3  MANAGEMENT & ESTATE","textPreview":"3  MANAGEMENT & ESTATE","textChars":22,"textLines":1,"bbox":[840,145,390,25]}
+{"kind":"shape","id":"sh/sryl4zqx","slide":1,"name":"operator","bbox":[45,190,235,102]}
+{"kind":"shape","id":"sh/fu94fe98","slide":1,"bbox":[45,190,8,102]}
+{"kind":"textbox","id":"sh/utg3698n","slide":1,"name":"operator-title","text":"Ops portal / ITSM","textPreview":"Ops portal / ITSM","textChars":17,"textLines":1,"bbox":[63,201,203,28]}
+{"kind":"textbox","id":"sh/wn6dc7eh","slide":1,"name":"operator-body","text":"Natural-language request, incident context, maintenance window","textPreview":"Natural-language request, incident context, maintenance window","textChars":62,"textLines":1,"bbox":[63,232,203,50]}
+{"kind":"shape","id":"sh/hofulsf2","slide":1,"name":"approval","bbox":[45,320,235,152]}
+{"kind":"shape","id":"sh/ul4vaxgb","slide":1,"bbox":[45,320,8,152]}
+{"kind":"textbox","id":"sh/vmdcj2xw","slide":1,"name":"approval-title","text":"Policy & human approval","textPreview":"Policy & human approval","textChars":23,"textLines":1,"bbox":[63,331,203,28]}
+{"kind":"textbox","id":"sh/4r6dg7et","slide":1,"name":"approval-body","text":"RBAC • change ticket • blast-radius limit\nRead-only by default; approve each write plan","textPreview":"RBAC • change ticket • blast-radius limit | Read-only by default; approve each write plan","textChars":87,"textLines":2,"bbox":[63,362,203,100]}
+{"kind":"textbox","id":"sh/5sfepcfe","slide":1,"text":"OPERATING LOOP","textPreview":"OPERATING LOOP","textChars":14,"textLines":1,"bbox":[48,497,230,20]}
+{"kind":"textbox","id":"sh/ipovexwn","slide":1,"text":"Observe  →  Diagnose  →  Propose\nApprove  →  Execute  →  Verify / roll back","textPreview":"Observe  →  Diagnose  →  Propose | Approve  →  Execute  →  Verify / roll back","textChars":75,"textLines":2,"bbox":[48,520,230,61]}
+{"kind":"shape","id":"sh/3qxwn2x8","slide":1,"name":"openshell-boundary","bbox":[320,180,475,410]}
+{"kind":"textbox","id":"sh/sfqdkrep","slide":1,"name":"openshell-title","text":"NVIDIA OpenShell policy sandbox","textPreview":"NVIDIA OpenShell policy sandbox","textChars":31,"textLines":1,"bbox":[345,196,300,30]}
+{"kind":"textbox","id":"sh/dgzetcfa","slide":1,"name":"openshell-controls","text":"Gateway • identity • egress / MCP allow-list • secret injection • audit","textPreview":"Gateway • identity • egress / MCP allow-list • secret injection • audit","textChars":71,"textLines":1,"bbox":[345,226,420,22]}
+{"kind":"shape","id":"sh/1cvuxc7e","slide":1,"name":"hermes","bbox":[345,264,425,92]}
+{"kind":"shape","id":"sh/0bmd476t","slide":1,"bbox":[345,264,8,92]}
+{"kind":"textbox","id":"sh/zadcv2p8","slide":1,"name":"hermes-title","text":"Hermes Agent","textPreview":"Hermes Agent","textChars":12,"textLines":1,"bbox":[363,275,393,28]}
+{"kind":"textbox","id":"sh/e94v2hon","slide":1,"name":"hermes-body","text":"Plans tool calls, preserves run context, and consumes fleet + host MCP tools","textPreview":"Plans tool calls, preserves run context, and consumes fleet + host MCP tools","textChars":76,"textLines":1,"bbox":[363,306,393,40]}
+{"kind":"textbox","id":"sh/90ve1w7q","slide":1,"name":"router-label","text":"POLICY ROUTER — OPENAI-COMPATIBLE LOCAL ENDPOINTS","textPreview":"POLICY ROUTER — OPENAI-COMPATIBLE LOCAL ENDPOINTS","textChars":49,"textLines":1,"bbox":[347,376,420,19]}
+{"kind":"shape","id":"sh/ozmd8r65","slide":1,"name":"nemotron","bbox":[345,404,202,106]}
+{"kind":"shape","id":"sh/nydczmpk","slide":1,"bbox":[345,404,8,106]}
+{"kind":"textbox","id":"sh/mx4v6hoz","slide":1,"name":"nemotron-title","text":"Nemotron 3.5 Lightning","textPreview":"Nemotron 3.5 Lightning","textChars":22,"textLines":1,"bbox":[363,415,170,28]}
+{"kind":"textbox","id":"sh/p4bu5s76","slide":1,"name":"nemotron-body","text":"Fast triage • tool planning\n30B-A3B • NVFP4","textPreview":"Fast triage • tool planning | 30B-A3B • NVFP4","textChars":43,"textLines":2,"bbox":[363,446,170,54]}
+{"kind":"shape","id":"sh/432dwn6l","slide":1,"name":"qwen","bbox":[565,404,205,106]}
+{"kind":"shape","id":"sh/uxgjq907","slide":1,"bbox":[565,404,8,106]}
+{"kind":"textbox","id":"sh/vyp0je1s","slide":1,"name":"qwen-title","text":"Qwen 3.8","textPreview":"Qwen 3.8","textChars":8,"textLines":1,"bbox":[583,415,173,28]}
+{"kind":"textbox","id":"sh/wzy1szid","slide":1,"name":"qwen-body","text":"Deep diagnosis • config/code\n27B starting point","textPreview":"Deep diagnosis • config/code | 27B starting point","textChars":47,"textLines":2,"bbox":[583,446,173,54]}
+{"kind":"textbox","id":"sh/h072l4jy","slide":1,"name":"sandbox-footer","text":"Sandbox boundary contains every agent path: shell, files, MCP, plugins, and model calls","textPreview":"Sandbox boundary contains every agent path: shell, files, MCP, plugins, and model calls","textChars":87,"textLines":1,"bbox":[345,539,425,29]}
+{"kind":"shape","id":"sh/i1gje90j","slide":1,"name":"sumlm","bbox":[850,190,385,150]}
+{"kind":"shape","id":"sh/j2pkne14","slide":1,"bbox":[850,190,8,150]}
+{"kind":"textbox","id":"sh/43y1gji9","slide":1,"name":"sumlm-title","text":"SUSE Multi-Linux Manager 5.x","textPreview":"SUSE Multi-Linux Manager 5.x","textChars":28,"textLines":1,"bbox":[868,201,353,28]}
+{"kind":"textbox","id":"sh/54r2poju","slide":1,"name":"sumlm-body","text":"System inventory • content lifecycle • CVE / patch posture\nSalt / SSH / Ansible automation • audit history","textPreview":"System inventory • content lifecycle • CVE / patch posture | Salt / SSH / Ansible automation • audit history","textChars":106,"textLines":2,"bbox":[868,232,353,98]}
+{"kind":"textbox","id":"sh/y5wjip0z","slide":1,"name":"fleet-mcp","text":"Uyuni / Multi-Linux Manager MCP server","textPreview":"Uyuni / Multi-Linux Manager MCP server","textChars":38,"textLines":1,"bbox":[873,304,330,23]}
+{"kind":"textbox","id":"sh/z650ba1k","slide":1,"name":"estate-label","text":"Managed estate","textPreview":"Managed estate","textChars":14,"textLines":1,"bbox":[851,373,380,26]}
+{"kind":"shape","id":"sh/z2xgf6to","slide":1,"name":"sles16","bbox":[850,420,120,134]}
+{"kind":"shape","id":"sh/e1oz61c3","slide":1,"bbox":[850,420,8,134]}
+{"kind":"textbox","id":"sh/14fyhgbe","slide":1,"name":"sles16-title","text":"SLES 16","textPreview":"SLES 16","textChars":7,"textLines":1,"bbox":[868,431,88,28]}
+{"kind":"textbox","id":"sh/036h8but","slide":1,"name":"sles16-body","text":"MCP host + local server\nTech Preview","textPreview":"MCP host + local server | Tech Preview","textChars":36,"textLines":2,"bbox":[868,462,88,82]}
+{"kind":"shape","id":"sh/nqxgjqtk","slide":1,"name":"rhel","bbox":[982,420,120,134]}
+{"kind":"shape","id":"sh/mpozalcz","slide":1,"bbox":[982,420,8,134]}
+{"kind":"textbox","id":"sh/9sfylgbq","slide":1,"name":"rhel-title","text":"RHEL / clones","textPreview":"RHEL / clones","textChars":13,"textLines":1,"bbox":[1000,431,88,28]}
+{"kind":"textbox","id":"sh/or6hcvu5","slide":1,"name":"rhel-body","text":"Managed through Salt / SSH","textPreview":"Managed through Salt / SSH","textChars":26,"textLines":1,"bbox":[1000,462,88,82]}
+{"kind":"shape","id":"sh/buh0nqtg","slide":1,"name":"debian","bbox":[1114,420,120,134]}
+{"kind":"shape","id":"sh/at8zelcb","slide":1,"bbox":[1114,420,8,134]}
+{"kind":"textbox","id":"sh/8zqx4vq9","slide":1,"name":"debian-title","text":"Ubuntu / Debian","textPreview":"Ubuntu / Debian","textChars":15,"textLines":1,"bbox":[1132,431,88,28]}
+{"kind":"textbox","id":"sh/t0jyd0ru","slide":1,"name":"debian-body","text":"Managed through Salt / SSH","textPreview":"Managed through Salt / SSH","textChars":26,"textLines":1,"bbox":[1132,462,88,82]}
+{"kind":"shape","id":"sh/vq94n2xo","slide":1,"bbox":[280,241,65,69]}
+{"kind":"shape","id":"sh/wrilw7e9","slide":1,"bbox":[280,310,65,86]}
+{"kind":"shape","id":"sh/hsbmpcfu","slide":1,"bbox":[770,265,80,45]}
+{"kind":"shape","id":"sh/itk3yhwf","slide":1,"bbox":[910,340,132.5,80]}
+{"kind":"shape","id":"sh/jet4rmx0","slide":1,"bbox":[1042,340,0.5,80]}
+{"kind":"shape","id":"sh/4f2l0re5","slide":1,"bbox":[1042.5,340,131.5,80]}
+{"kind":"shape","id":"sh/5gbmtwfq","slide":1,"bbox":[557.5,356,292.5,131]}
+{"kind":"textbox","id":"sh/xsfy5grm","slide":1,"name":"fleet-link-label","text":"fleet MCP","textPreview":"fleet MCP","textChars":9,"textLines":1,"bbox":[795,275,58,18]}
+{"kind":"textbox","id":"sh/dc7md8fe","slide":1,"name":"direct-link-label","text":"direct host MCP","textPreview":"direct host MCP","textChars":15,"textLines":1,"bbox":[736,584,125,18]}
+{"kind":"shape","id":"sh/cby5k3yt","slide":1,"bbox":[45,624,1190,1]}
+{"kind":"textbox","id":"sh/ra54bix8","slide":1,"text":"QUERY / PLAN","textPreview":"QUERY / PLAN","textChars":12,"textLines":1,"bbox":[45,642,105,20]}
+{"kind":"textbox","id":"sh/q9wnidgn","slide":1,"text":"APPROVED CHANGE","textPreview":"APPROVED CHANGE","textChars":15,"textLines":1,"bbox":[164,642,132,20]}
+{"kind":"textbox","id":"sh/5onm98f2","slide":1,"text":"TECH-PREVIEW DIRECT PATH","textPreview":"TECH-PREVIEW DIRECT PATH","textChars":24,"textLines":1,"bbox":[310,642,190,20]}
+{"kind":"textbox","id":"sh/4ne5g3yh","slide":1,"name":"production-default","text":"Production default: use the fleet MCP for broad actions; enable per-host MCP narrowly for evidence gathering and exceptional diagnosis.","textPreview":"Production default: use the fleet MCP for broad actions; enable per-host MCP narrowly for evidence gathering and exceptional diagnosis.","textChars":135,"textLines":1,"bbox":[520,637,715,31]}
+{"kind":"notes","id":"nt/y90nupkv","slide":1,"text":"Architecture intent:\n- SUSE Multi-Linux Manager remains the authoritative fleet control plane.\n- Hermes runs inside an OpenShell policy sandbox and selects a fast planning model or deeper diagnostic model.\n- Broad fleet operations use the Uyuni / SUSE Multi-Linux Manager MCP server.\n- A direct SLES 16 MCP path is optional, narrowly permissioned, and technology preview.\n- State-changing tools require ticket/approval, bounded targets, verification, and rollback.\n\n[Sources]\n- https://github.com/NVIDIA/OpenShell\n- https://github.com/NVIDIA/OpenShell/blob/main/architecture/sandbox.md\n- https://github.com/NousResearch/hermes-agent/blob/main/SECURITY.md\n- https://github.com/NousResearch/hermes-agent/blob/main/website/docs/reference/cli-commands.md\n- https://build.nvidia.com/nvidia/nemotron-3.5-lightning-30b-a3b/modelcard\n- https://huggingface.co/Qwen/models\n- https://www.suse.com/products/multi-linux-manager/\n- https://github.com/uyuni-project/mcp-server-uyuni/blob/main/README.md\n- https://documentation.suse.com/releasenotes/sles/16.0/index.html\n- https://www.suse.com/c/ai-assisted-infrastructure-at-scale/\n[/Sources]"}
+{"kind":"slide","id":"sl/hwbqtkby","slide":2,"title":"The AI factory separates management, runtime, data, and fleet authority","textShapes":54}
+{"kind":"textbox","id":"sh/1kbidgju","slide":2,"name":"slide-title","text":"The AI factory separates management, runtime, data, and fleet authority","textPreview":"The AI factory separates management, runtime, data, and fleet authority","textChars":71,"textLines":1,"bbox":[42,30,1030,48]}
+{"kind":"textbox","id":"sh/9072xkry","slide":2,"name":"slide-subtitle","text":"SUSE AI Factory with NVIDIA turns the platform into repeatable, governed blueprints across dedicated clusters.","textPreview":"SUSE AI Factory with NVIDIA turns the platform into repeatable, governed blueprints across dedicated clusters.","textChars":110,"textLines":1,"bbox":[44,91,1030,28]}
+{"kind":"textbox","id":"sh/ozy1ofad","slide":2,"name":"slide-kicker","text":"DETAILED PLATFORM STACK  •  2026","textPreview":"DETAILED PLATFORM STACK  •  2026","textChars":32,"textLines":1,"bbox":[1030,97,205,18]}
+{"kind":"shape","id":"sh/b29kza94","slide":2,"name":"ai-factory-boundary","bbox":[42,132,1196,420]}
+{"kind":"shape","id":"sh/a10jqpsj","slide":2,"bbox":[56,122,245,24]}
+{"kind":"textbox","id":"sh/x4r21kru","slide":2,"text":"SUSE AI FACTORY WITH NVIDIA","textPreview":"SUSE AI FACTORY WITH NVIDIA","textChars":27,"textLines":1,"bbox":[60,123,237,22]}
+{"kind":"textbox","id":"sh/w3i1sfa9","slide":2,"text":"MANAGEMENT CLUSTER","textPreview":"MANAGEMENT CLUSTER","textChars":18,"textLines":1,"bbox":[57,151,225,21]}
+{"kind":"textbox","id":"sh/r65knqtk","slide":2,"text":"AI WORKLOAD CLUSTER","textPreview":"AI WORKLOAD CLUSTER","textChars":19,"textLines":1,"bbox":[316,151,540,21]}
+{"kind":"textbox","id":"sh/q5wjelsz","slide":2,"text":"DATA + FLEET SERVICES","textPreview":"DATA + FLEET SERVICES","textChars":21,"textLines":1,"bbox":[885,151,336,21]}
+{"kind":"shape","id":"sh/ove9o7yd","slide":2,"bbox":[57,178,230,55]}
+{"kind":"shape","id":"sh/9wnqhczy","slide":2,"bbox":[57,178,7,55]}
+{"kind":"textbox","id":"sh/mtwrmxg7","slide":2,"name":"Rancher Prime-title","text":"Rancher Prime","textPreview":"Rancher Prime","textChars":13,"textLines":1,"bbox":[71,185,206,23]}
+{"kind":"textbox","id":"sh/nu58f2hs","slide":2,"name":"Rancher Prime-body","text":"Provision and govern RKE2 / K3s clusters","textPreview":"Provision and govern RKE2 / K3s clusters","textChars":40,"textLines":1,"bbox":[71,209,206,17]}
+{"kind":"shape","id":"sh/wjy9sry9","slide":2,"bbox":[57,242,230,61]}
+{"kind":"shape","id":"sh/xk7qlczu","slide":2,"bbox":[57,242,7,61]}
+{"kind":"textbox","id":"sh/ahwrqhgj","slide":2,"name":"AI Factory UI + Operator-title","text":"AI Factory UI + Operator","textPreview":"AI Factory UI + Operator","textChars":24,"textLines":1,"bbox":[71,249,206,23]}
+{"kind":"textbox","id":"sh/bip8jmho","slide":2,"name":"AI Factory UI + Operator-body","text":"Management plane for lifecycle and policy","textPreview":"Management plane for lifecycle and policy","textChars":41,"textLines":1,"bbox":[71,273,206,23]}
+{"kind":"shape","id":"sh/cnupgny5","slide":2,"bbox":[57,312,230,55]}
+{"kind":"shape","id":"sh/do3q9szq","slide":2,"bbox":[57,312,7,55]}
+{"kind":"textbox","id":"sh/t8byxkn2","slide":2,"name":"Fleet GitOps-title","text":"Fleet GitOps","textPreview":"Fleet GitOps","textChars":12,"textLines":1,"bbox":[71,319,206,23]}
+{"kind":"textbox","id":"sh/s72xofmh","slide":2,"name":"Fleet GitOps-body","text":"Versioned, repeatable deployment","textPreview":"Versioned, repeatable deployment","textChars":32,"textLines":1,"bbox":[71,343,206,17]}
+{"kind":"shape","id":"sh/76twva5c","slide":2,"bbox":[57,376,230,68]}
+{"kind":"shape","id":"sh/65kfmpor","slide":2,"bbox":[57,376,7,68]}
+{"kind":"textbox","id":"sh/hcvy14ne","slide":2,"name":"AI Library + Blueprints-title","text":"AI Library + Blueprints","textPreview":"AI Library + Blueprints","textChars":23,"textLines":1,"bbox":[71,383,206,23]}
+{"kind":"textbox","id":"sh/gbmxszmt","slide":2,"name":"AI Library + Blueprints-body","text":"NVIDIA AI Enterprise charts; RAG and research-agent patterns","textPreview":"NVIDIA AI Enterprise charts; RAG and research-agent patterns","textChars":60,"textLines":1,"bbox":[71,407,206,30]}
+{"kind":"shape","id":"sh/fadgzu58","slide":2,"bbox":[57,453,230,70]}
+{"kind":"shape","id":"sh/u94fqp4n","slide":2,"bbox":[57,453,7,70]}
+{"kind":"textbox","id":"sh/p0vy54na","slide":2,"name":"Trusted software supply-title","text":"Trusted software supply","textPreview":"Trusted software supply","textChars":23,"textLines":1,"bbox":[71,460,206,23]}
+{"kind":"textbox","id":"sh/4zmxwzmp","slide":2,"name":"Trusted software supply-body","text":"SUSE App Collection / Registry • NVIDIA NGC • SBOM","textPreview":"SUSE App Collection / Registry • NVIDIA NGC • SBOM","textChars":50,"textLines":1,"bbox":[71,484,206,32]}
+{"kind":"shape","id":"sh/mlgvq147","slide":2,"name":"openshell-runtime","bbox":[316,178,540,126]}
+{"kind":"textbox","id":"sh/nmpcj6ls","slide":2,"text":"NVIDIA OpenShell / NeMoClaw policy sandbox","textPreview":"NVIDIA OpenShell / NeMoClaw policy sandbox","textChars":42,"textLines":1,"bbox":[334,186,500,23]}
+{"kind":"textbox","id":"sh/onydsbmd","slide":2,"text":"Identity • network / filesystem / process policy • MCP allow-lists • privacy routing • audit","textPreview":"Identity • network / filesystem / process policy • MCP allow-lists • privacy routing • audit","textChars":92,"textLines":1,"bbox":[334,209,500,20]}
+{"kind":"shape","id":"sh/9o7ulg3y","slide":2,"bbox":[334,236,225,57]}
+{"kind":"shape","id":"sh/a9gvulkj","slide":2,"bbox":[334,236,7,57]}
+{"kind":"textbox","id":"sh/ba9cn6l4","slide":2,"name":"Hermes Agent-title","text":"Hermes Agent","textPreview":"Hermes Agent","textChars":12,"textLines":1,"bbox":[348,243,201,23]}
+{"kind":"textbox","id":"sh/wbidwb29","slide":2,"name":"Hermes Agent-body","text":"Planner, session context, MCP client","textPreview":"Planner, session context, MCP client","textChars":36,"textLines":1,"bbox":[348,267,201,19]}
+{"kind":"shape","id":"sh/xcrupg3u","slide":2,"bbox":[572,236,266,57]}
+{"kind":"shape","id":"sh/id0vylkf","slide":2,"bbox":[572,236,7,57]}
+{"kind":"textbox","id":"sh/je9crql0","slide":2,"name":"NeMo Agent Toolkit-title","text":"NeMo Agent Toolkit","textPreview":"NeMo Agent Toolkit","textChars":18,"textLines":1,"bbox":[586,243,242,23]}
+{"kind":"textbox","id":"sh/ru5cbqd4","slide":2,"name":"NeMo Agent Toolkit-body","text":"Function + function-group library for tools","textPreview":"Function + function-group library for tools","textChars":43,"textLines":1,"bbox":[586,267,242,19]}
+{"kind":"shape","id":"sh/69wbilcj","slide":2,"bbox":[316,315,168,68]}
+{"kind":"shape","id":"sh/tw7ud0va","slide":2,"bbox":[316,315,7,68]}
+{"kind":"textbox","id":"sh/svedkvup","slide":2,"name":"SUSE AI Universal Proxy-title","text":"SUSE AI Universal Proxy","textPreview":"SUSE AI Universal Proxy","textChars":23,"textLines":1,"bbox":[330,322,144,23]}
+{"kind":"textbox","id":"sh/fypcfqdg","slide":2,"name":"SUSE AI Universal Proxy-body","text":"Governed MCP gateway • tech preview","textPreview":"Governed MCP gateway • tech preview","textChars":35,"textLines":1,"bbox":[330,346,144,30]}
+{"kind":"shape","id":"sh/exgvmlcv","slide":2,"bbox":[494,315,174,68]}
+{"kind":"shape","id":"sh/107uh0v6","slide":2,"bbox":[494,315,7,68]}
+{"kind":"textbox","id":"sh/gzydovul","slide":2,"name":"NeMo Switchyard-title","text":"NeMo Switchyard","textPreview":"NeMo Switchyard","textChars":15,"textLines":1,"bbox":[508,322,150,23]}
+{"kind":"textbox","id":"sh/v2lc36dw","slide":2,"name":"NeMo Switchyard-body","text":"Per-step model routing; latency + token telemetry","textPreview":"Per-step model routing; latency + token telemetry","textChars":49,"textLines":1,"bbox":[508,346,150,30]}
+{"kind":"shape","id":"sh/a1cba1wb","slide":2,"bbox":[678,315,178,68]}
+{"kind":"shape","id":"sh/0vq1o36x","slide":2,"bbox":[678,315,7,68]}
+{"kind":"textbox","id":"sh/1wzix87i","slide":2,"name":"Guardrails + Evaluator-title","text":"Guardrails + Evaluator","textPreview":"Guardrails + Evaluator","textChars":22,"textLines":1,"bbox":[692,322,154,23]}
+{"kind":"textbox","id":"sh/et8zmto7","slide":2,"name":"Guardrails + Evaluator-body","text":"Input/output safety; LLM, retriever and RAG eval","textPreview":"Input/output safety; LLM, retriever and RAG eval","textChars":48,"textLines":1,"bbox":[692,346,154,30]}
+{"kind":"shape","id":"sh/zuh0vypc","slide":2,"bbox":[316,394,540,78]}
+{"kind":"shape","id":"sh/c76hk361","slide":2,"bbox":[316,394,7,78]}
+{"kind":"textbox","id":"sh/d8zit87m","slide":2,"name":"NVIDIA NIM microservices-title","text":"NVIDIA NIM microservices","textPreview":"NVIDIA NIM microservices","textChars":24,"textLines":1,"bbox":[330,401,516,23]}
+{"kind":"textbox","id":"sh/q5ozitov","slide":2,"name":"NVIDIA NIM microservices-body","text":"Reasoning LLM • embedding • reranking • retrieval services","textPreview":"Reasoning LLM • embedding • reranking • retrieval services","textChars":58,"textLines":1,"bbox":[330,425,516,40]}
+{"kind":"shape","id":"sh/r6x0rypg","slide":2,"bbox":[555,403,169,24]}
+{"kind":"textbox","id":"sh/w3a1wn65","slide":2,"text":"Nemotron 3.5 Lightning","textPreview":"Nemotron 3.5 Lightning","textChars":22,"textLines":1,"bbox":[559,404,161,22]}
+{"kind":"shape","id":"sh/xoji5s7q","slide":2,"bbox":[733,403,105,24]}
+{"kind":"textbox","id":"sh/5kfipszu","slide":2,"text":"Qwen 3.8","textPreview":"Qwen 3.8","textChars":8,"textLines":1,"bbox":[737,404,97,22]}
+{"kind":"shape","id":"sh/kj6hgny9","slide":2,"bbox":[316,483,210,40]}
+{"kind":"shape","id":"sh/jix0niho","slide":2,"bbox":[316,483,7,40]}
+{"kind":"textbox","id":"sh/ihozedgj","slide":2,"name":"Run:ai GPU orchestration-title","text":"Run:ai GPU orchestration","textPreview":"Run:ai GPU orchestration","textChars":24,"textLines":1,"bbox":[330,490,186,25]}
+{"kind":"shape","id":"sh/xgfil8zy","slide":2,"bbox":[536,483,320,40]}
+{"kind":"shape","id":"sh/wf6hcnyd","slide":2,"bbox":[536,483,7,40]}
+{"kind":"textbox","id":"sh/ved0jihs","slide":2,"name":"NIM • GPU • Network Operators-title","text":"NIM • GPU • Network Operators","textPreview":"NIM • GPU • Network Operators","textChars":29,"textLines":1,"bbox":[550,490,296,25]}
+{"kind":"shape","id":"sh/ad4zadg7","slide":2,"bbox":[885,178,336,59]}
+{"kind":"shape","id":"sh/9svih8zm","slide":2,"bbox":[885,178,7,59]}
+{"kind":"textbox","id":"sh/8rmh83y1","slide":2,"name":"NeMo Retriever-title","text":"NeMo Retriever","textPreview":"NeMo Retriever","textChars":14,"textLines":1,"bbox":[899,185,312,23]}
+{"kind":"textbox","id":"sh/yxkfi9wz","slide":2,"name":"NeMo Retriever-body","text":"Extract • index • query • embed • rerank","textPreview":"Extract • index • query • embed • rerank","textChars":40,"textLines":1,"bbox":[899,209,312,21]}
+{"kind":"shape","id":"sh/zytgbexk","slide":2,"bbox":[885,246,336,63]}
+{"kind":"shape","id":"sh/0j2xkje5","slide":2,"bbox":[885,246,7,63]}
+{"kind":"textbox","id":"sh/lkbyd4fq","slide":2,"name":"Vector databases-title","text":"Vector databases","textPreview":"Vector databases","textChars":16,"textLines":1,"bbox":[899,253,312,23]}
+{"kind":"textbox","id":"sh/qt0fepw3","slide":2,"name":"Vector databases-body","text":"Qdrant / Milvus for semantic memory and RAG","textPreview":"Qdrant / Milvus for semantic memory and RAG","textChars":43,"textLines":1,"bbox":[899,277,312,25]}
+{"kind":"shape","id":"sh/bu9w7uxo","slide":2,"bbox":[885,318,336,63]}
+{"kind":"shape","id":"sh/cv2xgzet","slide":2,"bbox":[885,318,7,63]}
+{"kind":"textbox","id":"sh/dwbe94fe","slide":2,"name":"Search + durable data-title","text":"Search + durable data","textPreview":"Search + durable data","textChars":21,"textLines":1,"bbox":[899,325,312,23]}
+{"kind":"textbox","id":"sh/2p0fapwr","slide":2,"name":"Search + durable data-body","text":"OpenSearch hybrid search • object storage • metadata","textPreview":"OpenSearch hybrid search • object storage • metadata","textChars":52,"textLines":1,"bbox":[899,349,312,25]}
+{"kind":"shape","id":"sh/3q9w3uxc","slide":2,"bbox":[885,390,336,59]}
+{"kind":"shape","id":"sh/ret8r2dk","slide":2,"bbox":[885,390,7,59]}
+{"kind":"textbox","id":"sh/6tk7yxcz","slide":2,"name":"AI lifecycle services-title","text":"AI lifecycle services","textPreview":"AI lifecycle services","textChars":21,"textLines":1,"bbox":[899,397,312,23]}
+{"kind":"textbox","id":"sh/tgvqtcva","slide":2,"name":"AI lifecycle services-body","text":"MLflow • Kubeflow • model and evaluation evidence","textPreview":"MLflow • Kubeflow • model and evaluation evidence","textChars":49,"textLines":1,"bbox":[899,421,312,21]}
+{"kind":"shape","id":"sh/sf2p07up","slide":2,"bbox":[885,458,336,65]}
+{"kind":"shape","id":"sh/jqt8nid8","slide":2,"bbox":[885,458,7,65]}
+{"kind":"textbox","id":"sh/ipk7udcn","slide":2,"name":"SUSE Multi-Linux Manager + MCP-title","text":"SUSE Multi-Linux Manager + MCP","textPreview":"SUSE Multi-Linux Manager + MCP","textChars":30,"textLines":1,"bbox":[899,465,312,23]}
+{"kind":"textbox","id":"sh/5sbqpsve","slide":2,"name":"SUSE Multi-Linux Manager + MCP-body","text":"Inventory • CVEs • content lifecycle • Salt / SSH / Ansible","textPreview":"Inventory • CVEs • content lifecycle • Salt / SSH / Ansible","textChars":59,"textLines":1,"bbox":[899,489,312,27]}
+{"kind":"shape","id":"sh/hgrilsvm","slide":2,"bbox":[172,233,0,9]}
+{"kind":"shape","id":"sh/2h0jexc7","slide":2,"bbox":[172,303,0,9]}
+{"kind":"shape","id":"sh/3i9kn2ds","slide":2,"bbox":[172,367,0,9]}
+{"kind":"shape","id":"sh/4ji1g7ud","slide":2,"bbox":[172,444,0,9]}
+{"kind":"shape","id":"sh/pkr2pcvy","slide":2,"bbox":[287,241,29,31.5]}
+{"kind":"shape","id":"sh/q50jixcj","slide":2,"bbox":[400,293,46.5,22]}
+{"kind":"shape","id":"sh/r69kr2d4","slide":2,"bbox":[581,293,124,22]}
+{"kind":"shape","id":"sh/cfq5k7u1","slide":2,"bbox":[581,383,5,11]}
+{"kind":"shape","id":"sh/xgz6tcv6","slide":2,"bbox":[586,383,181,11]}
+{"kind":"shape","id":"sh/at8nixcv","slide":2,"bbox":[856,207.5,29,225.5]}
+{"kind":"shape","id":"sh/buhor2dg","slide":2,"bbox":[1053,237,0,9]}
+{"kind":"shape","id":"sh/wzi583ah","slide":2,"bbox":[42,566,585,49]}
+{"kind":"textbox","id":"sh/hkr618b2","slide":2,"text":"SUSE Security (NeuVector)","textPreview":"SUSE Security (NeuVector)","textChars":25,"textLines":1,"bbox":[58,574,205,21]}
+{"kind":"textbox","id":"sh/uxwf6xgz","slide":2,"text":"image / SBOM scanning • admission control • runtime protection • Zero Trust","textPreview":"image / SBOM scanning • admission control • runtime protection • Zero Trust","textChars":75,"textLines":1,"bbox":[292,574,318,22]}
+{"kind":"shape","id":"sh/fi5gz2hk","slide":2,"bbox":[642,566,596,49]}
+{"kind":"textbox","id":"sh/gjyx87y5","slide":2,"text":"SUSE Observability","textPreview":"SUSE Observability","textChars":18,"textLines":1,"bbox":[658,574,180,21]}
+{"kind":"textbox","id":"sh/hk7y1czq","slide":2,"text":"OpenTelemetry • metrics / logs / traces • topology • GPU, token and model-route telemetry","textPreview":"OpenTelemetry • metrics / logs / traces • topology • GPU, token and model-route telemetry","textChars":89,"textLines":1,"bbox":[850,574,371,22]}
+{"kind":"shape","id":"sh/2lgfahgb","slide":2,"bbox":[42,627,1196,51]}
+{"kind":"textbox","id":"sh/3mpg3mhw","slide":2,"text":"FOUNDATION","textPreview":"FOUNDATION","textChars":10,"textLines":1,"bbox":[59,638,115,24]}
+{"kind":"textbox","id":"sh/4nyxcryh","slide":2,"text":"SLES 16 / SL Micro","textPreview":"SLES 16 / SL Micro","textChars":18,"textLines":1,"bbox":[176,638,155,24]}
+{"kind":"textbox","id":"sh/po7y5czm","slide":2,"text":"RKE2 / K3s","textPreview":"RKE2 / K3s","textChars":10,"textLines":1,"bbox":[349,638,115,24]}
+{"kind":"textbox","id":"sh/qpgfehg7","slide":2,"text":"NVIDIA drivers • CUDA • TensorRT-LLM • Dynamo","textPreview":"NVIDIA drivers • CUDA • TensorRT-LLM • Dynamo","textChars":45,"textLines":1,"bbox":[485,638,370,24]}
+{"kind":"textbox","id":"sh/rq9g7mhs","slide":2,"text":"DGX / RTX PRO / GPU cloud","textPreview":"DGX / RTX PRO / GPU cloud","textChars":25,"textLines":1,"bbox":[915,638,285,24]}
+{"kind":"notes","id":"nt/hwbqtkby","slide":2,"text":"Architecture intent:\n- SUSE AI Factory with NVIDIA is shown as a management plane plus dedicated AI workload and data/fleet services.\n- Rancher Prime, RKE2/K3s, Fleet GitOps, the AI Factory operator/UI, AI Library, and immutable blueprints provide the SUSE lifecycle layer.\n- NVIDIA AI Enterprise services include NIM microservices, NIM/GPU/Network Operators, Run:ai, NeMo Agent Toolkit, Switchyard, Guardrails, Retriever, and evaluation.\n- \"Function library\" is represented by NeMo Agent Toolkit functions and function groups.\n- Qdrant and Milvus are example vector databases documented in SUSE AI Factory building blocks; OpenSearch is shown for hybrid search.\n- SUSE Security and SUSE Observability are cross-cutting controls.\n\n[Sources]\n- https://www.suse.com/products/ai/factory-with-nvidia/\n- https://www.suse.com/c/introducing-suse-ai-factory-with-nvidia/\n- https://documentation.suse.com/suse-ai-factory/latest/html/AI-Factory-introduction/aif-building-blocks.html\n- https://documentation.suse.com/suse-ai-factory/latest/html/AI-Factory-deployment/aif-deployment-prepare.html\n- https://documentation.suse.com/suse-ai/1.0/html/AI-deployment/ai-library-installing.html\n- https://docs.nvidia.com/nim-operator/latest/\n- https://docs.nvidia.com/run-ai/\n- https://docs.nvidia.com/nemo/agent-toolkit/latest/\n- https://docs.nvidia.com/nemo/agent-toolkit/latest/build-workflows/functions-and-function-groups/functions.html\n- https://docs.nvidia.com/nemo/gym/model-server/switchyard/\n- https://docs.nvidia.com/nemo/retriever/\n- https://docs.nvidia.com/nemo/microservices/latest/guardrails/running-inference.html\n- https://github.com/NVIDIA/OpenShell\n- https://build.nvidia.com/nvidia/nemotron-3.5-lightning-30b-a3b/modelcard\n[/Sources]"}
+{"kind":"slide","id":"sl/ofy9wn61","slide":3,"title":"Every remediation closes the loop through evidence, approval, and verification","textShapes":39}
+{"kind":"textbox","id":"sh/0bq5kfu9","slide":3,"name":"slide-title","text":"Every remediation closes the loop through evidence, approval, and verification","textPreview":"Every remediation closes the loop through evidence, approval, and verification","textChars":78,"textLines":1,"bbox":[42,30,1030,48]}
+{"kind":"textbox","id":"sh/cza94vmx","slide":3,"name":"slide-subtitle","text":"The agent may investigate broadly, but writes stay bounded, attributable, and reversible.","textPreview":"The agent may investigate broadly, but writes stay bounded, attributable, and reversible.","textChars":89,"textLines":1,"bbox":[44,91,1030,28]}
+{"kind":"textbox","id":"sh/d0jax03i","slide":3,"name":"slide-kicker","text":"AGENT TROUBLESHOOTING LOOP  •  2026","textPreview":"AGENT TROUBLESHOOTING LOOP  •  2026","textChars":35,"textLines":1,"bbox":[1030,97,205,18]}
+{"kind":"shape","id":"sh/298ryl4v","slide":3,"name":"stage-1","bbox":[45,175,185,190]}
+{"kind":"shape","id":"sh/3ah8rqlg","slide":3,"bbox":[45,175,7,190]}
+{"kind":"shape","id":"sh/obq90bml","slide":3,"name":"stage-1-title","bbox":[59,182,161,23]}
+{"kind":"textbox","id":"sh/pcjqtg36","slide":3,"name":"stage-1-body","text":"SUSE Observability\nSUSE Security\nITSM / alert context","textPreview":"SUSE Observability | SUSE Security | ITSM / alert context","textChars":53,"textLines":3,"bbox":[59,230,161,128]}
+{"kind":"shape","id":"sh/m5cra54z","slide":3,"bbox":[59,188,29,29]}
+{"kind":"textbox","id":"sh/n6ls3alk","slide":3,"text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[63,189,21,27]}
+{"kind":"textbox","id":"sh/n2l4fq98","slide":3,"text":"Detect","textPreview":"Detect","textChars":6,"textLines":1,"bbox":[96,187,116,31]}
+{"kind":"shape","id":"sh/m1c3mlsn","slide":3,"name":"stage-2","bbox":[245,175,185,190]}
+{"kind":"shape","id":"sh/943mhgre","slide":3,"bbox":[245,175,7,190]}
+{"kind":"shape","id":"sh/83ulovat","slide":3,"name":"stage-2-title","bbox":[259,182,161,23]}
+{"kind":"textbox","id":"sh/v6l4jq94","slide":3,"name":"stage-2-body","text":"Topology, logs, traces, CVEs, fleet state, KB + vector retrieval","textPreview":"Topology, logs, traces, CVEs, fleet state, KB + vector retrieval","textChars":64,"textLines":1,"bbox":[259,230,161,128]}
+{"kind":"shape","id":"sh/a5c3ql8z","slide":3,"bbox":[259,188,29,29]}
+{"kind":"textbox","id":"sh/x8nml0ra","slide":3,"text":"2","textPreview":"2","textChars":1,"textLines":1,"bbox":[263,189,21,27]}
+{"kind":"textbox","id":"sh/w7ulsvqp","slide":3,"text":"Ground","textPreview":"Ground","textChars":6,"textLines":1,"bbox":[296,187,116,31]}
+{"kind":"shape","id":"sh/uh47ipov","slide":3,"bbox":[230,270,15,0]}
+{"kind":"shape","id":"sh/i9w3u58v","slide":3,"name":"stage-3","bbox":[445,175,185,190]}
+{"kind":"shape","id":"sh/e10f2twf","slide":3,"bbox":[445,175,7,190]}
+{"kind":"shape","id":"sh/f29gbyx0","slide":3,"name":"stage-3-title","bbox":[459,182,161,23]}
+{"kind":"textbox","id":"sh/03ix43e5","slide":3,"name":"stage-3-body","text":"Hermes + NeMo Agent Toolkit functions inside OpenShell","textPreview":"Hermes + NeMo Agent Toolkit functions inside OpenShell","textChars":54,"textLines":1,"bbox":[459,230,161,128]}
+{"kind":"shape","id":"sh/14ryd8fq","slide":3,"bbox":[459,188,29,29]}
+{"kind":"textbox","id":"sh/6d0fytg3","slide":3,"text":"3","textPreview":"3","textChars":1,"textLines":1,"bbox":[463,189,21,27]}
+{"kind":"textbox","id":"sh/re9g7yxo","slide":3,"text":"Plan","textPreview":"Plan","textChars":4,"textLines":1,"bbox":[496,187,116,31]}
+{"kind":"shape","id":"sh/by94f65w","slide":3,"bbox":[430,270,15,0]}
+{"kind":"shape","id":"sh/tgry9ofu","slide":3,"name":"stage-4","bbox":[645,175,185,190]}
+{"kind":"shape","id":"sh/a9kfadwn","slide":3,"bbox":[645,175,7,190]}
+{"kind":"shape","id":"sh/batgjixs","slide":3,"name":"stage-4-title","bbox":[659,182,161,23]}
+{"kind":"textbox","id":"sh/l4fi9cza","slide":3,"name":"stage-4-body","text":"Universal Proxy • Switchyard • Guardrails • NIM endpoint","textPreview":"Universal Proxy • Switchyard • Guardrails • NIM endpoint","textChars":56,"textLines":1,"bbox":[659,230,161,128]}
+{"kind":"shape","id":"sh/k3m1g7yp","slide":3,"bbox":[659,188,29,29]}
+{"kind":"textbox","id":"sh/z2d07mh4","slide":3,"text":"4","textPreview":"4","textChars":1,"textLines":1,"bbox":[663,189,21,27]}
+{"kind":"textbox","id":"sh/y14jehgj","slide":3,"text":"Route + guard","textPreview":"Route + guard","textChars":13,"textLines":1,"bbox":[696,187,116,31]}
+{"kind":"shape","id":"sh/l8ve1kfa","slide":3,"bbox":[630,270,15,0]}
+{"kind":"shape","id":"sh/czmhc7id","slide":3,"name":"stage-5","bbox":[845,175,185,190]}
+{"kind":"shape","id":"sh/byd032h8","slide":3,"bbox":[845,175,7,190]}
+{"kind":"shape","id":"sh/ax4zax0n","slide":3,"name":"stage-5-title","bbox":[859,182,161,23]}
+{"kind":"textbox","id":"sh/hwzihwzi","slide":3,"name":"stage-5-body","text":"RBAC • ticket • maintenance window • target and blast-radius limits","textPreview":"RBAC • ticket • maintenance window • target and blast-radius limits","textChars":67,"textLines":1,"bbox":[859,230,161,128]}
+{"kind":"shape","id":"sh/wv61obyx","slide":3,"bbox":[859,188,29,29]}
+{"kind":"textbox","id":"sh/4nuhs7uh","slide":3,"text":"5","textPreview":"5","textChars":1,"textLines":1,"bbox":[863,189,21,27]}
+{"kind":"textbox","id":"sh/po3ilcvm","slide":3,"text":"Approve","textPreview":"Approve","textChars":7,"textLines":1,"bbox":[896,187,116,31]}
+{"kind":"shape","id":"sh/pgbet0f2","slide":3,"bbox":[830,270,15,0]}
+{"kind":"shape","id":"sh/32l0j2dw","slide":3,"name":"stage-6","bbox":[1045,175,185,190]}
+{"kind":"shape","id":"sh/cruhwrud","slide":3,"bbox":[1045,175,7,190]}
+{"kind":"shape","id":"sh/ds3ipcvy","slide":3,"name":"stage-6-title","bbox":[1059,182,161,23]}
+{"kind":"textbox","id":"sh/qpczuhc7","slide":3,"name":"stage-6-body","text":"Run the bounded action; re-check health and roll back if needed","textPreview":"Run the bounded action; re-check health and roll back if needed","textChars":63,"textLines":1,"bbox":[1059,230,161,128]}
+{"kind":"shape","id":"sh/rql0nmds","slide":3,"bbox":[1059,188,29,29]}
+{"kind":"textbox","id":"sh/0ve10ru9","slide":3,"text":"6","textPreview":"6","textChars":1,"textLines":1,"bbox":[1063,189,21,27]}
+{"kind":"textbox","id":"sh/1wnitwvu","slide":3,"text":"Execute + verify","textPreview":"Execute + verify","textChars":16,"textLines":1,"bbox":[1096,187,116,31]}
+{"kind":"shape","id":"sh/gf2x0vil","slide":3,"bbox":[1030,270,15,0]}
+{"kind":"textbox","id":"sh/a10b6p03","slide":3,"text":"TWO EXECUTION PATHS","textPreview":"TWO EXECUTION PATHS","textChars":19,"textLines":1,"bbox":[45,395,270,22]}
+{"kind":"shape","id":"sh/xoruhkje","slide":3,"bbox":[45,424,770,135]}
+{"kind":"textbox","id":"sh/w3it8zit","slide":3,"text":"PRODUCTION DEFAULT","textPreview":"PRODUCTION DEFAULT","textChars":18,"textLines":1,"bbox":[62,436,165,20]}
+{"kind":"shape","id":"sh/nypcba1c","slide":3,"bbox":[62,465,210,74]}
+{"kind":"shape","id":"sh/mxgb250r","slide":3,"bbox":[62,465,7,74]}
+{"kind":"textbox","id":"sh/90rudkji","slide":3,"name":"Fleet MCP-title","text":"Fleet MCP","textPreview":"Fleet MCP","textChars":9,"textLines":1,"bbox":[76,472,186,23]}
+{"kind":"textbox","id":"sh/8zit4fix","slide":3,"name":"Fleet MCP-body","text":"SUSE Multi-Linux Manager / Uyuni","textPreview":"SUSE Multi-Linux Manager / Uyuni","textChars":32,"textLines":1,"bbox":[76,496,186,36]}
+{"kind":"shape","id":"sh/7utcne1g","slide":3,"bbox":[292,465,235,74]}
+{"kind":"shape","id":"sh/6tkve90v","slide":3,"bbox":[292,465,7,74]}
+{"kind":"textbox","id":"sh/2p4f6dk3","slide":3,"name":"Multi-Linux Manager-title","text":"Multi-Linux Manager","textPreview":"Multi-Linux Manager","textChars":19,"textLines":1,"bbox":[306,472,211,23]}
+{"kind":"textbox","id":"sh/3qxwfilo","slide":3,"name":"Multi-Linux Manager-body","text":"Inventory • patches • CVEs • content • audit","textPreview":"Inventory • patches • CVEs • content • audit","textChars":44,"textLines":1,"bbox":[306,496,211,36]}
+{"kind":"shape","id":"sh/or6x8329","slide":3,"bbox":[547,465,248,74]}
+{"kind":"shape","id":"sh/psfeh83u","slide":3,"bbox":[547,465,7,74]}
+{"kind":"textbox","id":"sh/qtofadkf","slide":3,"name":"Managed Linux estate-title","text":"Managed Linux estate","textPreview":"Managed Linux estate","textChars":20,"textLines":1,"bbox":[561,472,224,23]}
+{"kind":"textbox","id":"sh/bexwjil0","slide":3,"name":"Managed Linux estate-body","text":"SLES • RHEL / clones • Ubuntu / Debian via Salt / SSH / Ansible","textPreview":"SLES • RHEL / clones • Ubuntu / Debian via Salt / SSH / Ansible","textChars":63,"textLines":1,"bbox":[561,496,224,36]}
+{"kind":"shape","id":"sh/ixs36d43","slide":3,"bbox":[272,502,20,0]}
+{"kind":"shape","id":"sh/hwj2x83y","slide":3,"bbox":[527,502,20,0]}
+{"kind":"shape","id":"sh/6xkvytkb","slide":3,"bbox":[835,424,400,135]}
+{"kind":"textbox","id":"sh/7idw7ylg","slide":3,"text":"NARROW EXCEPTION • TECHNOLOGY PREVIEW","textPreview":"NARROW EXCEPTION • TECHNOLOGY PREVIEW","textChars":37,"textLines":1,"bbox":[852,436,365,20]}
+{"kind":"shape","id":"sh/9cjidwny","slide":3,"bbox":[852,465,165,74]}
+{"kind":"shape","id":"sh/8bahkrmt","slide":3,"bbox":[852,465,7,74]}
+{"kind":"textbox","id":"sh/na10bm58","slide":3,"name":"Direct host MCP-title","text":"Direct host MCP","textPreview":"Direct host MCP","textChars":15,"textLines":1,"bbox":[866,472,141,23]}
+{"kind":"textbox","id":"sh/m9szih4n","slide":3,"name":"Direct host MCP-body","text":"OpenShell-scoped","textPreview":"OpenShell-scoped","textChars":16,"textLines":1,"bbox":[866,496,141,36]}
+{"kind":"shape","id":"sh/xg3ihwna","slide":3,"bbox":[1036,465,181,74]}
+{"kind":"shape","id":"sh/wfahormp","slide":3,"bbox":[1036,465,7,74]}
+{"kind":"textbox","id":"sh/ve10fm54","slide":3,"name":"SLES 16 MCP host-title","text":"SLES 16 MCP host","textPreview":"SLES 16 MCP host","textChars":16,"textLines":1,"bbox":[1050,472,157,23]}
+{"kind":"textbox","id":"sh/adszm14j","slide":3,"name":"SLES 16 MCP host-body","text":"Opt-in tools for one system","textPreview":"Opt-in tools for one system","textChars":27,"textLines":1,"bbox":[1050,496,157,36]}
+{"kind":"shape","id":"sh/x0budw3u","slide":3,"bbox":[1017,502,19,0]}
+{"kind":"shape","id":"sh/axkb2h43","slide":3,"bbox":[430,365,707.5,59]}
+{"kind":"shape","id":"sh/vytcbmlo","slide":3,"bbox":[1035,365,102.5,59]}
+{"kind":"shape","id":"sh/54fm50vm","slide":3,"bbox":[45,585,1190,83]}
+{"kind":"textbox","id":"sh/ih43alwv","slide":3,"text":"CLOSE THE LOOP","textPreview":"CLOSE THE LOOP","textChars":14,"textLines":1,"bbox":[65,603,170,22]}
+{"kind":"textbox","id":"sh/3id43qdg","slide":3,"text":"SUSE Observability confirms metrics / logs / traces and topology recovery","textPreview":"SUSE Observability confirms metrics / logs / traces and topology recovery","textChars":73,"textLines":1,"bbox":[225,598,435,31]}
+{"kind":"textbox","id":"sh/gfml8ve5","slide":3,"text":"SUSE Security confirms vulnerability and runtime posture","textPreview":"SUSE Security confirms vulnerability and runtime posture","textChars":56,"textLines":1,"bbox":[690,598,360,31]}
+{"kind":"shape","id":"sh/hgvm1gvq","slide":3,"bbox":[1060,600,155,27]}
+{"kind":"textbox","id":"sh/ud436lwz","slide":3,"text":"verify or roll back","textPreview":"verify or roll back","textChars":19,"textLines":1,"bbox":[1064,601,147,25]}
+{"kind":"textbox","id":"sh/ved4zqdk","slide":3,"text":"Evidence, tool arguments, approvals, model-route decisions, tokens, latency, and change results remain auditable.","textPreview":"Evidence, tool arguments, approvals, model-route decisions, tokens, latency, and change results remain auditable.","textChars":113,"textLines":1,"bbox":[225,634,990,20]}
+{"kind":"notes","id":"nt/ofy9wn61","slide":3,"text":"Operating model:\n- Signals originate in SUSE Observability, SUSE Security, and ITSM.\n- Retrieval grounds the agent in topology, telemetry, CVEs, system state, and enterprise knowledge stored in vector/search services.\n- Hermes and NeMo Agent Toolkit functions run inside the OpenShell policy sandbox.\n- SUSE AI Universal Proxy, NeMo Switchyard, Guardrails, and NIM provide MCP governance, model routing, safety, and inference.\n- The production path uses the SUSE Multi-Linux Manager / Uyuni MCP server for fleet changes.\n- The direct SLES 16 MCP host path is optional, narrowly scoped, and technology preview.\n- Writes require explicit approval and verification; write-capable Uyuni MCP tools can remain disabled until enabled by policy.\n\n[Sources]\n- https://www.suse.com/products/multi-linux-manager/\n- https://github.com/uyuni-project/mcp-server-uyuni/blob/main/README.md\n- https://documentation.suse.com/releasenotes/sles/16.0/index.html\n- https://www.suse.com/news/suse-delivers-simplicity-security-and-deeper-observability-for-ai-workloads/\n- https://www.suse.com/c/ai-assisted-infrastructure-at-scale/\n- https://documentation.suse.com/cloudnative/security/index.html\n- https://www.suse.com/products/rancher/observability/\n- https://documentation.suse.com/cloudnative/suse-observability/latest/en/setup/otel/overview.html\n- https://github.com/NVIDIA/OpenShell/blob/main/architecture/sandbox.md\n- https://docs.nvidia.com/nemo/agent-toolkit/latest/build-workflows/functions-and-function-groups/functions.html\n- https://developer.nvidia.com/blog/route-ai-agent-workloads-across-models-with-nvidia-nemo-switchyard\n- https://docs.nvidia.com/nemo/microservices/latest/guardrails/running-inference.html\n- https://docs.nvidia.com/nim-operator/latest/\n[/Sources]"}
+{"kind":"slide","id":"sl/jyx0ra1s","slide":4,"title":"Trust boundaries and interfaces drive the implementation topology","textShapes":70}
+{"kind":"textbox","id":"sh/e9sj2tsv","slide":4,"name":"slide-title","text":"Trust boundaries and interfaces drive the implementation topology","textPreview":"Trust boundaries and interfaces drive the implementation topology","textChars":65,"textLines":1,"bbox":[42,29,1030,48]}
+{"kind":"textbox","id":"sh/1cj2d8b6","slide":4,"name":"slide-subtitle","text":"Separate control, workload, data/telemetry, and Linux-management planes; connect them through explicit contracts.","textPreview":"Separate control, workload, data/telemetry, and Linux-management planes; connect them through explicit contracts.","textChars":113,"textLines":1,"bbox":[44,91,1030,27]}
+{"kind":"textbox","id":"sh/0ba143al","slide":4,"name":"slide-kicker","text":"IMPLEMENTATION TOPOLOGY  •  V1","textPreview":"IMPLEMENTATION TOPOLOGY  •  V1","textChars":30,"textLines":1,"bbox":[1020,97,215,18]}
+{"kind":"shape","id":"sh/rm1k7yt4","slide":4,"bbox":[42,142,246,377]}
+{"kind":"shape","id":"sh/ql8jytsj","slide":4,"bbox":[302,142,581,377]}
+{"kind":"shape","id":"sh/doj29oba","slide":4,"bbox":[897,142,341,377]}
+{"kind":"shape","id":"sh/sna103ap","slide":4,"bbox":[42,540,1196,139]}
+{"kind":"textbox","id":"sh/3ihk3et8","slide":4,"text":"MANAGEMENT CLUSTER","textPreview":"MANAGEMENT CLUSTER","textChars":18,"textLines":1,"bbox":[56,149,218,22]}
+{"kind":"textbox","id":"sh/ih8ju9sn","slide":4,"text":"AI WORKLOAD CLUSTER","textPreview":"AI WORKLOAD CLUSTER","textChars":19,"textLines":1,"bbox":[316,149,553,22]}
+{"kind":"textbox","id":"sh/kbm987y5","slide":4,"text":"DATA + OBSERVABILITY CLUSTERS","textPreview":"DATA + OBSERVABILITY CLUSTERS","textChars":29,"textLines":1,"bbox":[911,149,313,22]}
+{"kind":"textbox","id":"sh/5cva1cfq","slide":4,"text":"LINUX MANAGEMENT PLANE + ESTATE","textPreview":"LINUX MANAGEMENT PLANE + ESTATE","textChars":31,"textLines":1,"bbox":[56,547,1168,22]}
+{"kind":"shape","id":"sh/i94r6xgz","slide":4,"bbox":[57,177,216,69]}
+{"kind":"shape","id":"sh/jadsz2xk","slide":4,"bbox":[57,177,6,69]}
+{"kind":"textbox","id":"sh/w72947yt","slide":4,"text":"Rancher Prime on RKE2","textPreview":"Rancher Prime on RKE2","textChars":21,"textLines":1,"bbox":[69,183,196,21]}
+{"kind":"textbox","id":"sh/x8vaxsfe","slide":4,"text":"HA control plane • downstream cluster registration • Kubernetes API","textPreview":"HA control plane • downstream cluster registration • Kubernetes API","textChars":67,"textLines":1,"bbox":[69,205,196,35]}
+{"kind":"shape","id":"sh/a5kr2xg3","slide":4,"bbox":[57,255,216,69]}
+{"kind":"shape","id":"sh/v6tsv2xo","slide":4,"bbox":[57,255,6,69]}
+{"kind":"textbox","id":"sh/g36tgryd","slide":4,"text":"AI Factory + Fleet","textPreview":"AI Factory + Fleet","textChars":18,"textLines":1,"bbox":[69,261,196,21]}
+{"kind":"textbox","id":"sh/h4fa9wfy","slide":4,"text":"Operator/UI • immutable blueprints • GitOps reconciliation","textPreview":"Operator/UI • immutable blueprints • GitOps reconciliation","textChars":58,"textLines":1,"bbox":[69,283,196,35]}
+{"kind":"shape","id":"sh/p0batw72","slide":4,"bbox":[57,333,216,76]}
+{"kind":"shape","id":"sh/oz29krqh","slide":4,"bbox":[57,333,6,76]}
+{"kind":"textbox","id":"sh/3ytsrmpw","slide":4,"text":"Enterprise trust services","textPreview":"Enterprise trust services","textChars":25,"textLines":1,"bbox":[69,339,196,21]}
+{"kind":"textbox","id":"sh/2xkrih8b","slide":4,"text":"OIDC groups • workload identity • PKI/mTLS • external secrets","textPreview":"OIDC groups • workload identity • PKI/mTLS • external secrets","textChars":61,"textLines":1,"bbox":[69,361,196,42]}
+{"kind":"shape","id":"sh/1wbapc7q","slide":4,"bbox":[57,418,216,82]}
+{"kind":"shape","id":"sh/gv29g7q5","slide":4,"bbox":[57,418,6,82]}
+{"kind":"textbox","id":"sh/fu9sn2p0","slide":4,"text":"SUSE Security control","textPreview":"SUSE Security control","textChars":21,"textLines":1,"bbox":[69,424,196,21]}
+{"kind":"textbox","id":"sh/et0reh8f","slide":4,"text":"Manager • 3x Controller HA • Scanner • admission policy","textPreview":"Manager • 3x Controller HA • Scanner • admission policy","textChars":55,"textLines":1,"bbox":[69,446,196,48]}
+{"kind":"shape","id":"sh/tsrqlc7u","slide":4,"bbox":[317,176,551,136]}
+{"kind":"textbox","id":"sh/sri9s7q9","slide":4,"text":"namespace: agent-control","textPreview":"namespace: agent-control","textChars":24,"textLines":1,"bbox":[331,183,200,18]}
+{"kind":"shape","id":"sh/ilwf69kv","slide":4,"bbox":[330,207,123,88]}
+{"kind":"shape","id":"sh/jm5gze1g","slide":4,"bbox":[330,207,6,88]}
+{"kind":"textbox","id":"sh/knex8j21","slide":4,"text":"OpenShell Gateway","textPreview":"OpenShell Gateway","textChars":17,"textLines":1,"bbox":[342,213,103,21]}
+{"kind":"textbox","id":"sh/5ony1oj6","slide":4,"text":"Auth • policy store • sandbox lifecycle","textPreview":"Auth • policy store • sandbox lifecycle","textChars":39,"textLines":1,"bbox":[342,235,103,54]}
+{"kind":"shape","id":"sh/axcf29kj","slide":4,"bbox":[463,207,132,88]}
+{"kind":"shape","id":"sh/vy5gbe14","slide":4,"bbox":[463,207,6,88]}
+{"kind":"textbox","id":"sh/wzex4z2p","slide":4,"text":"Supervisor + Hermes","textPreview":"Supervisor + Hermes","textChars":19,"textLines":1,"bbox":[475,213,112,21]}
+{"kind":"textbox","id":"sh/xknyx4ja","slide":4,"text":"Restricted child • egress proxy • audit","textPreview":"Restricted child • egress proxy • audit","textChars":39,"textLines":1,"bbox":[475,235,112,54]}
+{"kind":"shape","id":"sh/mtcfypkn","slide":4,"bbox":[605,207,119,88]}
+{"kind":"shape","id":"sh/nulw7u18","slide":4,"bbox":[605,207,6,88]}
+{"kind":"textbox","id":"sh/fm5c3q54","slide":4,"text":"Agent Toolkit","textPreview":"Agent Toolkit","textChars":13,"textLines":1,"bbox":[617,213,99,21]}
+{"kind":"textbox","id":"sh/elwba54j","slide":4,"text":"Typed function groups • MCP clients","textPreview":"Typed function groups • MCP clients","textChars":35,"textLines":1,"bbox":[617,235,99,54]}
+{"kind":"shape","id":"sh/18nu50nu","slide":4,"bbox":[734,207,121,88]}
+{"kind":"shape","id":"sh/0netcvm9","slide":4,"bbox":[734,207,6,88]}
+{"kind":"textbox","id":"sh/rilczq5s","slide":4,"text":"Universal Proxy","textPreview":"Universal Proxy","textChars":15,"textLines":1,"bbox":[746,213,101,21]}
+{"kind":"textbox","id":"sh/qhcb6l47","slide":4,"text":"Governed MCP bridge • tech preview","textPreview":"Governed MCP bridge • tech preview","textChars":34,"textLines":1,"bbox":[746,235,101,54]}
+{"kind":"shape","id":"sh/dknu10ny","slide":4,"bbox":[317,325,551,175]}
+{"kind":"textbox","id":"sh/sjut8vmd","slide":4,"text":"namespace: inference","textPreview":"namespace: inference","textChars":20,"textLines":1,"bbox":[331,332,170,18]}
+{"kind":"shape","id":"sh/3elcv65w","slide":4,"bbox":[330,356,122,62]}
+{"kind":"shape","id":"sh/idcb2lob","slide":4,"bbox":[330,356,6,62]}
+{"kind":"textbox","id":"sh/8jq9c72t","slide":4,"text":"Switchyard","textPreview":"Switchyard","textChars":10,"textLines":1,"bbox":[342,362,102,21]}
+{"kind":"textbox","id":"sh/tkjq5c3e","slide":4,"text":"Per-request route","textPreview":"Per-request route","textChars":17,"textLines":1,"bbox":[342,384,102,28]}
+{"kind":"shape","id":"sh/6x8rahk3","slide":4,"bbox":[462,356,126,62]}
+{"kind":"shape","id":"sh/7ih83mlo","slide":4,"bbox":[462,356,6,62]}
+{"kind":"textbox","id":"sh/gna9gr25","slide":4,"text":"NIM Operator","textPreview":"NIM Operator","textChars":12,"textLines":1,"bbox":[474,362,106,21]}
+{"kind":"textbox","id":"sh/hoja9w3q","slide":4,"text":"NIMCache • NIMService","textPreview":"NIMCache • NIMService","textChars":21,"textLines":1,"bbox":[474,384,106,28]}
+{"kind":"shape","id":"sh/ulsrehkz","slide":4,"bbox":[598,356,126,62]}
+{"kind":"shape","id":"sh/vm1s7mlk","slide":4,"bbox":[598,356,6,62]}
+{"kind":"textbox","id":"sh/wr694nm1","slide":4,"text":"Nemotron NIM","textPreview":"Nemotron NIM","textChars":12,"textLines":1,"bbox":[610,362,106,21]}
+{"kind":"textbox","id":"sh/xsfqxs36","slide":4,"text":"3.5 Lightning endpoint","textPreview":"3.5 Lightning endpoint","textChars":22,"textLines":1,"bbox":[610,384,106,28]}
+{"kind":"shape","id":"sh/do761ova","slide":4,"bbox":[734,356,121,62]}
+{"kind":"shape","id":"sh/cnyp8jep","slide":4,"bbox":[734,356,6,62]}
+{"kind":"textbox","id":"sh/bmpozed4","slide":4,"text":"Qwen 3.8","textPreview":"Qwen 3.8","textChars":8,"textLines":1,"bbox":[746,362,101,21]}
+{"kind":"textbox","id":"sh/qlg769wj","slide":4,"text":"vLLM / SUSE endpoint","textPreview":"vLLM / SUSE endpoint","textChars":20,"textLines":1,"bbox":[746,384,101,28]}
+{"kind":"shape","id":"sh/lcr658v6","slide":4,"bbox":[330,430,161,53]}
+{"kind":"shape","id":"sh/0bipc3el","slide":4,"bbox":[330,430,6,53]}
+{"kind":"textbox","id":"sh/zq9o3ydg","slide":4,"text":"Embedding + rerank NIMs","textPreview":"Embedding + rerank NIMs","textChars":23,"textLines":1,"bbox":[342,436,141,21]}
+{"kind":"textbox","id":"sh/yp07atwv","slide":4,"text":"Retriever acceleration","textPreview":"Retriever acceleration","textChars":22,"textLines":1,"bbox":[342,458,141,19]}
+{"kind":"shape","id":"sh/9grq98vi","slide":4,"bbox":[501,430,151,53]}
+{"kind":"shape","id":"sh/8fipg3ex","slide":4,"bbox":[501,430,6,53]}
+{"kind":"textbox","id":"sh/6psve183","slide":4,"text":"Run:ai","textPreview":"Run:ai","textChars":6,"textLines":1,"bbox":[513,436,131,21]}
+{"kind":"textbox","id":"sh/7a1cn6po","slide":4,"text":"Queues • projects • GPU policy","textPreview":"Queues • projects • GPU policy","textChars":30,"textLines":1,"bbox":[513,458,131,19]}
+{"kind":"shape","id":"sh/8badgbq9","slide":4,"bbox":[662,430,193,53]}
+{"kind":"shape","id":"sh/tcjupg7u","slide":4,"bbox":[662,430,6,53]}
+{"kind":"textbox","id":"sh/udcvil8z","slide":4,"text":"GPU + Network Operators","textPreview":"GPU + Network Operators","textChars":23,"textLines":1,"bbox":[674,436,173,21]}
+{"kind":"textbox","id":"sh/velcrqpk","slide":4,"text":"Drivers • device plugin • RDMA","textPreview":"Drivers • device plugin • RDMA","textChars":30,"textLines":1,"bbox":[674,458,173,19]}
+{"kind":"shape","id":"sh/gfudkvq5","slide":4,"bbox":[912,177,311,57]}
+{"kind":"shape","id":"sh/hg3et07q","slide":4,"bbox":[912,177,6,57]}
+{"kind":"textbox","id":"sh/ihcvml8b","slide":4,"text":"NeMo Retriever","textPreview":"NeMo Retriever","textChars":14,"textLines":1,"bbox":[924,183,291,21]}
+{"kind":"textbox","id":"sh/3ilwvqpw","slide":4,"text":"Extraction • chunking • indexing • query","textPreview":"Extraction • chunking • indexing • query","textChars":40,"textLines":1,"bbox":[924,205,291,23]}
+{"kind":"shape","id":"sh/na18b2tc","slide":4,"bbox":[912,243,151,67]}
+{"kind":"shape","id":"sh/29srixcr","slide":4,"bbox":[912,243,6,67]}
+{"kind":"textbox","id":"sh/pcjadsb2","slide":4,"text":"Qdrant / Milvus","textPreview":"Qdrant / Milvus","textChars":15,"textLines":1,"bbox":[924,249,131,21]}
+{"kind":"textbox","id":"sh/oba9k7uh","slide":4,"text":"Persistent vector index • encrypted volumes","textPreview":"Persistent vector index • encrypted volumes","textChars":43,"textLines":1,"bbox":[924,271,131,33]}
+{"kind":"shape","id":"sh/bylsf2t8","slide":4,"bbox":[1072,243,151,67]}
+{"kind":"shape","id":"sh/axsrmxcn","slide":4,"bbox":[1072,243,6,67]}
+{"kind":"textbox","id":"sh/x03ahcbe","slide":4,"text":"OpenSearch","textPreview":"OpenSearch","textChars":10,"textLines":1,"bbox":[1084,249,131,21]}
+{"kind":"textbox","id":"sh/czu9o7ut","slide":4,"text":"Hybrid search • audit/search evidence","textPreview":"Hybrid search • audit/search evidence","textChars":37,"textLines":1,"bbox":[1084,271,131,33]}
+{"kind":"shape","id":"sh/z2lsjmtk","slide":4,"bbox":[912,319,151,67]}
+{"kind":"shape","id":"sh/y1crqhcz","slide":4,"bbox":[912,319,6,67]}
+{"kind":"textbox","id":"sh/w7e9grqx","slide":4,"text":"Object store","textPreview":"Object store","textChars":12,"textLines":1,"bbox":[924,325,131,21]}
+{"kind":"textbox","id":"sh/h8nq9wri","slide":4,"text":"Documents • model cache • metadata • backups","textPreview":"Documents • model cache • metadata • backups","textChars":44,"textLines":1,"bbox":[924,347,131,33]}
+{"kind":"shape","id":"sh/u5wreh8r","slide":4,"bbox":[1072,319,151,67]}
+{"kind":"shape","id":"sh/v6587m9c","slide":4,"bbox":[1072,319,6,67]}
+{"kind":"textbox","id":"sh/83upc7q1","slide":4,"text":"ML lifecycle","textPreview":"ML lifecycle","textChars":12,"textLines":1,"bbox":[1084,325,131,21]}
+{"kind":"textbox","id":"sh/943q5crm","slide":4,"text":"MLflow / Kubeflow • evaluation • lineage","textPreview":"MLflow / Kubeflow • evaluation • lineage","textChars":40,"textLines":1,"bbox":[1084,347,131,33]}
+{"kind":"shape","id":"sh/m1c7ah8v","slide":4,"bbox":[912,395,151,99]}
+{"kind":"shape","id":"sh/72l8329g","slide":4,"bbox":[912,395,6,99]}
+{"kind":"textbox","id":"sh/kzup87qp","slide":4,"text":"OTel Collectors","textPreview":"OTel Collectors","textChars":15,"textLines":1,"bbox":[924,401,131,21]}
+{"kind":"textbox","id":"sh/l03q1cra","slide":4,"text":"Daemon/gateway • OTLP 4317/4318 • enrich, batch, filter","textPreview":"Daemon/gateway • OTLP 4317/4318 • enrich, batch, filter","textChars":55,"textLines":1,"bbox":[924,423,131,65]}
+{"kind":"shape","id":"sh/yl0b2t47","slide":4,"bbox":[1072,395,151,99]}
+{"kind":"shape","id":"sh/j6tsbyls","slide":4,"bbox":[1072,395,6,99]}
+{"kind":"textbox","id":"sh/k72t43md","slide":4,"text":"SUSE Observability","textPreview":"SUSE Observability","textChars":18,"textLines":1,"bbox":[1084,401,131,34]}
+{"kind":"textbox","id":"sh/l8bad83y","slide":4,"text":"Topology • metrics • traces • logs • SLO alerts","textPreview":"Topology • metrics • traces • logs • SLO alerts","textChars":47,"textLines":1,"bbox":[1084,436,131,52]}
+{"kind":"shape","id":"sh/ah0byt4b","slide":4,"bbox":[58,575,205,78]}
+{"kind":"shape","id":"sh/bi9s7ylw","slide":4,"bbox":[58,575,6,78]}
+{"kind":"textbox","id":"sh/wjit0jmh","slide":4,"text":"Fleet MCP adapter","textPreview":"Fleet MCP adapter","textChars":17,"textLines":1,"bbox":[70,581,185,21]}
+{"kind":"textbox","id":"sh/xkra9o3m","slide":4,"text":"Uyuni / MLM • HTTP + OAuth/mTLS • writes policy-gated","textPreview":"Uyuni / MLM • HTTP + OAuth/mTLS • writes policy-gated","textChars":53,"textLines":1,"bbox":[70,603,185,44]}
+{"kind":"shape","id":"sh/udkbadkf","slide":4,"bbox":[278,575,218,78]}
+{"kind":"shape","id":"sh/vedcjil0","slide":4,"bbox":[278,575,6,78]}
+{"kind":"textbox","id":"sh/58fe9cn2","slide":4,"text":"SUSE Multi-Linux Manager","textPreview":"SUSE Multi-Linux Manager","textChars":24,"textLines":1,"bbox":[290,581,198,21]}
+{"kind":"textbox","id":"sh/476d076h","slide":4,"text":"Inventory • CVEs • content lifecycle • action/audit history","textPreview":"Inventory • CVEs • content lifecycle • action/audit history","textChars":59,"textLines":1,"bbox":[290,603,198,44]}
+{"kind":"shape","id":"sh/36xw7m5c","slide":4,"bbox":[511,575,171,78]}
+{"kind":"shape","id":"sh/i5ovyhor","slide":4,"bbox":[511,575,6,78]}
+{"kind":"textbox","id":"sh/h4ve5cn6","slide":4,"text":"Execution channels","textPreview":"Execution channels","textChars":18,"textLines":1,"bbox":[523,581,151,21]}
+{"kind":"textbox","id":"sh/g3mdw76l","slide":4,"text":"Salt 4505/4506 • SSH 22 • Ansible","textPreview":"Salt 4505/4506 • SSH 22 • Ansible","textChars":33,"textLines":1,"bbox":[523,603,151,44]}
+{"kind":"shape","id":"sh/v2dw3250","slide":4,"bbox":[697,575,160,78]}
+{"kind":"shape","id":"sh/u14vuxof","slide":4,"bbox":[697,575,6,78]}
+{"kind":"textbox","id":"sh/10zehwna","slide":4,"text":"SLES 16","textPreview":"SLES 16","textChars":7,"textLines":1,"bbox":[709,581,140,21]}
+{"kind":"textbox","id":"sh/0zqd8rmp","slide":4,"text":"Managed node • optional mcphost path (tech preview)","textPreview":"Managed node • optional mcphost path (tech preview)","textChars":51,"textLines":1,"bbox":[709,603,140,44]}
+{"kind":"shape","id":"sh/kfip0zyd","slide":4,"bbox":[872,575,160,78]}
+{"kind":"shape","id":"sh/lgr6t4zy","slide":4,"bbox":[872,575,6,78]}
+{"kind":"textbox","id":"sh/ytg7ypg7","slide":4,"text":"RHEL / clones","textPreview":"RHEL / clones","textChars":13,"textLines":1,"bbox":[884,581,140,21]}
+{"kind":"textbox","id":"sh/je9oruhs","slide":4,"text":"Managed through Salt / SSH / Ansible","textPreview":"Managed through Salt / SSH / Ansible","textChars":36,"textLines":1,"bbox":[884,603,140,44]}
+{"kind":"shape","id":"sh/wrypwzy1","slide":4,"bbox":[1047,575,175,78]}
+{"kind":"shape","id":"sh/xs76p4zm","slide":4,"bbox":[1047,575,6,78]}
+{"kind":"textbox","id":"sh/apg7upgb","slide":4,"text":"Ubuntu / Debian","textPreview":"Ubuntu / Debian","textChars":15,"textLines":1,"bbox":[1059,581,155,21]}
+{"kind":"textbox","id":"sh/bqponuhg","slide":4,"text":"Managed through Salt / SSH / Ansible","textPreview":"Managed through Salt / SSH / Ansible","textChars":36,"textLines":1,"bbox":[1059,603,155,44]}
+{"kind":"shape","id":"sh/onypsfy5","slide":4,"bbox":[165,246,0,9]}
+{"kind":"shape","id":"sh/9o76lkzq","slide":4,"bbox":[273,251,57,38.5]}
+{"kind":"shape","id":"sh/ri58ba1c","slide":4,"bbox":[453,251,10,0]}
+{"kind":"shape","id":"sh/qhw725kr","slide":4,"bbox":[595,251,10,0]}
+{"kind":"shape","id":"sh/dknqdkji","slide":4,"bbox":[724,251,10,0]}
+{"kind":"shape","id":"sh/cjep4f2x","slide":4,"bbox":[452,387,10,0]}
+{"kind":"shape","id":"sh/zm58fu1o","slide":4,"bbox":[588,387,10,0]}
+{"kind":"shape","id":"sh/elw76pk3","slide":4,"bbox":[452,387,282,0]}
+{"kind":"shape","id":"sh/1o7qhkje","slide":4,"bbox":[987.5,234,80,9]}
+{"kind":"shape","id":"sh/0nyp8z29","slide":4,"bbox":[1067.5,234,80,9]}
+{"kind":"shape","id":"sh/nqp8ju1k","slide":4,"bbox":[1063,444.5,9,0]}
+{"kind":"shape","id":"sh/mpg7apkz","slide":4,"bbox":[263,614,15,0]}
+{"kind":"shape","id":"sh/mtor6d8b","slide":4,"bbox":[496,614,15,0]}
+{"kind":"shape","id":"sh/7uxsfy9w","slide":4,"bbox":[682,614,15,0]}
+{"kind":"shape","id":"sh/8v6983qh","slide":4,"bbox":[682,614,190,0]}
+{"kind":"shape","id":"sh/9wfah8rm","slide":4,"bbox":[682,614,365,0]}
+{"kind":"shape","id":"sh/uxobad87","slide":4,"bbox":[274,225,42,22]}
+{"kind":"textbox","id":"sh/vyhsji9s","slide":4,"text":"K8s","textPreview":"K8s","textChars":3,"textLines":1,"bbox":[278,226,34,20]}
+{"kind":"shape","id":"sh/wjqtcnqd","slide":4,"bbox":[873,224,51,22]}
+{"kind":"textbox","id":"sh/hkzalsry","slide":4,"text":"RAG","textPreview":"RAG","textChars":3,"textLines":1,"bbox":[877,225,43,20]}
+{"kind":"shape","id":"sh/a14ryt83","slide":4,"bbox":[873,436,51,22]}
+{"kind":"textbox","id":"sh/b2ds7e9o","slide":4,"text":"OTLP","textPreview":"OTLP","textChars":4,"textLines":1,"bbox":[877,437,43,20]}
+{"kind":"shape","id":"sh/ds3mtgfi","slide":4,"bbox":[711,519,164,22]}
+{"kind":"textbox","id":"sh/srul0bex","slide":4,"text":"MCP HTTPS • OAuth/mTLS","textPreview":"MCP HTTPS • OAuth/mTLS","textChars":22,"textLines":1,"bbox":[715,520,156,20]}
+{"kind":"shape","id":"sh/rql4r6xc","slide":4,"bbox":[1054,509,168,22]}
+{"kind":"textbox","id":"sh/qpc3ylwr","slide":4,"text":"Enforcer DaemonSet / node","textPreview":"Enforcer DaemonSet / node","textChars":25,"textLines":1,"bbox":[1058,510,160,20]}
+{"kind":"notes","id":"nt/jyx0ra1s","slide":4,"text":"Implementation guidance:\n- Keep the Rancher Prime / AI Factory management cluster separate from AI Library workloads and the SUSE Observability cluster for production.\n- Install SUSE Security controllers/managers/scanners centrally and an Enforcer on each protected Kubernetes node.\n- Run OpenShell as gateway plus sandbox supervisor; Hermes is the restricted agent child.\n- NeMo Agent Toolkit function groups expose typed internal tools and MCP clients.\n- Route Nemotron 3.5 Lightning through a NIMService managed by NIM Operator. Serve Qwen 3.8 through a validated vLLM or SUSE Inference Endpoint unless a supported NIM profile is available.\n- NIMCache and NIMService custom resources separate model staging from service lifecycle.\n- Keep vector/search/object stores on encrypted persistent storage with tested backup/restore.\n- Export application, model, MCP, Kubernetes, and host telemetry through local OTel collectors to SUSE Observability.\n- Keep Uyuni MCP write tools disabled by default; require OAuth/mTLS and least-privilege roles before enabling bounded write actions.\n\n[Sources]\n- https://documentation.suse.com/suse-ai-factory/latest/html/AI-Factory-introduction/aif-building-blocks.html\n- https://documentation.suse.com/suse-ai-factory/latest/html/AI-Factory-deployment/aif-deployment-prepare.html\n- https://documentation.suse.com/suse-ai-factory/latest/html/AI-Factory-usage/ai-factory-managing-blueprints.html\n- https://docs.nvidia.com/nim-operator/latest/\n- https://docs.nvidia.com/nim/large-language-models/latest/deployment/kubernetes-deployment/nim-operator-deployment.html\n- https://github.com/NVIDIA/OpenShell/blob/main/architecture/README.md\n- https://github.com/NVIDIA/OpenShell/blob/main/architecture/sandbox.md\n- https://docs.nvidia.com/nemo/agent-toolkit/latest/extend/custom-components/custom-functions/function-groups.html\n- https://docs.nvidia.com/nemo/gym/model-server/switchyard/\n- https://documentation.suse.com/cloudnative/security/5.5/en/overview.html\n- https://documentation.suse.com/cloudnative/suse-observability/latest/en/setup/otel/collector.html\n- https://github.com/uyuni-project/mcp-server-uyuni/blob/main/README.md\n- https://documentation.suse.com/releasenotes/sles/html/releasenotes_sles_16.0/index.html\n[/Sources]"}
+{"kind":"slide","id":"sl/i107q5of","slide":5,"title":"Build in dependency order and promote only after each exit gate passes","textShapes":40}
+{"kind":"textbox","id":"sh/qd0bahob","slide":5,"name":"slide-title","text":"Build in dependency order and promote only after each exit gate passes","textPreview":"Build in dependency order and promote only after each exit gate passes","textChars":70,"textLines":1,"bbox":[42,29,1030,48]}
+{"kind":"textbox","id":"sh/dgbulwnm","slide":5,"name":"slide-subtitle","text":"The implementation sequence creates trust and telemetry before model or remediation workloads receive production authority.","textPreview":"The implementation sequence creates trust and telemetry before model or remediation workloads receive production authority.","textChars":123,"textLines":1,"bbox":[44,91,1030,27]}
+{"kind":"textbox","id":"sh/cf2tcr61","slide":5,"name":"slide-kicker","text":"BUILD SEQUENCE  •  V1","textPreview":"BUILD SEQUENCE  •  V1","textChars":21,"textLines":1,"bbox":[1020,97,215,18]}
+{"kind":"shape","id":"sh/z2tcnm5s","slide":5,"bbox":[45,157,275,180]}
+{"kind":"shape","id":"sh/yhkbe1o7","slide":5,"bbox":[59,170,31,31]}
+{"kind":"textbox","id":"sh/l4bupwny","slide":5,"text":"0","textPreview":"0","textChars":1,"textLines":1,"bbox":[63,171,23,29]}
+{"kind":"textbox","id":"sh/032tgr6d","slide":5,"text":"Design inputs","textPreview":"Design inputs","textChars":13,"textLines":1,"bbox":[100,170,202,31]}
+{"kind":"textbox","id":"sh/n6dcr65o","slide":5,"text":"DNS/IPAM • PKI • OIDC groups • storage classes • GPU/driver matrix","textPreview":"DNS/IPAM • PKI • OIDC groups • storage classes • GPU/driver matrix","textChars":66,"textLines":1,"bbox":[61,213,243,66]}
+{"kind":"shape","id":"sh/m5kbi1oj","slide":5,"bbox":[59,287,247,38]}
+{"kind":"textbox","id":"sh/w32dkbuh","slide":5,"text":"EXIT GATE  Signed architecture + bill of materials","textPreview":"EXIT GATE  Signed architecture + bill of materials","textChars":50,"textLines":1,"bbox":[68,293,229,26]}
+{"kind":"shape","id":"sh/x4vedgvm","slide":5,"bbox":[350,157,275,180]}
+{"kind":"shape","id":"sh/ahkvi1cb","slide":5,"bbox":[364,170,31,31]}
+{"kind":"textbox","id":"sh/v2twb6dw","slide":5,"text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[368,171,23,29]}
+{"kind":"textbox","id":"sh/k7mxovud","slide":5,"text":"Cluster foundation","textPreview":"Cluster foundation","textChars":18,"textLines":1,"bbox":[405,170,202,31]}
+{"kind":"textbox","id":"sh/58vehgvy","slide":5,"text":"SLES 16/SL Micro • RKE2 • Rancher Prime • downstream registration","textPreview":"SLES 16/SL Micro • RKE2 • Rancher Prime • downstream registration","textChars":65,"textLines":1,"bbox":[366,213,243,66]}
+{"kind":"shape","id":"sh/i54fmlc7","slide":5,"bbox":[364,287,247,38]}
+{"kind":"textbox","id":"sh/j6dwfqds","slide":5,"text":"EXIT GATE  HA, backup, restore and upgrade test","textPreview":"EXIT GATE  HA, backup, restore and upgrade test","textChars":47,"textLines":1,"bbox":[373,293,229,26]}
+{"kind":"shape","id":"sh/sb6xsvu9","slide":5,"bbox":[655,157,275,180]}
+{"kind":"shape","id":"sh/tcfel0vu","slide":5,"bbox":[669,170,31,31]}
+{"kind":"textbox","id":"sh/hgrmpwj2","slide":5,"text":"2","textPreview":"2","textChars":1,"textLines":1,"bbox":[673,171,23,29]}
+{"kind":"textbox","id":"sh/gfi5grih","slide":5,"text":"Security + telemetry","textPreview":"Security + telemetry","textChars":20,"textLines":1,"bbox":[710,170,202,31]}
+{"kind":"textbox","id":"sh/fe94nm1w","slide":5,"text":"SUSE Security • Enforcers • OTel collectors • SUSE Observability","textPreview":"SUSE Security • Enforcers • OTel collectors • SUSE Observability","textChars":64,"textLines":1,"bbox":[671,213,243,66]}
+{"kind":"shape","id":"sh/ud0ne10b","slide":5,"bbox":[669,287,247,38]}
+{"kind":"textbox","id":"sh/pkr6tgjy","slide":5,"text":"EXIT GATE  Denied test image; correlated trace visible","textPreview":"EXIT GATE  Denied test image; correlated trace visible","textChars":54,"textLines":1,"bbox":[678,293,229,26]}
+{"kind":"shape","id":"sh/4ji5kbid","slide":5,"bbox":[960,157,275,180]}
+{"kind":"shape","id":"sh/3i94r61s","slide":5,"bbox":[974,170,31,31]}
+{"kind":"textbox","id":"sh/2h0ni107","slide":5,"text":"3","textPreview":"3","textChars":1,"textLines":1,"bbox":[978,171,23,29]}
+{"kind":"textbox","id":"sh/5o7mhcju","slide":5,"text":"NVIDIA runtime","textPreview":"NVIDIA runtime","textChars":14,"textLines":1,"bbox":[1015,170,202,31]}
+{"kind":"textbox","id":"sh/kny587i9","slide":5,"text":"GPU/Network Operators • Run:ai • NIM Operator • NIMCache","textPreview":"GPU/Network Operators • Run:ai • NIM Operator • NIMCache","textChars":56,"textLines":1,"bbox":[976,213,243,66]}
+{"kind":"shape","id":"sh/atcjidg7","slide":5,"bbox":[974,287,247,38]}
+{"kind":"textbox","id":"sh/vu5kbihc","slide":5,"text":"EXIT GATE  GPU health, cache ready, quota enforced","textPreview":"EXIT GATE  GPU health, cache ready, quota enforced","textChars":50,"textLines":1,"bbox":[983,293,229,26]}
+{"kind":"shape","id":"sh/wve1knyx","slide":5,"bbox":[45,369,275,180]}
+{"kind":"shape","id":"sh/xwn2dszi","slide":5,"bbox":[59,382,31,31]}
+{"kind":"textbox","id":"sh/ihw3mxg3","slide":5,"text":"4","textPreview":"4","textChars":1,"textLines":1,"bbox":[63,383,23,29]}
+{"kind":"textbox","id":"sh/ji5kf2ho","slide":5,"text":"Data services","textPreview":"Data services","textChars":13,"textLines":1,"bbox":[100,382,202,31]}
+{"kind":"textbox","id":"sh/kjelony9","slide":5,"text":"Qdrant/Milvus • OpenSearch • object storage • Retriever","textPreview":"Qdrant/Milvus • OpenSearch • object storage • Retriever","textChars":55,"textLines":1,"bbox":[61,425,243,66]}
+{"kind":"shape","id":"sh/5kn2hszu","slide":5,"bbox":[59,499,247,38]}
+{"kind":"textbox","id":"sh/e1sjatgz","slide":5,"text":"EXIT GATE  RAG quality baseline + backup restore","textPreview":"EXIT GATE  RAG quality baseline + backup restore","textChars":48,"textLines":1,"bbox":[68,505,229,26]}
+{"kind":"shape","id":"sh/zmlk3yhk","slide":5,"bbox":[350,369,275,180]}
+{"kind":"shape","id":"sh/fid07u98","slide":5,"bbox":[364,382,31,31]}
+{"kind":"textbox","id":"sh/ehkzepsn","slide":5,"text":"5","textPreview":"5","textChars":1,"textLines":1,"bbox":[368,383,23,29]}
+{"kind":"textbox","id":"sh/1kvi94re","slide":5,"text":"Inference routes","textPreview":"Inference routes","textChars":16,"textLines":1,"bbox":[405,382,202,31]}
+{"kind":"textbox","id":"sh/gjmhgzqt","slide":5,"text":"Nemotron NIM • Qwen vLLM endpoint • embedding/rerank • Switchyard","textPreview":"Nemotron NIM • Qwen vLLM endpoint • embedding/rerank • Switchyard","textChars":65,"textLines":1,"bbox":[366,425,243,66]}
+{"kind":"shape","id":"sh/3md0bu94","slide":5,"bbox":[364,499,247,38]}
+{"kind":"textbox","id":"sh/2l4zip8j","slide":5,"text":"EXIT GATE  Golden prompts, latency and route evidence","textPreview":"EXIT GATE  Golden prompts, latency and route evidence","textChars":53,"textLines":1,"bbox":[373,505,229,26]}
+{"kind":"shape","id":"sh/povid4ra","slide":5,"bbox":[655,369,275,180]}
+{"kind":"shape","id":"sh/onmhkzqp","slide":5,"bbox":[669,382,31,31]}
+{"kind":"textbox","id":"sh/bqx0fe9g","slide":5,"text":"6","textPreview":"6","textChars":1,"textLines":1,"bbox":[673,383,23,29]}
+{"kind":"textbox","id":"sh/qp4jm98v","slide":5,"text":"Agent control plane","textPreview":"Agent control plane","textChars":19,"textLines":1,"bbox":[710,382,202,31]}
+{"kind":"textbox","id":"sh/8f6hcj6t","slide":5,"text":"OpenShell • Hermes • function groups • Guardrails • Universal Proxy","textPreview":"OpenShell • Hermes • function groups • Guardrails • Universal Proxy","textChars":67,"textLines":1,"bbox":[671,425,243,66]}
+{"kind":"shape","id":"sh/9gfy5o7e","slide":5,"bbox":[669,499,247,38]}
+{"kind":"textbox","id":"sh/mdoza9o3","slide":5,"text":"EXIT GATE  Policy denies unapproved egress/tool call","textPreview":"EXIT GATE  Policy denies unapproved egress/tool call","textChars":52,"textLines":1,"bbox":[678,505,229,26]}
+{"kind":"shape","id":"sh/nexg3epo","slide":5,"bbox":[960,369,275,180]}
+{"kind":"shape","id":"sh/0r6h8z6x","slide":5,"bbox":[974,382,31,31]}
+{"kind":"textbox","id":"sh/lcfy147i","slide":5,"text":"7","textPreview":"7","textChars":1,"textLines":1,"bbox":[978,383,23,29]}
+{"kind":"textbox","id":"sh/yp4z69or","slide":5,"text":"Fleet integration","textPreview":"Fleet integration","textChars":17,"textLines":1,"bbox":[1015,382,202,31]}
+{"kind":"textbox","id":"sh/zqxgzupc","slide":5,"text":"Uyuni MCP read tools • OAuth/mTLS • approvals • bounded write enablement","textPreview":"Uyuni MCP read tools • OAuth/mTLS • approvals • bounded write enablement","textChars":72,"textLines":1,"bbox":[976,425,243,66]}
+{"kind":"shape","id":"sh/cnmh4z61","slide":5,"bbox":[974,499,247,38]}
+{"kind":"textbox","id":"sh/dovyx476","slide":5,"text":"EXIT GATE  Canary patch, verify, rollback, full audit","textPreview":"EXIT GATE  Canary patch, verify, rollback, full audit","textChars":53,"textLines":1,"bbox":[983,505,229,26]}
+{"kind":"shape","id":"sh/t8n6lwvy","slide":5,"bbox":[320,247,30,0]}
+{"kind":"shape","id":"sh/s7u5crud","slide":5,"bbox":[625,247,30,0]}
+{"kind":"shape","id":"sh/r6lojmds","slide":5,"bbox":[930,247,30,0]}
+{"kind":"shape","id":"sh/65cnahc7","slide":5,"bbox":[182.5,337,915,32]}
+{"kind":"shape","id":"sh/5436hcv2","slide":5,"bbox":[320,459,30,0]}
+{"kind":"shape","id":"sh/43u587uh","slide":5,"bbox":[625,459,30,0]}
+{"kind":"shape","id":"sh/j2lofmdw","slide":5,"bbox":[930,459,30,0]}
+{"kind":"shape","id":"sh/i1cn6hcb","slide":5,"bbox":[45,575,1190,92]}
+{"kind":"textbox","id":"sh/p076tgv6","slide":5,"text":"PRODUCTION DEFINITION OF DONE","textPreview":"PRODUCTION DEFINITION OF DONE","textChars":29,"textLines":1,"bbox":[65,589,255,24]}
+{"kind":"textbox","id":"sh/ozepkbul","slide":5,"text":"No unapproved write path","textPreview":"No unapproved write path","textChars":24,"textLines":1,"bbox":[65,623,225,21]}
+{"kind":"textbox","id":"sh/m583eds3","slide":5,"text":"End-to-end trace + audit correlation","textPreview":"End-to-end trace + audit correlation","textChars":36,"textLines":1,"bbox":[326,623,280,21]}
+{"kind":"textbox","id":"sh/76hk7ito","slide":5,"text":"Backup / restore + rollback proven","textPreview":"Backup / restore + rollback proven","textChars":34,"textLines":1,"bbox":[642,623,270,21]}
+{"kind":"textbox","id":"sh/87qlgna9","slide":5,"text":"Load, failure and security tests passed","textPreview":"Load, failure and security tests passed","textChars":39,"textLines":1,"bbox":[948,623,270,21]}
+{"kind":"notes","id":"nt/i107q5of","slide":5,"text":"Implementation sequence:\n- Phase 0 freezes architecture inputs and ownership.\n- Phase 1 establishes recoverable cluster foundations.\n- Phase 2 installs security and observability before application workloads.\n- Phase 3 validates GPU and NIM lifecycle.\n- Phase 4 establishes persistent data services and recovery.\n- Phase 5 validates model endpoints and routing.\n- Phase 6 proves agent policy containment and tool controls.\n- Phase 7 integrates Multi-Linux Manager first as read-only, then enables bounded writes only after canary verification and rollback.\n\n[Sources]\n- https://documentation.suse.com/suse-ai-factory/latest/html/AI-Factory-deployment/aif-deployment-prepare.html\n- https://documentation.suse.com/suse-ai-factory/latest/html/AI-Factory-introduction/aif-building-blocks.html\n- https://docs.nvidia.com/nim-operator/latest/\n- https://github.com/NVIDIA/OpenShell/blob/main/architecture/sandbox.md\n- https://documentation.suse.com/cloudnative/security/5.5/en/overview.html\n- https://documentation.suse.com/cloudnative/suse-observability/latest/en/setup/otel/collector.html\n- https://github.com/uyuni-project/mcp-server-uyuni/blob/main/README.md\n[/Sources]"}

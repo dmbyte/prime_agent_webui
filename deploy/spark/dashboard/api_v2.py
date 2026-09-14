@@ -28,9 +28,12 @@ POLICY_SPEC = importlib.util.spec_from_file_location("prime_task_policy", Path(_
 task_policy = importlib.util.module_from_spec(POLICY_SPEC)
 POLICY_SPEC.loader.exec_module(task_policy)
 
-RUNNER_SPEC = importlib.util.spec_from_file_location("prime_container_runner", Path(__file__).with_name("container_runner.py"))
-container_runner = importlib.util.module_from_spec(RUNNER_SPEC)
-RUNNER_SPEC.loader.exec_module(container_runner)
+TASK_COMMON_PATH = Path(__file__).with_name("task_common.py")
+if not TASK_COMMON_PATH.exists():
+    TASK_COMMON_PATH = Path(__file__).parents[1] / "container" / "task_common.py"
+RUNNER_SPEC = importlib.util.spec_from_file_location("prime_task_common", TASK_COMMON_PATH)
+task_common = importlib.util.module_from_spec(RUNNER_SPEC)
+RUNNER_SPEC.loader.exec_module(task_common)
 
 META = legacy.HOME / ".prime/agent/webui-metadata.json"
 ROUTING_RULES = legacy.HOME / ".prime/agent/webui-routing-rules.json"
@@ -51,7 +54,7 @@ EXECUTION_GRANT_LOCK = threading.Lock()
 INITIAL_ADMIN = os.environ.get("PRIME_INITIAL_ADMIN", "dbyte")
 
 NEMOTRON_ROUTE = ("spark-nemotron", "nemotron-3.5-lightning")
-QWEN_ROUTE = ("spark-qwen", "qwen3.6-35b-a3b")
+QWEN_ROUTE = ("spark-qwen", "qwen3.8-flash-next")
 CODEX_ROUTE = ("openai-codex", "gpt-5.6-sol")
 ROUTING_SCOPES = {"always", "nemotron-default"}
 
@@ -279,8 +282,12 @@ def valid_id(value):
     return bool(re.fullmatch(r"[A-Za-z0-9_-]{8,80}", str(value)))
 
 
+def valid_project_id(value):
+    return bool(re.fullmatch(r"p_[a-f0-9]{24}", str(value)))
+
+
 def metadata():
-    return legacy.read_json(META, {"conversations": {}, "retentionDays": 30})
+    return legacy.read_json(META, {"conversations": {}, "projects": {}, "retentionDays": 30})
 
 
 def save_metadata(data):
@@ -289,7 +296,7 @@ def save_metadata(data):
 
 
 def container_mode():
-    return os.environ.get("PRIME_TASK_CONTAINER_IMAGE") == "1"
+    return os.environ.get("PRIME_TASK_RUNTIME") == "openshell"
 
 
 def session_root(user):
@@ -314,6 +321,255 @@ def conversation_owner(session_id):
 def require_conversation_owner(session_id, user):
     if conversation_owner(session_id) != user:
         raise ValueError("Conversation not found")
+
+
+def require_project(project_id, user, data=None):
+    if not valid_project_id(project_id):
+        raise ValueError("Project not found")
+    row = (data or metadata()).get("projects", {}).get(project_id)
+    if not isinstance(row, dict) or row.get("owner", INITIAL_ADMIN) != user:
+        raise ValueError("Project not found")
+    return row
+
+
+def project_catalog(user=INITIAL_ADMIN):
+    data = metadata()
+    counts = {}
+    for row in data.get("conversations", {}).values():
+        if row.get("owner", INITIAL_ADMIN) == user and row.get("projectId"):
+            counts[row["projectId"]] = counts.get(row["projectId"], 0) + 1
+    rows = []
+    for project_id, project in data.get("projects", {}).items():
+        if not isinstance(project, dict) or project.get("owner", INITIAL_ADMIN) != user:
+            continue
+        rows.append({"id": project_id, "name": project.get("name", "Untitled project"),
+                     "icon": project.get("icon", "folder"), "color": project.get("color", "blue"),
+                     "instructions": project.get("instructions", ""),
+                     "fileIds": list(project.get("fileIds", [])),
+                     "taskPolicy": dict(project.get("taskPolicy") or {"profile": "general", "executionMode": "prompt", "networkMode": "restricted", "approvalMode": "manual"}),
+                     "pinned": bool(project.get("pinned")),
+                     "createdAt": project.get("createdAt"), "updatedAt": project.get("updatedAt"),
+                     "conversationCount": counts.get(project_id, 0)})
+    return sorted(rows, key=lambda row: (not row["pinned"], row.get("name", "").casefold()))
+
+
+def normalize_file_ids(values, user, maximum=200):
+    file_ids = []
+    for value in values or []:
+        file_id = str(value)
+        upload_path(file_id, user)
+        if file_id not in file_ids:
+            file_ids.append(file_id)
+    if len(file_ids) > maximum:
+        raise ValueError(f"Choose no more than {maximum} uploaded files")
+    return file_ids
+
+
+def project_source_root(user):
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{2,32}", str(user)):
+        raise ValueError("Invalid project owner")
+    if container_mode():
+        return Path(os.environ.get("PRIME_RUNNER_STORAGE", "/var/lib/prime-runner/users")) / user / "prime/agent/project-sources"
+    return legacy.HOME / ".prime/agent/project-sources" / user
+
+
+def sync_project_sources(project_id, user, file_ids):
+    if not valid_project_id(project_id):
+        raise ValueError("Project not found")
+    if not file_ids:
+        return []
+    root = project_source_root(user)
+    if container_mode():
+        for _ in range(40):
+            if root.is_dir():
+                break
+            time.sleep(0.05)
+        else:
+            raise ValueError("Project source storage is unavailable")
+    else:
+        root.mkdir(mode=0o750, parents=True, exist_ok=True)
+    project_root = root / project_id
+    project_root.mkdir(mode=0o755, exist_ok=True)
+    desired = set()
+    rows = []
+    for index, file_id in enumerate(file_ids, 1):
+        source = upload_path(str(file_id), user)
+        safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "-", source.name).strip("-.")[:80] or "source"
+        name = f"{index:02d}-{safe_name}"
+        target = project_root / name
+        source_stat = source.stat()
+        if not target.is_file() or target.stat().st_size != source_stat.st_size or target.stat().st_mtime_ns != source_stat.st_mtime_ns:
+            temporary = project_root / f".{name}.{uuid.uuid4().hex}.tmp"
+            shutil.copy2(source, temporary)
+            os.chmod(temporary, 0o644)
+            os.replace(temporary, target)
+        desired.add(name)
+        rows.append({"id": str(file_id), "path": f"/home/prime/.prime/agent/project-sources/{project_id}/{name}"})
+    for path in project_root.iterdir():
+        if path.is_file() and path.name not in desired:
+            path.unlink()
+    return rows
+
+
+def normalize_project_fields(payload, user, role="user"):
+    payload = payload if isinstance(payload, dict) else {}
+    name = re.sub(r"\s+", " ", str(payload.get("name", ""))).strip()[:80]
+    if not name:
+        raise ValueError("Project name is required")
+    icon = str(payload.get("icon") or "folder")
+    color = str(payload.get("color") or "blue")
+    if icon not in {"folder", "code", "document", "chart", "idea", "tools"}:
+        raise ValueError("Unsupported project icon")
+    if color not in {"blue", "green", "violet", "orange", "rose", "gray"}:
+        raise ValueError("Unsupported project color")
+    instructions = str(payload.get("instructions") or "").strip()
+    if len(instructions) > 8000:
+        raise ValueError("Project instructions are limited to 8,000 characters")
+    file_ids = normalize_file_ids(payload.get("fileIds"), user, 40)
+    task_policy_value = policy_preference(payload.get("taskPolicy"), role)
+    task_policy_value.setdefault("approvalMode", "manual")
+    task_policy_value.setdefault("localPaths", [])
+    return {"name": name, "icon": icon, "color": color, "instructions": instructions,
+            "fileIds": file_ids, "taskPolicy": task_policy_value, "pinned": bool(payload.get("pinned"))}
+
+
+def create_project(payload, user=INITIAL_ADMIN, role="user"):
+    fields = normalize_project_fields(payload, user, role)
+    data = metadata()
+    project_id = f"p_{uuid.uuid4().hex[:24]}"
+    timestamp = now_iso()
+    row = {**fields, "owner": user, "createdAt": timestamp, "updatedAt": timestamp}
+    data.setdefault("projects", {})[project_id] = row
+    save_metadata(data)
+    legacy.audit("project_created", project=project_id, owner=user)
+    return {"id": project_id, **row, "conversationCount": 0}
+
+
+def update_project(project_id, payload, user=INITIAL_ADMIN, role="user"):
+    data = metadata()
+    current = require_project(project_id, user, data)
+    fields = normalize_project_fields({**current, **(payload if isinstance(payload, dict) else {})}, user, role)
+    current.update(fields)
+    current["updatedAt"] = now_iso()
+    save_metadata(data)
+    legacy.audit("project_updated", project=project_id, owner=user)
+    count = sum(1 for row in data.get("conversations", {}).values()
+                if row.get("owner", INITIAL_ADMIN) == user and row.get("projectId") == project_id)
+    return {"id": project_id, **current, "conversationCount": count}
+
+
+def related_conversation_file_ids(session_id, user, data=None):
+    data = data or metadata()
+    row = data.get("conversations", {}).get(session_id, {})
+    related = []
+    for file_id in row.get("fileIds") or []:
+        try:
+            clean = normalize_file_ids([file_id], user, 1)[0]
+        except ValueError:
+            continue
+        if clean not in related:
+            related.append(clean)
+    source_project = data.get("projects", {}).get(row.get("projectId"), {})
+    if isinstance(source_project, dict) and source_project.get("owner", INITIAL_ADMIN) == user:
+        for file_id in source_project.get("fileIds") or []:
+            try:
+                file_id = normalize_file_ids([file_id], user, 1)[0]
+            except ValueError:
+                continue
+            if file_id not in related:
+                related.append(file_id)
+    try:
+        transcript = "\n".join(message.get("text", "") for message in conversation_messages(session_id, user))
+        for upload in upload_rows(user):
+            if upload["path"] in transcript and upload["id"] not in related:
+                related.append(upload["id"])
+    except (OSError, ValueError):
+        pass
+    return related
+
+
+def promote_conversation(payload, user=INITIAL_ADMIN, role="user"):
+    payload = payload if isinstance(payload, dict) else {}
+    session_id = str(payload.get("id") or "")
+    if not valid_id(session_id):
+        raise ValueError("Conversation not found")
+    data = metadata()
+    conversation = data.get("conversations", {}).get(session_id)
+    if not isinstance(conversation, dict) or conversation.get("owner", INITIAL_ADMIN) != user:
+        raise ValueError("Conversation not found")
+    file_ids = related_conversation_file_ids(session_id, user, data)
+    project_id = str(payload.get("projectId") or "")
+    created = False
+    if project_id:
+        project = require_project(project_id, user, data)
+        merged = list(project.get("fileIds") or [])
+        for file_id in file_ids:
+            if file_id not in merged:
+                merged.append(file_id)
+        if len(merged) > 40:
+            raise ValueError("The destination project would exceed 40 source files")
+        project["fileIds"] = normalize_file_ids(merged, user, 40)
+        project["updatedAt"] = now_iso()
+    else:
+        project_payload = dict(payload.get("project") or {})
+        project_payload["fileIds"] = file_ids
+        project_payload["taskPolicy"] = dict(conversation.get("taskPolicy") or {
+            "profile": "general", "executionMode": "prompt",
+            "networkMode": "restricted", "approvalMode": "manual", "localPaths": [],
+        })
+        fields = normalize_project_fields(project_payload, user, role)
+        project_id = f"p_{uuid.uuid4().hex[:24]}"
+        timestamp = now_iso()
+        project = {**fields, "owner": user, "createdAt": timestamp, "updatedAt": timestamp}
+        data.setdefault("projects", {})[project_id] = project
+        created = True
+    conversation["projectId"] = project_id
+    conversation["fileIds"] = normalize_file_ids(file_ids, user)
+    save_metadata(data)
+    legacy.audit("conversation_promoted", session=session_id, project=project_id,
+                 owner=user, created=created, files=len(file_ids))
+    result = next(row for row in project_catalog(user) if row["id"] == project_id)
+    return {"project": result, "conversationId": session_id, "created": created,
+            "relatedFiles": len(file_ids)}
+
+
+def delete_project(project_id, user=INITIAL_ADMIN):
+    data = metadata()
+    require_project(project_id, user, data)
+    with TASK_LOCK:
+        if any(row.get("owner") == user and row.get("status") == "running"
+               for row in TASKS.values()):
+            raise RuntimeError("Wait for active tasks to finish before deleting a project")
+    source_root = project_source_root(user) / project_id
+    if source_root.is_dir():
+        recovery = session_trash(user) / f"project-{project_id}-{uuid.uuid4().hex[:8]}"
+        recovery.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        os.replace(source_root, recovery)
+    data.get("projects", {}).pop(project_id, None)
+    detached = 0
+    for row in data.get("conversations", {}).values():
+        if row.get("owner", INITIAL_ADMIN) == user and row.get("projectId") == project_id:
+            row.pop("projectId", None)
+            detached += 1
+    save_metadata(data)
+    legacy.audit("project_deleted", project=project_id, owner=user, detached=detached)
+    return {"deleted": True, "detachedConversations": detached}
+
+
+def project_context(project_id, user):
+    if not project_id:
+        return ""
+    project = require_project(project_id, user)
+    sections = []
+    if project.get("instructions"):
+        sections.append("Project instructions (apply throughout this chat):\n" + str(project["instructions"]))
+    sources = [row["path"] for row in sync_project_sources(project_id, user, project.get("fileIds", []))]
+    if sources:
+        sections.append("Project source files (shared by every chat in this project):\n" +
+                        "\n".join(f"- {value}" for value in sources))
+    if not sections:
+        return ""
+    return "\n\n<prime_project_context>\n" + "\n\n".join(sections) + "\n</prime_project_context>"
 
 
 def cached_session_catalog(user):
@@ -390,6 +646,10 @@ def conversation_catalog(query="", include_archived=False, user=INITIAL_ADMIN):
         if extra.get("owner", INITIAL_ADMIN) != user:
             continue
         row.update({"pinned": bool(extra.get("pinned")), "archived": bool(extra.get("archived"))})
+        if extra.get("projectId"):
+            row["projectId"] = extra["projectId"]
+        if isinstance(extra.get("fileIds"), list):
+            row["fileIds"] = list(extra["fileIds"])
         if isinstance(extra.get("taskPolicy"), dict):
             row["taskPolicy"] = dict(extra["taskPolicy"])
         if extra.get("thinking"):
@@ -443,6 +703,8 @@ def conversation_messages(session_id, user=INITIAL_ADMIN):
                     continue
                 parts = message.get("content") or []
                 text = message_text(parts)
+                if role == "user" and "\n\n<prime_project_context>" in text:
+                    text = text.split("\n\n<prime_project_context>", 1)[0]
                 tools = [str(part.get("name") or part.get("toolName")) for part in parts if isinstance(part, dict) and part.get("type") == "toolCall"]
                 if not text and not tools and role != "toolResult":
                     continue
@@ -775,6 +1037,10 @@ def store_task_route(task):
             "routeReason": task.get("routeReason"),
             "owner": task.get("owner", INITIAL_ADMIN),
         })
+        if task.get("projectId"):
+            row["projectId"] = task["projectId"]
+        if task.get("fileIds"):
+            row["fileIds"] = list(dict.fromkeys([*(row.get("fileIds") or []), *task["fileIds"]]))
         if task.get("persistPolicyOnSessionCreate") and isinstance(task.get("policyPreference"), dict):
             row["taskPolicy"] = dict(task["policyPreference"])
         legacy.atomic_json(META, data)
@@ -786,18 +1052,23 @@ def policy_preference(payload, role):
     profile = str(payload.get("profile") or "general")
     execution = str(payload.get("executionMode") or "prompt")
     network = str(payload.get("networkMode") or "restricted")
+    approval = str(payload.get("approvalMode") or "manual")
     local_paths = task_policy.normalize_local_paths(payload.get("localPaths"), role)
-    if profile not in task_policy.PROFILES or execution not in task_policy.EXECUTION_MODES or network not in task_policy.NETWORK_MODES:
+    if profile not in task_policy.PROFILES or execution not in task_policy.EXECUTION_MODES or network not in task_policy.NETWORK_MODES or approval not in task_policy.APPROVAL_MODES:
         raise ValueError("Unsupported conversation policy")
     if (profile == "network-operations" or network in {"lan", "full"}) and role not in {"power_user", "admin"}:
         raise ValueError("This conversation policy requires power-user or administrator access")
+    if approval == "auto" and role != "admin":
+        raise ValueError("Automatic OpenShell policy approval requires administrator access")
     result = {"profile": profile, "executionMode": execution, "networkMode": network}
+    if "approvalMode" in payload or approval != "manual":
+        result["approvalMode"] = approval
     if local_paths:
         result["localPaths"] = local_paths
     return result
 
 
-def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITIAL_ADMIN, authorization=None, policy=None):
+def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITIAL_ADMIN, authorization=None, policy=None, project_id=None, file_ids=None):
     message = str(message).strip()
     if not message or len(message) > 100000:
         raise ValueError("Message must contain between 1 and 100,000 characters")
@@ -805,6 +1076,13 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITI
         raise ValueError("Invalid conversation identifier")
     if session_id:
         require_conversation_owner(session_id, owner)
+        saved_project = metadata().get("conversations", {}).get(session_id, {}).get("projectId")
+        if project_id and project_id != saved_project:
+            raise ValueError("Conversation belongs to a different project")
+        project_id = saved_project
+    if project_id:
+        require_project(project_id, owner)
+    file_ids = normalize_file_ids(file_ids, owner)
     prompt_message = message
     if (authorization or {}).get("localPaths"):
         prompt_message += "\n\nThe conversation's selected Spark-local inputs are mounted read-only under /project-files inside the task container."
@@ -822,7 +1100,7 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITI
     details = model_details(route["provider"], route["model"])
     task_id = uuid.uuid4().hex
     if container_mode():
-        command = container_runner.broker_command(task_id, owner, authorization or {}, route["provider"], route["model"], thinking, session_id, fork)
+        command = task_common.broker_command(task_id, owner, authorization or {}, route["provider"], route["model"], thinking, session_id, fork)
         task_cwd = legacy.HOME
         task_env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin")}
     else:
@@ -836,7 +1114,8 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITI
     before = session_stems(owner)
     process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=task_cwd, env=task_env, start_new_session=True)
     started = now_iso()
-    task = {"id": task_id, "sessionId": session_id if not fork else None, "agentSessionId": session_id if session_id and not fork else None, "rpcReady": True, "rpcResponses": {}, "owner": owner, "authorization": authorization or {}, "policyPreference": policy or {}, "persistPolicyOnSessionCreate": not bool(session_id) or fork, "topic": legacy.safe_topic(message) or "Native task", **route, "thinking": thinking, "contextWindow": details.get("contextWindow"), "maxTokens": details.get("maxTokens"), "status": "running", "progress": "Starting Prime", "progressEvents": [{"at": started, "label": "Request received"}], "runtimeEvents": [{"at": started, "kind": "request", "label": "Request received"}], "liveLog": [], "liveLogBytes": 0, "liveResponse": "", "started": started, "startedEpoch": time.time(), "pid": process.pid, "process": process, "logAvailable": False}
+    runtime = "openshell" if container_mode() else "host"
+    task = {"id": task_id, "sessionId": session_id if not fork else None, "agentSessionId": session_id if session_id and not fork else None, "rpcReady": True, "rpcResponses": {}, "owner": owner, "projectId": project_id, "fileIds": file_ids, "authorization": authorization or {}, "policyPreference": policy or {}, "persistPolicyOnSessionCreate": not bool(session_id) or fork, "topic": legacy.safe_topic(message) or "Native task", **route, "thinking": thinking, "contextWindow": details.get("contextWindow"), "maxTokens": details.get("maxTokens"), "runtime": runtime, "sandboxName": f"pt-{task_id[:16]}" if runtime == "openshell" else None, "policyRevision": 1 if runtime == "openshell" else None, "status": "running", "progress": "Starting Prime", "progressEvents": [{"at": started, "label": "Request received"}], "runtimeEvents": [{"at": started, "kind": "request", "label": "Request received"}], "liveLog": [], "liveLogBytes": 0, "liveResponse": "", "started": started, "startedEpoch": time.time(), "pid": process.pid, "process": process, "logAvailable": False}
     with TASK_LOCK:
         TASKS[task_id] = task
     with META_LOCK:
@@ -846,6 +1125,7 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITI
     if task.get("sessionId"):
         store_task_route(task)
     try:
+        prompt_message += project_context(project_id, owner)
         process.stdin.write(json.dumps({"id": f"state-{task_id}", "type": "get_state"}, separators=(",", ":")) + "\n")
         process.stdin.write(json.dumps({"id": f"prompt-{task_id}", "type": "prompt", "message": prompt_message}, separators=(",", ":")) + "\n")
         process.stdin.flush()
@@ -970,6 +1250,12 @@ def update_conversation(session_id, action, value=None, user=INITIAL_ADMIN, role
         row["title"] = title
     elif action == "policy":
         row["taskPolicy"] = policy_preference(value, role)
+    elif action == "project":
+        if value in {None, ""}:
+            row.pop("projectId", None)
+        else:
+            require_project(str(value), user, data)
+            row["projectId"] = str(value)
     else:
         raise ValueError("Unsupported conversation action")
     save_metadata(data)
@@ -1046,6 +1332,9 @@ def purge_user_cache(username):
         data["files"].pop(relative, None)
     for session_id in owned_sessions:
         data.get("conversations", {}).pop(session_id, None)
+    for project_id, row in list(data.get("projects", {}).items()):
+        if row.get("owner", INITIAL_ADMIN) == username:
+            data["projects"].pop(project_id, None)
     with TASK_LOCK:
         owned_tasks = {task_id for task_id, row in TASKS.items() if row.get("owner", INITIAL_ADMIN) == username}
     owned_tasks.update(task_id for task_id, row in data.get("tasks", {}).items() if row.get("owner", INITIAL_ADMIN) == username)
@@ -1109,7 +1398,7 @@ def inspect_archive(path):
 
 def admin_status():
     services = {}
-    for name in ("prime-auth", "prime-dashboard-api", "prime-web", "vllm-nemotron35", "vllm-qwen36"):
+    for name in ("prime-auth", "prime-dashboard-api", "prime-web", "openshell-gateway", "vllm-nemotron35", "llama-qwen38"):
         result = subprocess.run(["systemctl", "--user", "is-active", name], capture_output=True, text=True, timeout=4)
         services[name] = result.stdout.strip() or "unknown"
     disk = shutil.disk_usage(legacy.HOME)
@@ -1118,7 +1407,7 @@ def admin_status():
 
 def update_status():
     rows = {}
-    for kind, unit in (("agent", "prime-update-agent.service"), ("webui", "prime-update-webui.service")):
+    for kind, unit in (("agent", "prime-update-agent.service"), ("webui", "prime-update-webui.service"), ("openshell", "prime-update-openshell.service")):
         result = subprocess.run(
             ["systemctl", "--user", "show", unit, "--property=ActiveState,SubState"],
             capture_output=True, text=True, timeout=5,
@@ -1145,6 +1434,7 @@ def release_status():
     definitions = {
         "agent": ("PrimeIntellect-ai/prime-agent", "Prime Agent"),
         "webui": ("dmbyte/prime_agent_webui", "Prime WebUI"),
+        "openshell": ("NVIDIA/OpenShell", "NVIDIA OpenShell"),
     }
     rows = {}
     for kind, (repository, label) in definitions.items():
@@ -1159,6 +1449,11 @@ def release_status():
             if kind == "agent":
                 package = legacy.PRIME_BIN.parent / "lib/node_modules/prime-agent/package.json"
                 installed = str(legacy.read_json(package, {}).get("version") or "unknown")
+                current_version, latest_version = version_tuple(installed), version_tuple(tag)
+                available = bool(current_version and latest_version and latest_version > current_version)
+            elif kind == "openshell":
+                output = subprocess.run(["openshell", "--version"], capture_output=True, text=True, timeout=5, check=True).stdout.strip()
+                installed = output.rsplit(" ", 1)[-1]
                 current_version, latest_version = version_tuple(installed), version_tuple(tag)
                 available = bool(current_version and latest_version and latest_version > current_version)
             else:
@@ -1176,7 +1471,7 @@ def release_status():
 
 
 def start_update(kind, confirmation):
-    units = {"agent": "prime-update-agent.service", "webui": "prime-update-webui.service"}
+    units = {"agent": "prime-update-agent.service", "webui": "prime-update-webui.service", "openshell": "prime-update-openshell.service"}
     unit = units.get(str(kind))
     if not unit or confirmation != f"update-{kind}":
         raise ValueError("Explicit update confirmation is required")
@@ -1259,6 +1554,8 @@ def task_capabilities(role):
         "profiles": sorted(task_policy.PROFILES),
         "networkModes": ["restricted", "internet"] + (["lan", "full"] if role in {"power_user", "admin"} else []),
         "executionModes": ["prompt", "task", "login", "deny"],
+        "approvalModes": ["manual"] + (["auto"] if role == "admin" else []),
+        "sandbox": {"runtime": "openshell" if container_mode() else "host", "version": os.environ.get("PRIME_OPENSHELL_VERSION") if container_mode() else None, "driver": "docker" if container_mode() else "none", "staticPolicy": "recreated-per-task" if container_mode() else "host-process", "networkPolicy": "default-deny" if container_mode() else "host", "egressControl": "broker-channel" if container_mode() else "none"},
         "defaults": task_policy.ROLE_DEFAULTS[role].__dict__,
         "maximums": task_policy.ROLE_MAXIMUMS[role].__dict__,
         "packageOverride": role == "admin",
@@ -1303,7 +1600,7 @@ class Handler(legacy.Handler):
             if path == "/api/state":
                 user = self.request_user()
                 role = self.headers.get("X-Prime-Role", "user")
-                self.send_json(200, {"settings": legacy.settings_view(), "models": legacy.model_catalog(), "usage": usage_for_user(user), "requestLedger": {"nativeRequests": 0, "recent": []}, "sessions": conversation_catalog(query.get("q", [""])[0], query.get("archived", ["0"])[0] == "1", user), "telemetry": legacy.telemetry(), "nativeTasks": task_snapshot(user), "identity": {"user": user, "role": role}, "taskCapabilities": task_capabilities(role)})
+                self.send_json(200, {"settings": legacy.settings_view(), "models": legacy.model_catalog(), "usage": usage_for_user(user), "requestLedger": {"nativeRequests": 0, "recent": []}, "sessions": conversation_catalog(query.get("q", [""])[0], query.get("archived", ["0"])[0] == "1", user), "projects": project_catalog(user), "telemetry": legacy.telemetry(), "nativeTasks": task_snapshot(user), "identity": {"user": user, "role": role}, "taskCapabilities": task_capabilities(role)})
             elif path == "/api/conversations/messages":
                 self.send_json(200, {"messages": conversation_messages(query.get("id", [""])[0], self.request_user())})
             elif path == "/api/conversations/export":
@@ -1353,7 +1650,7 @@ class Handler(legacy.Handler):
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
-        v2 = {"/api/settings", "/api/tasks/start", "/api/tasks/stop", "/api/tasks/message", "/api/tasks/authorization", "/api/conversations/update", "/api/conversations/delete", "/api/conversations/duplicate", "/api/files/delete", "/api/admin/restart", "/api/admin/retention", "/api/admin/update", "/api/admin/user-cache", "/api/admin/routing-rules", "/api/providers/configure", "/api/files/upload"}
+        v2 = {"/api/settings", "/api/tasks/start", "/api/tasks/stop", "/api/tasks/message", "/api/tasks/authorization", "/api/conversations/update", "/api/conversations/delete", "/api/conversations/duplicate", "/api/conversations/promote", "/api/projects/create", "/api/projects/update", "/api/projects/delete", "/api/files/delete", "/api/admin/restart", "/api/admin/retention", "/api/admin/update", "/api/admin/user-cache", "/api/admin/routing-rules", "/api/providers/configure", "/api/files/upload"}
         if path not in v2:
             if not csrf_ok(self.headers):
                 self.send_json(403, {"error": "CSRF validation failed"})
@@ -1403,7 +1700,7 @@ class Handler(legacy.Handler):
                     network_confirmed=payload.get("networkConfirm") == f"allow-network-{requested.get('networkMode')}",
                     files_confirmed=payload.get("filesConfirm") == "allow-local-files-task",
                 )
-                self.send_json(202, {"task": launch_task(payload.get("message"), payload.get("sessionId"), thinking=payload.get("thinking"), owner=user, authorization=authorization, policy=preference)})
+                self.send_json(202, {"task": launch_task(payload.get("message"), payload.get("sessionId"), thinking=payload.get("thinking"), owner=user, authorization=authorization, policy=preference, project_id=payload.get("projectId"), file_ids=payload.get("fileIds"))})
             elif path == "/api/tasks/stop":
                 self.send_json(200, stop_native_task(str(payload.get("id", "")), user))
             elif path == "/api/tasks/message":
@@ -1420,7 +1717,20 @@ class Handler(legacy.Handler):
                 self.send_json(200, legacy.delete_conversation(session_id, session_root(user), session_trash(user), active_ids))
             elif path == "/api/conversations/duplicate":
                 authorization = task_policy.authorize_task({"executionMode": "deny"}, role)
-                self.send_json(202, {"task": launch_task("Continue this fork with a concise recap of the inherited context.", str(payload.get("id", "")), True, owner=user, authorization=authorization)})
+                session_id = str(payload.get("id", ""))
+                project_id = metadata().get("conversations", {}).get(session_id, {}).get("projectId")
+                self.send_json(202, {"task": launch_task("Continue this fork with a concise recap of the inherited context.", session_id, True, owner=user, authorization=authorization, project_id=project_id)})
+            elif path == "/api/conversations/promote":
+                self.send_json(200, promote_conversation(payload, user, role))
+            elif path == "/api/projects/create":
+                self.send_json(201, {"project": create_project(payload, user, role)})
+            elif path == "/api/projects/update":
+                self.send_json(200, {"project": update_project(str(payload.get("id", "")), payload, user, role)})
+            elif path == "/api/projects/delete":
+                project_id = str(payload.get("id", ""))
+                if payload.get("confirm") != f"delete-project-{project_id}":
+                    raise ValueError("Explicit project deletion confirmation is required")
+                self.send_json(200, delete_project(project_id, user))
             elif path == "/api/files/delete":
                 file = upload_path(str(payload.get("id", "")), user)
                 file.unlink()
@@ -1428,7 +1738,7 @@ class Handler(legacy.Handler):
             elif path == "/api/admin/restart":
                 self.require_admin()
                 service = str(payload.get("service", ""))
-                allowed = {"prime-web", "vllm-nemotron35", "vllm-qwen36"}
+                allowed = {"prime-web", "openshell-gateway", "vllm-nemotron35", "llama-qwen38"}
                 if service not in allowed or payload.get("confirm") != service:
                     raise ValueError("Explicit service confirmation is required")
                 result = subprocess.run(["systemctl", "--user", "restart", service], timeout=30, capture_output=True)

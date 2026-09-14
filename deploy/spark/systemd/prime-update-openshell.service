@@ -1,0 +1,10 @@
+[Unit]
+Description=Update NVIDIA OpenShell from its latest stable GitHub release
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/prime-update/update-openshell.sh
+UMask=0077
+Nice=10

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-webui_version="0.4.0"
+webui_version="0.5.0"
 prime_version="0.8.0"
 port=8443
 bind_address=""
@@ -116,6 +116,7 @@ update_dir="${HOME}/prime-update"
 install -d -m 0700 "$dashboard" "$workspace" "$workspace/uploads" "${HOME}/.prime/agent" "${HOME}/.config/prime-agent"
 install -d -m 0755 "$unit_dir" "$update_dir" "${HOME}/.local/bin"
 install -m 0644 "$repo_dir"/deploy/spark/dashboard/*.py "$repo_dir"/deploy/spark/dashboard/*.js "$repo_dir"/deploy/spark/dashboard/*.css "$repo_dir"/deploy/spark/dashboard/*.html "$dashboard"/
+install -m 0644 "$repo_dir/deploy/spark/container/task_common.py" "$dashboard/task_common.py"
 install -m 0755 "$repo_dir/deploy/spark/dashboard/install-static.sh" "$dashboard/install-static.sh"
 install -m 0755 "$repo_dir/deploy/spark/update/"*.sh "$update_dir"/
 install -m 0755 "$repo_dir/deploy/spark/dashboard/set_web_password.py" "${HOME}/.local/bin/prime-web-password"
@@ -168,7 +169,7 @@ UMask=0077
 WantedBy=default.target
 EOF
 
-for update_unit in prime-update-agent.service prime-update-webui.service; do
+for update_unit in prime-update-agent.service prime-update-webui.service prime-update-openshell.service; do
   install -m 0644 "$repo_dir/deploy/spark/systemd/$update_unit" "$unit_dir/$update_unit"
 done
 cat >>"$unit_dir/prime-update-webui.service" <<EOF

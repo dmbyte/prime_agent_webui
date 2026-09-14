@@ -26,13 +26,20 @@ skills belong outside the repository and are excluded from version control.
   connection limits, and LAN/VPN source restrictions.
 - Native Prime RPC conversations with immediate message echo, safe live progress,
   `/steer`, `/follow-up`, and explicit stop.
+- Account-scoped collapsible projects and chats in the sidebar, with shared
+  project instructions and uploaded sources, inherited conversation-control
+  defaults, pinning, remove chat actions, and promotion of existing chats into
+  new or existing projects.
+- Persistent sandbox, tool, egress, proposal, and local-path controls directly
+  below the conversation header; saved chats retain their own overrides.
 - Configured-provider discovery, write-only credential forms, model selection,
   effort control, and provider/model token and spend roll-ups.
 - Recoverable conversation deletion, isolated ownership metadata, uploads,
   activity logs, and administrative user lifecycle management.
-- Production rootless per-task execution under a dedicated service identity,
-  six immutable profile images, isolated per-user storage, a credential/model
-  gateway, four role-controlled network modes, and enforced resource limits.
+- Production OpenShell per-task execution under a dedicated service identity,
+  six immutable Docker profile images, isolated per-user storage, a
+  credential/model gateway, four role-controlled network modes, and enforced
+  resource limits.
 
 ## Supported systems
 
@@ -42,7 +49,7 @@ of these families:
 | Family | Examples | Package manager | Notes |
 |---|---|---|---|
 | Debian | Ubuntu 22.04/24.04, Debian 12 | `apt` | Primary and most-tested path. NVIDIA DGX Spark uses Ubuntu 24.04. |
-| Red Hat | RHEL 9/10, Rocky, AlmaLinux, CentOS Stream, Fedora | `dnf`/`yum` | Enable the appropriate BaseOS/AppStream repositories. Some derivatives obtain `slirp4netns` from EPEL. |
+| Red Hat | RHEL 9/10, Rocky, AlmaLinux, CentOS Stream, Fedora | `dnf`/`yum` | Enable the appropriate BaseOS/AppStream repositories. |
 | SUSE | SLES 15, openSUSE Leap/Tumbleweed | `zypper` | The WebUI works; NVIDIA's DGX Spark local-model recipes are Ubuntu-specific. Package names can vary by service pack. |
 
 Requirements: x86-64 or ARM64 Linux, systemd with user services, Python 3.10+,
@@ -55,7 +62,7 @@ providers are used.
 Clone the release and run the installer as the account that should own Prime:
 
 ```bash
-git clone --branch v0.4.0 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
+git clone --branch v0.5.0 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
 cd prime_agent_webui
 ./install.sh --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
@@ -145,42 +152,64 @@ your service pack. If a package uses a service-pack-specific name, install its
 equivalent and use `--skip-packages`. DGX Spark's local NVFP4 recipes are not
 supported on SLES; use cloud or a remote OpenAI-compatible inference endpoint.
 
-### Rootless task-container installation
+### DGX Spark OpenShell and local models
 
-The base installer supports host-mode cloud/remote-model deployments. For the
-production DGX Spark configuration, install the rootless prerequisites after
-the base installer:
+The production Spark release runs Prime tasks inside NVIDIA OpenShell while
+serving Nemotron 3.5 Lightning and Qwen 3.8 Flash-Next from loopback-only local
+endpoints. Install the base WebUI first, then apply the Spark-specific model and
+OpenShell pieces. On Ubuntu 24.04 DGX Spark systems, the extra host
+prerequisites are Docker 28 or newer, `jq`, `acl`, and `rsync`.
 
-```bash
-# Ubuntu/Debian
-sudo apt-get install -y podman uidmap slirp4netns fuse-overlayfs acl rsync
-
-# RHEL family
-sudo dnf install -y podman shadow-utils slirp4netns fuse-overlayfs acl rsync
-
-# SLES/openSUSE
-sudo zypper --non-interactive install podman shadow slirp4netns fuse-overlayfs acl rsync
-```
-
-On the Spark, make sure the tracked Nemotron and Qwen loopback services are
-healthy, then provision and activate the complete rootless path as the WebUI
-owner:
+Install Nemotron 3.5 Lightning on port 30000:
 
 ```bash
-./deploy/spark/container/install-rootless.sh
-./deploy/spark/container/activate-rootless.sh
-./deploy/spark/container/rollback-rootless.sh --check \
-  /var/backups/prime-rootless-v0081-20260826T161217-0500
+install -d ~/vllm-nemotron35
+cp deploy/spark/vllm-nemotron35/vllm.env.template ~/vllm-nemotron35/vllm.env
+cp deploy/spark/vllm-nemotron35/start.sh ~/vllm-nemotron35/start.sh
+install -m 0644 deploy/spark/systemd/vllm-nemotron35.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now vllm-nemotron35.service
+curl -fsS http://127.0.0.1:30000/v1/models
 ```
 
-The installer first creates and verifies a root-only recovery bundle, then
-creates `prime-runner`, subordinate mappings, persistent model
-gateway and task broker services, six digest-pinned images, and protected
-credential/storage roots. Activation migrates existing conversations without
-deleting newer rootless data and enables the API feature flag. See the
-[rootless operations guide](deploy/spark/container/README.md). Pass the recovery
-path printed by the installer to the rollback check; the example path above is
-specific to the reference Spark deployment.
+If the model artifacts require Hugging Face access, add the token to
+`~/vllm-nemotron35/vllm.env` before starting the service.
+
+Install Qwen 3.8 Flash-Next on port 30001:
+
+```bash
+deploy/spark/llama-qwen38/build-image.sh
+install -d ~/llama-qwen38
+cp deploy/spark/llama-qwen38/llama.env.template ~/llama-qwen38/llama.env
+cp deploy/spark/llama-qwen38/start.sh ~/llama-qwen38/start.sh
+install -m 0644 deploy/spark/systemd/llama-qwen38.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now llama-qwen38.service
+curl -fsS http://127.0.0.1:30001/v1/models
+```
+
+Edit `~/llama-qwen38/llama.env` if the Qwen GGUF, multimodal projector, or MTP
+draft files live outside the default model directory. Qwen 3.8 is the supported
+Qwen runtime for this release.
+
+Install the local model catalog and OpenShell integration:
+
+```bash
+install -m 0600 deploy/spark/prime/models.json ~/.prime/agent/models.json
+install -m 0600 deploy/spark/prime/settings.json ~/.prime/agent/settings.json
+deploy/spark/openshell/install.sh
+systemctl --user restart prime-dashboard-api.service
+deploy/spark/prime/validate.sh
+```
+
+The OpenShell installer uses the pinned ARM64 package, validates the published
+checksum, provisions `prime-runner`, installs the model gateway and task broker,
+copies existing owner state into protected runner storage, builds the approved
+Docker runtime images, provisions per-user volumes, and restarts the local
+gateway. See the component guides for details:
+[Nemotron](deploy/spark/vllm-nemotron35/README.md),
+[Qwen 3.8](deploy/spark/llama-qwen38/README.md), and
+[OpenShell](deploy/spark/openshell/README.md).
 
 ## Firewall examples
 
@@ -261,7 +290,9 @@ upgrade. Never commit credentials, provider settings, sessions, or TLS keys.
 Administrators can check and install published releases from Settings. Prime
 Agent updates use the official versioned artifact and verify its published
 SHA256SUMS entry. The WebUI updater resolves an immutable GitHub release tag.
-In-app release checks require an authenticated
+OpenShell appears in the same section and updates only from NVIDIA's latest
+stable ARM64 release with the published checksum file, while refusing to run if
+OpenShell sandboxes still exist. In-app release checks require an authenticated
 [GitHub CLI](https://cli.github.com/) installation because this repository is
 private; core chat operation does not require `gh`.
 
@@ -269,21 +300,21 @@ For a manual upgrade:
 
 ```bash
 git fetch --tags origin
-git checkout v0.4.0
+git checkout v0.5.0
 ./install.sh --skip-packages --skip-prime --skip-password \
   --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
 
 ## Security and limitations
 
-Read the [security hardening guide](deploy/spark/security/README.md) and
-[rootless operations guide](deploy/spark/container/README.md). In v0.4.0,
-Prime tasks execute as rootless containers under `prime-runner`, with separate
-per-user state/workspaces and no host credentials. The broker alone permits the
-`newuidmap`/`newgidmap` setuid helpers and bounds them to `CAP_SETUID` and
-`CAP_SETGID`; the WebUI API retains no-new-privileges and task containers drop
-all capabilities. Full-network mode remains intentionally powerful and is
-limited to confirmed power-user/administrator tasks.
+Read the [security hardening guide](deploy/spark/security/README.md),
+[OpenShell runtime-image guide](deploy/spark/container/README.md), and
+[OpenShell operations guide](deploy/spark/openshell/README.md). In v0.5.0,
+Prime tasks execute inside OpenShell sandboxes launched by the dedicated
+`prime-runner` service identity, with separate per-user state/workspaces and no
+host credentials. The API retains no-new-privileges, the gateway is loopback-only
+with mTLS, and full-network mode remains intentionally powerful and limited to
+confirmed power-user/administrator tasks.
 
 This project provides research and workflow tooling, not investment advice or an
 unattended live-trading system. Keep broker credentials and deterministic risk
@@ -294,7 +325,8 @@ controls outside model processes.
 ```bash
 python3 -m unittest discover -s deploy/spark/dashboard -p 'test*.py' -v
 node --check deploy/spark/dashboard/app-v2.js
-bash -n install.sh deploy/spark/update/update-prime-agent.sh
+bash -n install.sh deploy/spark/update/update-prime-agent.sh \
+  deploy/spark/update/update-webui.sh deploy/spark/update/update-openshell.sh
 ```
 
 Run `./scripts/validate-release.sh` before publishing a change. Keep operational
