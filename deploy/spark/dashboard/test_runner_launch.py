@@ -19,6 +19,22 @@ class RunnerLaunchRegressionTests(unittest.TestCase):
         self.assertLess(command_at, finally_at)
         self.assertLess(finally_at, restore_at)
 
+    def test_sandbox_create_cannot_consume_prime_rpc_stdin(self):
+        source = (Path(__file__).parents[1] / "container" / "runner_launch.py").read_text()
+        create_at = source.index('subprocess.Popen(spec["create"]')
+        execute_at = source.index('subprocess.Popen(spec["execute"]')
+        create_call = source[create_at:source.index(")", create_at)]
+        execute_call = source[execute_at:source.index(")", execute_at)]
+        self.assertIn("stdin=subprocess.DEVNULL", create_call)
+        self.assertNotIn("stdin=subprocess.DEVNULL", execute_call)
+
+    def test_nemotron_memory_target_preserves_qwen_coresidency(self):
+        root = Path(__file__).parents[3]
+        template = (root / "deploy/spark/vllm-nemotron35/vllm.env.template").read_text()
+        start = (root / "deploy/spark/vllm-nemotron35/start.sh").read_text()
+        self.assertIn("GPU_MEMORY_UTILIZATION=0.38", template)
+        self.assertIn('GPU_MEMORY_UTILIZATION:-0.38', start)
+
 
 if __name__ == "__main__":
     unittest.main()

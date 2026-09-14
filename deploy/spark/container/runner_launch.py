@@ -75,7 +75,7 @@ def main():
         # cannot leave the WebUI unable to traverse its conversation storage.
         spec=openshell_runner.task_spec(request["taskId"],request["owner"],request["authorization"],request["provider"],request["model"],request["thinking"],request["sessionId"],request["fork"],ROOT/"users",ROOT/"openshell-image-digests.json",ROOT/"openshell-policies")
         sandbox, policy_path = spec["name"], spec["policy"]
-        child = subprocess.Popen(spec["create"], start_new_session=True)
+        child = subprocess.Popen(spec["create"], stdin=subprocess.DEVNULL, start_new_session=True)
         if child.wait() != 0:
             raise SystemExit("OpenShell could not create the task sandbox")
         child = subprocess.Popen(spec["execute"], start_new_session=True)
