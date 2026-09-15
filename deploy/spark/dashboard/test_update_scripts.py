@@ -34,6 +34,7 @@ class UpdateScriptTests(unittest.TestCase):
         self.assertIn("provision-volumes.sh", script)
         self.assertIn("/var/lib/prime-runner/users/${owner}/workspace", provision)
         self.assertIn("--ignore-existing --exclude uploads", provision)
+        self.assertIn('setfacl -Rm "u:${USER}:rwX,g:prime-web:rwX', provision)
 
     def test_openshell_install_uses_home_task_workspace(self):
         script = (ROOT / "deploy/spark/openshell/install.sh").read_text()

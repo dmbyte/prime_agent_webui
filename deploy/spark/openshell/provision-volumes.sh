@@ -38,7 +38,8 @@ ensure_workspace() {
     sudo rsync -a --ignore-existing --exclude uploads "${HOME}/prime-dgx-agent/" "$target/"
   fi
   sudo chown -R prime-runner:prime-runner "$target"
-  sudo setfacl -m "u:${USER}:rwx,d:u:${USER}:rwx,g:prime-web:rwx,d:g:prime-web:rwx,m::rwx,d:m::rwx,o::---,d:o::---" "$target"
+  sudo setfacl -Rm "u:${USER}:rwX,g:prime-web:rwX,m::rwX,o::---" "$target"
+  sudo find "$target" -type d -exec setfacl -m "d:u:${USER}:rwx,d:g:prime-web:rwx,d:m::rwx,d:o::---" {} +
   printf '%s' "$target"
 }
 

@@ -51,7 +51,8 @@ if [[ -d ${HOME}/prime-dgx-agent ]]; then
 fi
 sudo chown -R prime-runner:prime-runner "/var/lib/prime-runner/users/${USER}"
 sudo chown -R prime-runner:prime-runner "$owner_workspace"
-sudo setfacl -m "u:${USER}:rwx,d:u:${USER}:rwx,g:prime-web:rwx,d:g:prime-web:rwx,m::rwx,d:m::rwx,o::---,d:o::---" "$owner_workspace"
+sudo setfacl -Rm "u:${USER}:rwX,g:prime-web:rwX,m::rwX,o::---" "$owner_workspace"
+sudo find "$owner_workspace" -type d -exec setfacl -m "d:u:${USER}:rwx,d:g:prime-web:rwx,d:m::rwx,d:o::---" {} +
 sudo setfacl -m "u:${USER}:--x,g:prime-web:--x,m::--x" "/var/lib/prime-runner/users/${USER}" "/var/lib/prime-runner/users/${USER}/prime" "$owner_agent"
 sudo install -d -o prime-runner -g prime-runner -m 0770 "$owner_agent/sessions" "$owner_agent/trash" "$owner_agent/project-sources"
 sudo setfacl -Rm "u:${USER}:rwx,g:prime-web:rwx,m::rwx,o::---" "$owner_agent/sessions" "$owner_agent/trash" "$owner_agent/project-sources"
