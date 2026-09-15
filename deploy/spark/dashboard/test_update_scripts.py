@@ -25,6 +25,28 @@ class UpdateScriptTests(unittest.TestCase):
         for helper in ("task_common.py", "openshell_runner.py", "model_gateway.py", "runner_broker.py"):
             self.assertIn(f"deploy/spark/container/{helper}", script)
 
+    def test_webui_update_refreshes_runner_unit_and_home_workspace_volume(self):
+        script = (ROOT / "deploy/spark/update/update-webui.sh").read_text()
+        provision = (ROOT / "deploy/spark/openshell/provision-volumes.sh").read_text()
+        self.assertIn("PRIME_RUNNER_WORKSPACE_ROOT", script)
+        self.assertIn("prime-agent/tasks", script)
+        self.assertIn("prime-runner-broker.service", script)
+        self.assertIn("provision-volumes.sh", script)
+        self.assertIn("/var/lib/prime-runner/users/${owner}/workspace", provision)
+        self.assertIn("--ignore-existing --exclude uploads", provision)
+
+    def test_openshell_install_uses_home_task_workspace(self):
+        script = (ROOT / "deploy/spark/openshell/install.sh").read_text()
+        self.assertIn("PRIME_RUNNER_WORKSPACE_ROOT", script)
+        self.assertIn("prime-agent/tasks", script)
+        self.assertIn("owner_workspace=\"${workspace_root}/${USER}\"", script)
+
+    def test_broker_unit_allows_only_prime_agent_home_workspace(self):
+        unit = (ROOT / "deploy/spark/systemd/prime-runner-broker.service").read_text()
+        self.assertIn("PRIME_RUNNER_WORKSPACE_ROOT=/home/@WEB_OWNER@/prime-agent/tasks", unit)
+        self.assertIn("/home/@WEB_OWNER@/prime-agent", unit)
+        self.assertNotIn("InaccessiblePaths=/home", unit)
+
     def test_openshell_install_moves_stale_user_broker_units_to_recovery(self):
         script = (ROOT / "deploy/spark/openshell/install.sh").read_text()
         self.assertIn("stale-openshell-user-units-", script)

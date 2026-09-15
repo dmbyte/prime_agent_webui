@@ -16,11 +16,13 @@ approved image, filesystem policy, resource limits, and selected network mode.
 - `network-operations` adds nmap, ping, DNS, and traceroute tools and is limited
   to power users and administrators.
 
-Every task receives only its owner's Prime state, workspace, selected model
-gateway socket, and explicitly approved read-only local sources. Host
-credentials, other users' data, the Docker socket, host networking, and
-privileged mode are never mounted into the sandbox. Image references are
-validated against `/var/lib/prime-runner/openshell-image-digests.json`.
+Every task receives only its owner's protected Prime state, host-visible task
+workspace, selected model gateway socket, and explicitly approved read-only
+local sources. The task workspace appears as `/project` inside the sandbox and
+is backed by `~/prime-agent/tasks/OWNER/` on the host. Host credentials, other
+users' data, the Docker socket, host networking, and privileged mode are never
+mounted into the sandbox. Image references are validated against
+`/var/lib/prime-runner/openshell-image-digests.json`.
 
 ## Network modes
 
@@ -67,7 +69,8 @@ deploy/spark/prime/validate.sh
 ```
 
 The OpenShell installer provisions `prime-runner`, protected per-user state,
-the model gateway, the runner broker, the dashboard API drop-in, OpenShell
-gateway configuration, Docker volumes, and the six digest-checked task images.
-It also copies existing owner sessions and workspace files into the runner state
-tree so current conversations continue under OpenShell.
+the home-backed task workspace, the model gateway, the runner broker, the
+dashboard API drop-in, OpenShell gateway configuration, Docker volumes, and the
+six digest-checked task images. It also copies existing owner sessions into the
+runner state tree and workspace files into `~/prime-agent/tasks/OWNER/` so
+current conversations continue under OpenShell.

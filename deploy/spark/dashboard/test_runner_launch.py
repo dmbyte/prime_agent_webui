@@ -9,6 +9,12 @@ class RunnerLaunchRegressionTests(unittest.TestCase):
         self.assertIn('project_sources=agent/"project-sources"', source)
         self.assertIn('(project_sources, writable_acl)', source)
 
+    def test_task_workspace_defaults_to_home_prime_agent_tasks(self):
+        source = (Path(__file__).parents[1] / "container" / "runner_launch.py").read_text()
+        self.assertIn('PRIME_RUNNER_WORKSPACE_ROOT', source)
+        self.assertIn('prime-agent/tasks', source)
+        self.assertIn('setfacl", "-m", writable_acl, str(workspace)', source)
+
     def test_command_construction_is_inside_acl_restoration_boundary(self):
         source = (Path(__file__).parents[1] / "container" / "runner_launch.py").read_text()
         try_at = source.index("    try:\n", source.index("def main():"))

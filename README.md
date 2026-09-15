@@ -62,7 +62,7 @@ providers are used.
 Clone the release and run the installer as the account that should own Prime:
 
 ```bash
-git clone --branch v0.5.8 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
+git clone --branch v0.5.9 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
 cd prime_agent_webui
 ./install.sh --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
@@ -273,10 +273,12 @@ curl -kI https://127.0.0.1:8443/login.html
 Configuration and data live under:
 
 - `~/prime-dgx-dashboard/` — installed WebUI application
-- `~/prime-dgx-agent/` — workspace and uploads
+- `~/prime-dgx-agent/` — legacy host-mode workspace and uploads
+- `~/prime-agent/tasks/USER/` — host-visible OpenShell task workspace mounted
+  as `/project`
 - `~/.prime/agent/` — Prime sessions/settings and WebUI metadata
 - `~/.config/prime-agent/web-auth.json` — mode-0600 password records
-- `/var/lib/prime-runner/users/USER/` — isolated Prime state and workspace
+- `/var/lib/prime-runner/users/USER/` — isolated Prime state
 - `/var/lib/prime-runner/credentials/` — protected global/per-user gateway credentials
 - `/var/lib/prime-runner/image-digests.json` — approved immutable profile images
 - `/var/www/prime-agent/` — static browser assets
@@ -300,7 +302,7 @@ For a manual upgrade:
 
 ```bash
 git fetch --tags origin
-git checkout v0.5.8
+git checkout v0.5.9
 ./install.sh --skip-packages --skip-prime --skip-password \
   --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
@@ -309,14 +311,16 @@ git checkout v0.5.8
 
 Read the [security hardening guide](deploy/spark/security/README.md),
 [OpenShell runtime-image guide](deploy/spark/container/README.md), and
-[OpenShell operations guide](deploy/spark/openshell/README.md). In v0.5.8,
+[OpenShell operations guide](deploy/spark/openshell/README.md). In v0.5.9,
 Prime tasks execute inside OpenShell sandboxes launched by the dedicated
-`prime-runner` service identity, with separate per-user state/workspaces and no
-host credentials. Each task also uses its own sandbox-local Prime control socket
-so stale OpenShell worker records cannot poison later resumes. The API retains
-no-new-privileges, the gateway is loopback-only with mTLS, and full-network mode
-remains intentionally powerful and limited to confirmed power-user/administrator
-tasks.
+`prime-runner` service identity, with protected per-user Prime state and a
+host-visible task workspace under `~/prime-agent/tasks/USER/`. That workspace is
+mounted as `/project` inside the sandbox; credentials, sessions, the Docker
+socket, and arbitrary home-directory paths are not mounted. Each task also uses
+its own sandbox-local Prime control socket so stale OpenShell worker records
+cannot poison later resumes. The API retains no-new-privileges, the gateway is
+loopback-only with mTLS, and full-network mode remains intentionally powerful
+and limited to confirmed power-user/administrator tasks.
 
 This project provides research and workflow tooling, not investment advice or an
 unattended live-trading system. Keep broker credentials and deterministic risk

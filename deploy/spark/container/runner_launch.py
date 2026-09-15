@@ -16,7 +16,8 @@ def fake_jwt():
 def configure(owner):
     web_owner = os.environ.get("PRIME_WEB_OWNER", "dbyte")
     if not task_common.SAFE_USER.fullmatch(web_owner): raise SystemExit(2)
-    agent, workspace = task_common.prepare_user_storage(ROOT/"users", owner)
+    workspace_root = Path(os.environ.get("PRIME_RUNNER_WORKSPACE_ROOT", f"/home/{web_owner}/prime-agent/tasks"))
+    agent, workspace = task_common.prepare_user_storage(ROOT/"users", owner, workspace_root)
     sessions=agent/"sessions"; sessions.mkdir(mode=0o770,exist_ok=True); os.chmod(sessions,0o770)
     trash=agent/"trash"; trash.mkdir(mode=0o770,exist_ok=True); os.chmod(trash,0o770)
     project_sources=agent/"project-sources"; project_sources.mkdir(mode=0o770,exist_ok=True); os.chmod(project_sources,0o770)
@@ -28,8 +29,8 @@ def configure(owner):
     # bind sources before asking Docker to mount them. Directory read/traverse
     # is required for that validation; files and sockets retain their own
     # prime-runner-only permissions.
-    for path in (agent, workspace):
-        subprocess.run(["/usr/bin/setfacl", "-m", f"u:{web_owner}:rx,m::rx", str(path)], check=True)
+    subprocess.run(["/usr/bin/setfacl", "-m", f"u:{web_owner}:rx,m::rx", str(agent)], check=True)
+    subprocess.run(["/usr/bin/setfacl", "-m", writable_acl, str(workspace)], check=True)
     gateway = ROOT/"gateway"
     for path in (gateway, gateway/owner):
         if path.exists():
@@ -88,7 +89,7 @@ def main():
         # Path validation and argv construction can fail before OpenShell starts.
         # Keep them inside the restoration boundary so a rejected local path
         # cannot leave the WebUI unable to traverse its conversation storage.
-        spec=openshell_runner.task_spec(request["taskId"],request["owner"],request["authorization"],request["provider"],request["model"],request["thinking"],request["sessionId"],request["fork"],ROOT/"users",ROOT/"openshell-image-digests.json",ROOT/"openshell-policies")
+        spec=openshell_runner.task_spec(request["taskId"],request["owner"],request["authorization"],request["provider"],request["model"],request["thinking"],request["sessionId"],request["fork"],ROOT/"users",ROOT/"openshell-image-digests.json",ROOT/"openshell-policies",Path(os.environ.get("PRIME_RUNNER_WORKSPACE_ROOT", f"/home/{os.environ.get('PRIME_WEB_OWNER', 'dbyte')}/prime-agent/tasks")))
         sandbox, policy_path = spec["name"], spec["policy"]
         child = subprocess.Popen(spec["create"], stdin=subprocess.DEVNULL, start_new_session=True)
         if child.wait() != 0:

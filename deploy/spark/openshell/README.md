@@ -26,14 +26,21 @@ The installer:
 1. Verifies the pinned OpenShell ARM64 package and checksum.
 2. Creates the dedicated `prime-runner` identity and protected state tree.
 3. Installs the model gateway and runner broker.
-4. Copies existing owner sessions, skills, artifacts, and workspace files into
-   `/var/lib/prime-runner/users/OWNER/`.
+4. Copies existing owner sessions, skills, and artifacts into
+   `/var/lib/prime-runner/users/OWNER/`, while copying existing workspace files
+   into `~/prime-agent/tasks/OWNER/`.
 5. Installs a dashboard API drop-in that selects `PRIME_TASK_RUNTIME=openshell`.
 6. Configures the loopback `spark-local` OpenShell gateway and disables
    telemetry.
 7. Builds and verifies the six approved Docker task images.
-8. Creates the Docker volumes that expose per-user Prime state, workspaces,
-   model gateway sockets, and approved shared source roots.
+8. Creates the Docker volumes that expose per-user Prime state, the
+   host-visible task workspace, model gateway sockets, and approved shared
+   source roots.
+
+Inside a task sandbox, `/project` maps to `~/prime-agent/tasks/OWNER/` on the
+host. Prime state remains protected under `/var/lib/prime-runner/users/OWNER/`.
+The local-path picker still rejects arbitrary `/home` paths; the home-backed
+task workspace is the controlled exception created by the installer.
 
 ## Verify
 

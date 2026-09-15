@@ -53,6 +53,19 @@ sudo install -o root -g root -m 0644 \
   /usr/local/lib/prime-runner/
 sudo install -o root -g root -m 0755 "$repo/deploy/spark/container/runner_launch.py" /usr/local/libexec/prime-runner-launch
 sudo install -o root -g root -m 0755 "$repo/deploy/spark/container/runner_client.py" /usr/local/libexec/prime-runner-client
+if id prime-runner >/dev/null 2>&1; then
+  runner_uid=$(id -u prime-runner)
+  workspace_root="${PRIME_RUNNER_WORKSPACE_ROOT:-${HOME}/prime-agent/tasks}"
+  install -d -m 0770 "${HOME}/prime-agent" "$workspace_root"
+  setfacl -m "u:prime-runner:rwx,g:prime-web:rwx,m::rwx,d:u:prime-runner:rwx,d:g:prime-web:rwx,d:m::rwx" "${HOME}/prime-agent" "$workspace_root"
+  broker_unit=$(mktemp)
+  sed -e "s/@RUNNER_UID@/${runner_uid}/g" -e "s/@WEB_OWNER@/${USER}/g" "$repo/deploy/spark/systemd/prime-runner-broker.service" >"$broker_unit"
+  sudo install -o root -g root -m 0644 "$broker_unit" /etc/systemd/system/prime-runner-broker.service
+  rm -f "$broker_unit"
+  sudo systemctl daemon-reload
+  PRIME_RUNNER_WORKSPACE_ROOT="$workspace_root" "$repo/deploy/spark/openshell/provision-volumes.sh"
+  sudo systemctl restart prime-runner-broker.service
+fi
 
 install -d -m 0755 "${HOME}/prime-update" "${HOME}/.config/systemd/user"
 install -m 0755 "$repo/deploy/spark/update/update-prime-agent.sh" "$repo/deploy/spark/update/update-webui.sh" "$repo/deploy/spark/update/update-openshell.sh" "${HOME}/prime-update/"

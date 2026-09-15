@@ -32,18 +32,26 @@ sudo chown prime-runner:prime-runner /var/lib/prime-runner /var/lib/prime-runner
 sudo chmod 0700 /var/lib/prime-runner /var/lib/prime-runner/users
 sudo setfacl -m "u:${USER}:--x,g:prime-web:--x,m::--x" /var/lib/prime-runner /var/lib/prime-runner/users
 
+workspace_root="${PRIME_RUNNER_WORKSPACE_ROOT:-${HOME}/prime-agent/tasks}"
+install -d -m 0770 "${HOME}/prime-agent" "$workspace_root"
+setfacl -m "u:prime-runner:rwx,g:prime-web:rwx,m::rwx,d:u:prime-runner:rwx,d:g:prime-web:rwx,d:m::rwx" "${HOME}/prime-agent" "$workspace_root"
 owner_agent="/var/lib/prime-runner/users/${USER}/prime/agent"
-owner_workspace="/var/lib/prime-runner/users/${USER}/workspace"
+owner_workspace="${workspace_root}/${USER}"
 sudo install -d -o prime-runner -g prime-runner -m 0700 "$owner_agent" "$owner_workspace"
 for name in sessions skills session-artifacts; do
   if [[ -d ${HOME}/.prime/agent/$name ]]; then
     sudo rsync -a "${HOME}/.prime/agent/$name/" "$owner_agent/$name/"
   fi
 done
+if [[ -d /var/lib/prime-runner/users/${USER}/workspace ]]; then
+  sudo rsync -a "/var/lib/prime-runner/users/${USER}/workspace/" "$owner_workspace/"
+fi
 if [[ -d ${HOME}/prime-dgx-agent ]]; then
   sudo rsync -a --exclude uploads "${HOME}/prime-dgx-agent/" "$owner_workspace/"
 fi
 sudo chown -R prime-runner:prime-runner "/var/lib/prime-runner/users/${USER}"
+sudo chown -R prime-runner:prime-runner "$owner_workspace"
+sudo setfacl -m "u:${USER}:rwx,d:u:${USER}:rwx,g:prime-web:rwx,d:g:prime-web:rwx,m::rwx,d:m::rwx,o::---,d:o::---" "$owner_workspace"
 sudo setfacl -m "u:${USER}:--x,g:prime-web:--x,m::--x" "/var/lib/prime-runner/users/${USER}" "/var/lib/prime-runner/users/${USER}/prime" "$owner_agent"
 sudo install -d -o prime-runner -g prime-runner -m 0770 "$owner_agent/sessions" "$owner_agent/trash" "$owner_agent/project-sources"
 sudo setfacl -Rm "u:${USER}:rwx,g:prime-web:rwx,m::rwx,o::---" "$owner_agent/sessions" "$owner_agent/trash" "$owner_agent/project-sources"
@@ -88,7 +96,8 @@ install -m 0644 /dev/stdin "${HOME}/.config/systemd/user/prime-dashboard-api.ser
 Environment=PRIME_TASK_RUNTIME=openshell
 Environment=PRIME_OPENSHELL_VERSION=${version}
 Environment=PRIME_RUNNER_STORAGE=/var/lib/prime-runner/users
-ReadWritePaths=/var/lib/prime-runner/users
+Environment=PRIME_RUNNER_WORKSPACE_ROOT=${workspace_root}
+ReadWritePaths=/var/lib/prime-runner/users ${HOME}/prime-agent
 EOF
 
 curl -fL "$asset_url" -o "$staging/$asset"

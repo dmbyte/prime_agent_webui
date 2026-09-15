@@ -47,7 +47,7 @@ def _shared_path_volume(source, target):
 
 def task_spec(task_id, owner, authorization, provider, model, thinking,
               session_id=None, fork=False, storage_root=None, image_manifest=None,
-              policy_root=None):
+              policy_root=None, workspace_root=None):
     if not task_common.SAFE_TASK.fullmatch(str(task_id)):
         raise ValueError("Invalid task identifier")
     if session_id and not task_common.SAFE_SESSION.fullmatch(str(session_id)):
@@ -56,7 +56,7 @@ def task_spec(task_id, owner, authorization, provider, model, thinking,
         raise ValueError("Invalid task owner")
     profile = authorization.get("profile", "general")
     storage_root = Path(storage_root or "/var/lib/prime-runner/users")
-    agent, workspace = task_common.prepare_user_storage(storage_root, owner)
+    agent, workspace = task_common.prepare_user_storage(storage_root, owner, workspace_root)
     network = authorization.get("networkMode", "restricted")
     if network not in {"restricted", "internet", "lan", "full"}:
         raise ValueError("Unsupported task network mode")
@@ -139,4 +139,5 @@ def task_spec(task_id, owner, authorization, provider, model, thinking,
     delete = common + ["sandbox", "delete", sandbox]
     return {"name": sandbox, "create": create, "execute": execute, "delete": delete,
             "prepareInput": prepare_input, "inputFifo": input_fifo,
-            "daemonSocket": daemon_socket, "policy": policy_path, "image": image}
+            "daemonSocket": daemon_socket, "policy": policy_path, "image": image,
+            "workspace": workspace}

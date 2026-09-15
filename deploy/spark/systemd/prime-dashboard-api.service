@@ -8,6 +8,7 @@ Environment=PRIME_OPENAI_CONFIGURED=1
 Environment=PRIME_TASK_RUNTIME=openshell
 Environment=PRIME_OPENSHELL_VERSION=0.0.116
 Environment=PRIME_RUNNER_STORAGE=/var/lib/prime-runner/users
+Environment=PRIME_RUNNER_WORKSPACE_ROOT=%h/prime-agent/tasks
 ExecStart=/usr/bin/python3 %h/prime-dgx-dashboard/api_v2.py
 Restart=on-failure
 RestartSec=3
@@ -15,7 +16,7 @@ NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=%h/.prime/agent %h/prime-dgx-agent /var/lib/prime-runner/users
+ReadWritePaths=%h/.prime/agent %h/prime-dgx-agent %h/prime-agent /var/lib/prime-runner/users
 InaccessiblePaths=%h/.config/prime-agent/openai.env
 UMask=0077
 LockPersonality=yes

@@ -22,7 +22,7 @@ class OpenShellRunnerTests(unittest.TestCase):
         manifest = root / "images.json"
         manifest.write_text(json.dumps({"general": {"image": "local/prime-openshell-general:0.8.0-" + "a" * 12}}))
         policy = {"profile": "general", "networkMode": "restricted", "executionMode": "task", "approvalMode": "manual", "localPaths": local_paths or [], "limits": {"memoryGiB": 8, "cpus": 4, "runtimeMinutes": 30, "pids": 256, "openFiles": 1024, "temporaryGiB": 4}}
-        return openshell_runner.task_spec("a" * 32, "alice", policy, "spark-nemotron", "example", "low", storage_root=storage, image_manifest=manifest, policy_root=root / "policies")
+        return openshell_runner.task_spec("a" * 32, "alice", policy, "spark-nemotron", "example", "low", storage_root=storage, image_manifest=manifest, policy_root=root / "policies", workspace_root=root / "prime-agent/tasks")
 
     def test_openshell_task_is_bounded_and_default_deny(self):
         spec = self.build()
@@ -43,6 +43,7 @@ class OpenShellRunnerTests(unittest.TestCase):
         self.assertIn("IPYTHONDIR=/home/prime/.prime/ipython", execute)
         self.assertIn("--daemon-socket /tmp/prime-daemon-aaaaaaaaaaaaaaaa.sock", execute)
         self.assertEqual(spec["daemonSocket"], "/tmp/prime-daemon-aaaaaaaaaaaaaaaa.sock")
+        self.assertTrue(str(spec["workspace"]).endswith("/prime-agent/tasks/alice"))
         config = json.loads(spec["create"][spec["create"].index("--driver-config-json") + 1])
         volumes = config["docker"]["mounts"][:3]
         self.assertEqual([row["type"] for row in volumes], ["volume", "volume", "volume"])

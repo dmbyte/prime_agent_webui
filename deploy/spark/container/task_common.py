@@ -23,13 +23,13 @@ def _safe_path(root, child):
     return candidate
 
 
-def prepare_user_storage(root, owner):
+def prepare_user_storage(root, owner, workspace_root=None):
     if not SAFE_USER.fullmatch(str(owner)):
         raise ValueError("Invalid task owner")
     user_root = _safe_path(Path(root), owner)
     prime = user_root / "prime"
     agent = prime / "agent"
-    workspace = user_root / "workspace"
+    workspace = _safe_path(Path(workspace_root), owner) if workspace_root else user_root / "workspace"
     for path, mode in ((user_root, 0o700), (prime, 0o700), (agent, 0o700), (workspace, 0o700)):
         path.mkdir(mode=mode, parents=True, exist_ok=True)
         os.chmod(path, mode)

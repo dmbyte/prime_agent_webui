@@ -37,6 +37,20 @@ class TaskCommonTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "owner"):
                 task_common.prepare_user_storage(root, "../root")
 
+    def test_workspace_can_live_under_separate_host_root(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            agent, workspace = task_common.prepare_user_storage(root / "users", "alice", root / "prime-agent/tasks")
+            self.assertEqual(agent, (root / "users/alice/prime/agent").resolve())
+            self.assertEqual(workspace, (root / "prime-agent/tasks/alice").resolve())
+            self.assertTrue(workspace.is_dir())
+
+    def test_workspace_owner_cannot_escape_separate_host_root(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with self.assertRaisesRegex(ValueError, "owner"):
+                task_common.prepare_user_storage(root / "users", "../alice", root / "prime-agent/tasks")
+
     def test_selected_local_path_is_resolved_for_read_only_mount(self):
         with tempfile.TemporaryDirectory() as root:
             source = os.path.join(root, "project")
