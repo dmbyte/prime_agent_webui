@@ -211,6 +211,211 @@ gateway. See the component guides for details:
 [Qwen 3.8](deploy/spark/llama-qwen38/README.md), and
 [OpenShell](deploy/spark/openshell/README.md).
 
+### Deployed DGX Spark configuration
+
+The tracked Spark recipe is intentionally explicit. A default deployment uses
+these concrete parameters unless you edit the copied files under your home
+directory before starting the services.
+
+#### Nemotron 3.5 Lightning service
+
+Source files:
+`deploy/spark/vllm-nemotron35/vllm.env.template`,
+`deploy/spark/vllm-nemotron35/start.sh`, and
+`deploy/spark/systemd/vllm-nemotron35.service`.
+
+| Setting | Deployed value |
+|---|---|
+| Container image | `vllm/vllm-openai:v0.27.1-aarch64-cu129-ubuntu2404` |
+| Model | `nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4` |
+| DSpark draft model | `nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4-DSpark` |
+| Served name | `nemotron-3.5-lightning` |
+| Listener | `127.0.0.1:30000` |
+| Context cap | `MAX_MODEL_LEN=81920` |
+| GPU memory target | `GPU_MEMORY_UTILIZATION=0.38` |
+| Explicit KV cache | `KV_CACHE_MEMORY_BYTES=4G` |
+| Parallel sequences | `MAX_NUM_SEQS=2` |
+| Speculation | `SPEC_TOKENS=3`, `--spec-method dspark` |
+| Container memory | `--memory=68g`, `--memory-swap=80g`, `--shm-size=24g` |
+
+The vLLM command line includes:
+
+```text
+--moe-backend marlin
+--kv-cache-dtype fp8
+--enable-prefix-caching
+--spec-method dspark
+--spec-model nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4-DSpark
+--spec-tokens 3
+--mamba-backend flashinfer
+--mamba-cache-mode align
+--reasoning-parser nemotron_v3
+--tool-call-parser qwen3_coder
+--enable-auto-tool-choice
+--max-model-len 81920
+--gpu-memory-utilization 0.38
+--kv-cache-memory-bytes 4G
+--max-num-seqs 2
+--served-model-name nemotron-3.5-lightning
+```
+
+#### Qwen 3.8 Flash-Next service
+
+Source files:
+`deploy/spark/llama-qwen38/llama.env.template`,
+`deploy/spark/llama-qwen38/start.sh`, and
+`deploy/spark/systemd/llama-qwen38.service`.
+
+| Setting | Deployed value |
+|---|---|
+| Container image | `local/llama-qwen38-mtp:560abb66` |
+| Model directory | `/home/dbyte/models/qwen38-flash-next-ud-iq4-xs` |
+| Main GGUF | `UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf` |
+| Vision projector | `mmproj-F16.gguf` |
+| MTP draft head | `MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf` |
+| Served name | `qwen3.8-flash-next` |
+| Listener | `127.0.0.1:30001` |
+| Context slot | `CONTEXT_SIZE=32768` |
+| Parallel slots | `PARALLEL=1` |
+| GPU layers | `GPU_LAYERS=999` and `SPEC_DRAFT_GPU_LAYERS=999` |
+| KV cache | `CACHE_TYPE_K=q8_0`, `CACHE_TYPE_V=q8_0` |
+| Batching | `BATCH_SIZE=2048`, `UBATCH_SIZE=512` |
+| PLE loading | `--load-mode mmap`, `LAZY_MODE=on-direct` |
+| Speculation | `SPEC_DRAFT_MAX_TOKENS=2`, `SPEC_DRAFT_P_MIN=0.0` |
+| Container memory | `--memory=88g`, `--memory-swap=88g` |
+
+The llama.cpp server command line includes:
+
+```text
+--model /models/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
+--mmproj /models/mmproj-F16.gguf
+--model-draft /models/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf
+--spec-type draft-mtp
+--spec-draft-ngl 999
+--spec-draft-n-max 2
+--spec-draft-p-min 0.0
+--alias qwen3.8-flash-next
+--ctx-size 32768
+--parallel 1
+--gpu-layers 999
+--flash-attn on
+--cache-type-k q8_0
+--cache-type-v q8_0
+--batch-size 2048
+--ubatch-size 512
+--load-mode mmap
+--lazy-mode on-direct
+--reasoning auto
+--reasoning-format deepseek
+--metrics
+```
+
+#### OpenShell task runtime
+
+Source files:
+`deploy/spark/openshell/install.sh`,
+`deploy/spark/openshell/provision-volumes.sh`,
+`deploy/spark/container/openshell_runner.py`,
+`deploy/spark/container/runner_launch.py`, and
+`deploy/spark/systemd/prime-runner-broker.service`.
+
+| Setting | Deployed value |
+|---|---|
+| OpenShell package | `0.0.116` ARM64 `.deb` with pinned SHA256 |
+| Gateway name | `spark-local` |
+| Task service identity | `prime-runner:prime-runner` |
+| Supplementary groups | `prime-web`, `prime-local-access` |
+| Dashboard runtime env | `PRIME_TASK_RUNTIME=openshell` |
+| Runner state root | `/var/lib/prime-runner/users` |
+| Task workspace root | `/home/WEB_OWNER/prime-agent/tasks` |
+| Sandbox workdir | `/project` |
+| Default task limits | `memoryGiB=8`, `cpus=4`, `runtimeMinutes=30` |
+| Prime daemon socket | `/tmp/prime-daemon-<task-prefix>.sock` per task |
+| Prime RPC FIFO | `/tmp/prime-rpc-<task-prefix>.fifo` per task |
+
+Each OpenShell sandbox is created with these important switches:
+
+```text
+openshell --gateway spark-local sandbox create
+  --name pt-<task-prefix>
+  --from local/prime-openshell-<profile>:0.8.0-<digest>
+  --policy /var/lib/prime-runner/openshell-policies/<task>.yaml
+  --driver-config-json <pre-provisioned Docker volume mounts>
+  --cpu <task cpus>
+  --memory <task memory>Gi
+  --approval-mode manual|auto
+  --label prime.owner=<user>
+  --label prime.profile=<profile>
+  --label prime.network=<restricted|internet|lan|full>
+  --label prime.task=<task-id>
+  --detach
+  --no-auto-providers
+  --no-tty
+  -- /bin/sleep infinity
+```
+
+Prime is then executed inside the sandbox with:
+
+```text
+timeout --signal=TERM --kill-after=15s <runtime>m
+openshell --gateway spark-local sandbox exec
+  --name pt-<task-prefix>
+  --workdir /project
+  --no-tty
+  --env HOME=/home/prime
+  --env NO_PROXY=127.0.0.1,localhost,::1
+  --env no_proxy=127.0.0.1,localhost,::1
+  --env TINI_SUBREAPER=1
+  --env PRIME_AGENT_KERNEL_PYTHON=/opt/prime-kernel/bin/python
+  --env IPYTHONDIR=/home/prime/.prime/ipython
+  -- /usr/local/bin/prime-container-entrypoint
+     --cwd /project
+     --mode rpc
+     --daemon-socket /tmp/prime-daemon-<task-prefix>.sock
+     --provider <selected provider>
+     --model <selected model>
+     --thinking <selected effort>
+```
+
+When execution mode is **Deny tools**, the runner also passes `--no-tools`.
+Existing conversations add either `--resume SESSION_ID` or `--fork SESSION_ID`.
+
+The default OpenShell filesystem policy makes these paths read-only:
+
+```text
+/usr
+/lib
+/proc
+/etc
+/opt/prime-kernel
+/run/prime-gateway
+/home/prime/.prime/agent/project-sources
+/project-files/<approved-source>
+```
+
+and only these paths writable:
+
+```text
+/home/prime/.prime
+/project
+/tmp
+/dev/null
+```
+
+The sandbox receives Docker bind volumes only through pre-provisioned local
+volumes:
+
+| Volume | Sandbox path | Mode |
+|---|---|---|
+| `prime-USER-prime` | `/home/prime/.prime` | read/write |
+| `prime-USER-workspace` | `/project` | read/write |
+| `prime-USER-gateway-MODE` | `/run/prime-gateway` | read-only |
+| `prime-shared-mnt`, `prime-shared-media`, `prime-shared-srv`, `prime-shared-opt` | `/project-files/...` | read-only, explicitly approved paths only |
+
+The local-path picker still rejects arbitrary `/home` paths. The controlled
+`~/prime-agent/tasks/USER/` workspace is the only home-backed writeable task
+mount in the default Spark recipe.
+
 ## Firewall examples
 
 Expose only the chosen HTTPS port to private LAN/VPN sources. Never expose the
