@@ -16,7 +16,7 @@ ensure_volume() {
         exit 1
       fi
     else
-      return
+      return 0
     fi
   fi
   if ! docker volume inspect "$name" >/dev/null 2>&1; then
