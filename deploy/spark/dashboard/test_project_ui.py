@@ -55,6 +55,18 @@ class ProjectUiTests(unittest.TestCase):
         self.assertIn('confirmationMode==="always"', app)
         self.assertIn("matchesSavedSecurityPolicy", app)
 
+    def test_top_statistics_have_live_hover_sparklines(self):
+        app = (ROOT / "app-v2.js").read_text()
+        css = (ROOT / "enhancements.css").read_text()
+        self.assertIn("telemetryHistory", app)
+        self.assertIn("telemetryPath", app)
+        self.assertIn('class="metric-graph"', app)
+        self.assertIn("metric-watermark", app)
+        self.assertIn("last ${history.length} seconds", app)
+        self.assertIn("),1000);setInterval(()=>updateTasks", app)
+        self.assertIn(".telemetry-card:hover", css)
+        self.assertIn("transform:scale(1.9)", css)
+
 
 if __name__ == "__main__":
     unittest.main()

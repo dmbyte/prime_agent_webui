@@ -36,6 +36,8 @@ skills belong outside the repository and are excluded from version control.
   only while the requested policy exactly matches that saved scope.
 - Configured-provider discovery, write-only credential forms, model selection,
   effort control, and provider/model token and spend roll-ups.
+- One-second CPU, GPU, memory, power, and temperature sparklines at the top of
+  the sidebar, with large value watermarks and an expanded live hover view.
 - Recoverable conversation deletion, isolated ownership metadata, uploads,
   activity logs, and administrative user lifecycle management.
 - Production OpenShell per-task execution under a dedicated service identity,
@@ -64,7 +66,7 @@ providers are used.
 Clone the release and run the installer as the account that should own Prime:
 
 ```bash
-git clone --branch v0.5.12 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
+git clone --branch v0.5.13 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
 cd prime_agent_webui
 ./install.sh --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
@@ -510,7 +512,7 @@ For a manual upgrade:
 
 ```bash
 git fetch --tags origin
-git checkout v0.5.12
+git checkout v0.5.13
 ./install.sh --skip-packages --skip-prime --skip-password \
   --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
@@ -519,7 +521,7 @@ git checkout v0.5.12
 
 Read the [security hardening guide](deploy/spark/security/README.md),
 [OpenShell runtime-image guide](deploy/spark/container/README.md), and
-[OpenShell operations guide](deploy/spark/openshell/README.md). In v0.5.12,
+[OpenShell operations guide](deploy/spark/openshell/README.md). In v0.5.13,
 Prime tasks execute inside OpenShell sandboxes launched by the dedicated
 `prime-runner` service identity, with protected per-user Prime state and a
 host-visible task workspace under `~/prime-agent/tasks/USER/`. That workspace is
