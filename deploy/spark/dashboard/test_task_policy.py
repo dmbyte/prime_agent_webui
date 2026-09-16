@@ -56,6 +56,15 @@ class TaskPolicyTests(unittest.TestCase):
             authorize_task({"approvalMode": "auto"}, "power_user")
         self.assertEqual(authorize_task({"approvalMode": "auto"}, "admin")["approvalMode"], "auto")
 
+    def test_saved_scope_can_satisfy_repeated_security_confirmations(self):
+        result = authorize_task({"executionMode": "task", "networkMode": "lan", "localPaths": ["/srv/project"], "confirmationMode": "always"}, "power_user", persistent_confirmation=True)
+        self.assertTrue(result["executionApproved"])
+        self.assertEqual(result["confirmationMode"], "always")
+
+    def test_always_mode_without_saved_scope_still_requires_confirmation(self):
+        with self.assertRaisesRegex(ValueError, "execution approval"):
+            authorize_task({"executionMode": "task", "confirmationMode": "always"}, "user")
+
 
 if __name__ == "__main__":
     unittest.main()

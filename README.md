@@ -30,8 +30,10 @@ skills belong outside the repository and are excluded from version control.
   project instructions and uploaded sources, inherited conversation-control
   defaults, pinning, boxed `...` chat actions, and visible promotion of existing
   chats into new or existing projects.
-- Persistent sandbox, tool, egress, proposal, and local-path controls directly
-  below the conversation header; saved chats retain their own overrides.
+- Persistent sandbox, tool, egress, proposal, local-path, and security-prompt
+  controls directly below the conversation header; saved chats retain their own
+  overrides. **Always allow for this chat/project** suppresses repeated prompts
+  only while the requested policy exactly matches that saved scope.
 - Configured-provider discovery, write-only credential forms, model selection,
   effort control, and provider/model token and spend roll-ups.
 - Recoverable conversation deletion, isolated ownership metadata, uploads,
@@ -62,7 +64,7 @@ providers are used.
 Clone the release and run the installer as the account that should own Prime:
 
 ```bash
-git clone --branch v0.5.11 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
+git clone --branch v0.5.12 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
 cd prime_agent_webui
 ./install.sh --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
@@ -449,8 +451,9 @@ The supplied Nginx configuration independently allows loopback, RFC1918, and
    returned to the browser.
 3. Alternatively run `prime-agent`, enter `/login`, and configure a supported
    subscription provider such as ChatGPT/Codex.
-4. Choose a model and effort level. Start a conversation and approve or deny
-   shell/code execution when prompted.
+4. Choose a model and effort level. Under **Security prompts**, keep **Ask each
+   task** or choose **Always allow for this chat**. Project settings offer the
+   equivalent project default; a new standalone chat asks once before saving it.
 5. Administrators can add users and assign `user`, `power_user`, or `admin` from
    the Admin panel.
 
@@ -507,7 +510,7 @@ For a manual upgrade:
 
 ```bash
 git fetch --tags origin
-git checkout v0.5.11
+git checkout v0.5.12
 ./install.sh --skip-packages --skip-prime --skip-password \
   --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
@@ -516,7 +519,7 @@ git checkout v0.5.11
 
 Read the [security hardening guide](deploy/spark/security/README.md),
 [OpenShell runtime-image guide](deploy/spark/container/README.md), and
-[OpenShell operations guide](deploy/spark/openshell/README.md). In v0.5.11,
+[OpenShell operations guide](deploy/spark/openshell/README.md). In v0.5.12,
 Prime tasks execute inside OpenShell sandboxes launched by the dedicated
 `prime-runner` service identity, with protected per-user Prime state and a
 host-visible task workspace under `~/prime-agent/tasks/USER/`. That workspace is
@@ -526,6 +529,13 @@ its own sandbox-local Prime control socket so stale OpenShell worker records
 cannot poison later resumes. The API retains no-new-privileges, the gateway is
 loopback-only with mTLS, and full-network mode remains intentionally powerful
 and limited to confirmed power-user/administrator tasks.
+
+The **Always allow** setting is owner-scoped and stored with the chat or project,
+not as a global bypass. The API honors it only when the sandbox image, execution
+mode, network mode, policy-proposal mode, and local paths exactly match the saved
+policy. Changing any of those controls requires the new policy to be saved in
+that scope. Role restrictions, OpenShell isolation, resource limits, and the
+read-only treatment of approved host paths remain enforced.
 
 This project provides research and workflow tooling, not investment advice or an
 unattended live-trading system. Keep broker credentials and deterministic risk

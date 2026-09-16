@@ -9,6 +9,7 @@ EXECUTION_MODES = {"prompt", "task", "login", "deny"}
 NETWORK_MODES = {"restricted", "internet", "lan", "full"}
 PROFILES = {"general", "development", "cad", "finance", "network-operations", "review"}
 APPROVAL_MODES = {"manual", "auto"}
+CONFIRMATION_MODES = {"prompt", "always"}
 MAX_LOCAL_PATHS = 8
 LOCAL_PATH_ROOTS = ("/mnt", "/media", "/srv", "/opt")
 
@@ -60,13 +61,14 @@ def normalize_local_paths(value, role):
     return result
 
 
-def authorize_task(payload, role, login_execution=False, task_execution_confirmed=False, network_confirmed=False, files_confirmed=False):
+def authorize_task(payload, role, login_execution=False, task_execution_confirmed=False, network_confirmed=False, files_confirmed=False, persistent_confirmation=False):
     """Return an immutable, normalized policy or reject an unauthorized request."""
     role = normalize_role(role)
     profile = str(payload.get("profile") or "general")
     network = str(payload.get("networkMode") or "restricted")
     execution = str(payload.get("executionMode") or "prompt")
     approval = str(payload.get("approvalMode") or "manual")
+    confirmation = str(payload.get("confirmationMode") or "prompt")
     local_paths = normalize_local_paths(payload.get("localPaths"), role)
     if profile not in PROFILES:
         raise ValueError("Unsupported task profile")
@@ -76,6 +78,8 @@ def authorize_task(payload, role, login_execution=False, task_execution_confirme
         raise ValueError("Unsupported execution mode")
     if approval not in APPROVAL_MODES:
         raise ValueError("Unsupported OpenShell approval mode")
+    if confirmation not in CONFIRMATION_MODES:
+        raise ValueError("Unsupported security confirmation mode")
     if approval == "auto" and role != "admin":
         raise ValueError("Automatic OpenShell policy approval requires administrator access")
     if network in {"lan", "full"} and role not in {"power_user", "admin"}:
@@ -84,14 +88,14 @@ def authorize_task(payload, role, login_execution=False, task_execution_confirme
         raise ValueError("The network-operations profile requires power-user or administrator access")
     if network == "full" and execution == "deny":
         raise ValueError("Full-network tasks require task execution approval")
-    approved_execution = execution == "login" and login_execution or execution == "task" and task_execution_confirmed
-    if execution == "login" and not login_execution:
+    approved_execution = execution == "login" and (login_execution or persistent_confirmation) or execution == "task" and (task_execution_confirmed or persistent_confirmation)
+    if execution == "login" and not (login_execution or persistent_confirmation):
         raise ValueError("Login-session execution approval is required")
-    if execution == "task" and not task_execution_confirmed:
+    if execution == "task" and not (task_execution_confirmed or persistent_confirmation):
         raise ValueError("Task execution approval is required")
-    if network in {"lan", "full"} and not network_confirmed:
+    if network in {"lan", "full"} and not (network_confirmed or persistent_confirmation):
         raise ValueError("Explicit private-network approval is required")
-    if local_paths and not files_confirmed:
+    if local_paths and not (files_confirmed or persistent_confirmation):
         raise ValueError("Explicit local-file approval is required")
     requested = payload.get("limits") or {}
     defaults, maximums = ROLE_DEFAULTS[role], ROLE_MAXIMUMS[role]
@@ -115,6 +119,7 @@ def authorize_task(payload, role, login_execution=False, task_execution_confirme
         "networkMode": network,
         "executionMode": execution,
         "approvalMode": approval,
+        "confirmationMode": confirmation,
         "executionApproved": approved_execution,
         "packageOverride": bool(payload.get("packageOverride") and role == "admin"),
         "localPaths": local_paths,

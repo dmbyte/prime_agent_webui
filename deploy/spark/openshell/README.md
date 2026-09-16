@@ -42,6 +42,12 @@ host. Prime state remains protected under `/var/lib/prime-runner/users/OWNER/`.
 The local-path picker still rejects arbitrary `/home` paths; the home-backed
 task workspace is the controlled exception created by the installer.
 
+The WebUI's **Security prompts** control can persist **Always allow** at a chat
+or project scope. The dashboard API accepts quiet execution/network/file
+confirmation only when the full task policy exactly matches an owner-scoped
+saved policy. This does not broaden role permissions or weaken the sandbox;
+changing access settings changes the policy and invalidates the previous match.
+
 ## Verify
 
 ```bash

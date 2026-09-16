@@ -124,13 +124,22 @@ class DashboardV2Tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             meta_path = Path(directory) / "metadata.json"
             meta_path.write_text(json.dumps({"conversations": {"session-alice": {"owner": "alice"}}}))
-            policy = {"profile": "development", "executionMode": "prompt", "networkMode": "internet"}
+            policy = {"profile": "development", "executionMode": "prompt", "networkMode": "internet", "confirmationMode": "prompt"}
             with mock.patch.object(api, "META", meta_path), mock.patch.object(api.legacy, "session_path", return_value=Path("/tmp/session-alice.jsonl")):
                 result = api.update_conversation("session-alice", "policy", policy, "alice", "user")
                 self.assertEqual(result["taskPolicy"], policy)
                 self.assertEqual(json.loads(meta_path.read_text())["conversations"]["session-alice"]["taskPolicy"], policy)
                 with self.assertRaisesRegex(ValueError, "power-user"):
                     api.update_conversation("session-alice", "policy", {**policy, "networkMode": "full"}, "alice", "user")
+
+    def test_persistent_confirmation_requires_matching_owned_saved_scope(self):
+        saved = {"profile": "development", "executionMode": "task", "networkMode": "internet", "approvalMode": "manual", "confirmationMode": "always", "localPaths": []}
+        meta = {"projects": {"p_" + "a" * 24: {"owner": "alice", "taskPolicy": saved}}, "conversations": {"session-alice": {"owner": "alice", "taskPolicy": saved}}}
+        with mock.patch.object(api, "metadata", return_value=meta):
+            self.assertTrue(api.persistent_confirmation_allowed(saved, "session-alice", None, "alice"))
+            self.assertTrue(api.persistent_confirmation_allowed(saved, None, "p_" + "a" * 24, "alice"))
+            self.assertFalse(api.persistent_confirmation_allowed({**saved, "networkMode": "lan"}, "session-alice", None, "alice"))
+            self.assertFalse(api.persistent_confirmation_allowed(saved, "session-alice", None, "bob"))
 
     def test_projects_are_owner_scoped_and_count_their_chats(self):
         alice_id = "p_" + "a" * 24
@@ -151,7 +160,7 @@ class DashboardV2Tests(unittest.TestCase):
                 updated = api.update_project(project["id"], {"name": "Spark UI", "pinned": True}, "alice")
                 self.assertEqual(updated["name"], "Spark UI")
                 self.assertTrue(updated["pinned"])
-                self.assertEqual(updated["taskPolicy"], {"profile": "development", "executionMode": "deny", "networkMode": "internet", "approvalMode": "manual", "localPaths": []})
+                self.assertEqual(updated["taskPolicy"], {"profile": "development", "executionMode": "deny", "networkMode": "internet", "approvalMode": "manual", "confirmationMode": "prompt", "localPaths": []})
                 with self.assertRaisesRegex(ValueError, "Project not found"):
                     api.update_project(project["id"], {"name": "Stolen"}, "bob")
                 result = api.delete_project(project["id"], "alice")
@@ -168,7 +177,7 @@ class DashboardV2Tests(unittest.TestCase):
             source = uploads / "alice/source.txt"
             source.write_text("reference")
             file_id = base64.urlsafe_b64encode("alice/source.txt".encode()).decode().rstrip("=")
-            policy = {"profile": "development", "executionMode": "prompt", "networkMode": "restricted", "approvalMode": "manual", "localPaths": []}
+            policy = {"profile": "development", "executionMode": "prompt", "networkMode": "restricted", "approvalMode": "manual", "confirmationMode": "prompt", "localPaths": []}
             meta_path = root / "metadata.json"
             meta_path.write_text(json.dumps({"projects": {}, "conversations": {"session-alice": {"owner": "alice", "taskPolicy": policy, "fileIds": [file_id]}}, "files": {"alice/source.txt": {"owner": "alice"}}}))
             with mock.patch.object(api, "META", meta_path), mock.patch.object(api.legacy, "UPLOADS", uploads), mock.patch.object(api.legacy, "audit"):

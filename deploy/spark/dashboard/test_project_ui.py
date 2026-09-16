@@ -48,6 +48,13 @@ class ProjectUiTests(unittest.TestCase):
         self.assertIn(".trace-event", css)
         self.assertIn(".collapsed-trace", css)
 
+    def test_security_prompts_can_persist_for_chat_or_project(self):
+        app = (ROOT / "app-v2.js").read_text()
+        self.assertIn('"confirmationMode","chat"', app)
+        self.assertIn('"projectConfirmationMode","project"', app)
+        self.assertIn('confirmationMode==="always"', app)
+        self.assertIn("matchesSavedSecurityPolicy", app)
+
 
 if __name__ == "__main__":
     unittest.main()

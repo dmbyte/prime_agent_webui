@@ -346,7 +346,7 @@ def project_catalog(user=INITIAL_ADMIN):
                      "icon": project.get("icon", "folder"), "color": project.get("color", "blue"),
                      "instructions": project.get("instructions", ""),
                      "fileIds": list(project.get("fileIds", [])),
-                     "taskPolicy": dict(project.get("taskPolicy") or {"profile": "general", "executionMode": "prompt", "networkMode": "restricted", "approvalMode": "manual"}),
+                     "taskPolicy": dict(project.get("taskPolicy") or {"profile": "general", "executionMode": "prompt", "networkMode": "restricted", "approvalMode": "manual", "confirmationMode": "prompt"}),
                      "pinned": bool(project.get("pinned")),
                      "createdAt": project.get("createdAt"), "updatedAt": project.get("updatedAt"),
                      "conversationCount": counts.get(project_id, 0)})
@@ -428,6 +428,7 @@ def normalize_project_fields(payload, user, role="user"):
     file_ids = normalize_file_ids(payload.get("fileIds"), user, 40)
     task_policy_value = policy_preference(payload.get("taskPolicy"), role)
     task_policy_value.setdefault("approvalMode", "manual")
+    task_policy_value.setdefault("confirmationMode", "prompt")
     task_policy_value.setdefault("localPaths", [])
     return {"name": name, "icon": icon, "color": color, "instructions": instructions,
             "fileIds": file_ids, "taskPolicy": task_policy_value, "pinned": bool(payload.get("pinned"))}
@@ -515,7 +516,7 @@ def promote_conversation(payload, user=INITIAL_ADMIN, role="user"):
         project_payload["fileIds"] = file_ids
         project_payload["taskPolicy"] = dict(conversation.get("taskPolicy") or {
             "profile": "general", "executionMode": "prompt",
-            "networkMode": "restricted", "approvalMode": "manual", "localPaths": [],
+            "networkMode": "restricted", "approvalMode": "manual", "confirmationMode": "prompt", "localPaths": [],
         })
         fields = normalize_project_fields(project_payload, user, role)
         project_id = f"p_{uuid.uuid4().hex[:24]}"
@@ -1124,19 +1125,42 @@ def policy_preference(payload, role):
     execution = str(payload.get("executionMode") or "prompt")
     network = str(payload.get("networkMode") or "restricted")
     approval = str(payload.get("approvalMode") or "manual")
+    confirmation = str(payload.get("confirmationMode") or "prompt")
     local_paths = task_policy.normalize_local_paths(payload.get("localPaths"), role)
-    if profile not in task_policy.PROFILES or execution not in task_policy.EXECUTION_MODES or network not in task_policy.NETWORK_MODES or approval not in task_policy.APPROVAL_MODES:
+    if profile not in task_policy.PROFILES or execution not in task_policy.EXECUTION_MODES or network not in task_policy.NETWORK_MODES or approval not in task_policy.APPROVAL_MODES or confirmation not in task_policy.CONFIRMATION_MODES:
         raise ValueError("Unsupported conversation policy")
     if (profile == "network-operations" or network in {"lan", "full"}) and role not in {"power_user", "admin"}:
         raise ValueError("This conversation policy requires power-user or administrator access")
     if approval == "auto" and role != "admin":
         raise ValueError("Automatic OpenShell policy approval requires administrator access")
-    result = {"profile": profile, "executionMode": execution, "networkMode": network}
+    result = {"profile": profile, "executionMode": execution, "networkMode": network, "confirmationMode": confirmation}
     if "approvalMode" in payload or approval != "manual":
         result["approvalMode"] = approval
     if local_paths:
         result["localPaths"] = local_paths
     return result
+
+
+def persistent_confirmation_allowed(requested, session_id, project_id, user):
+    """Trust quiet confirmations only when they match an owner-scoped saved policy."""
+    requested = requested if isinstance(requested, dict) else {}
+    if requested.get("confirmationMode") != "always":
+        return False
+    data = metadata()
+    saved = None
+    if session_id:
+        row = data.get("conversations", {}).get(str(session_id))
+        if isinstance(row, dict) and row.get("owner", INITIAL_ADMIN) == user:
+            saved = row.get("taskPolicy")
+    elif project_id:
+        row = data.get("projects", {}).get(str(project_id))
+        if isinstance(row, dict) and row.get("owner", INITIAL_ADMIN) == user:
+            saved = row.get("taskPolicy")
+    if not isinstance(saved, dict) or saved.get("confirmationMode") != "always":
+        return False
+    keys = ("profile", "executionMode", "networkMode", "approvalMode", "confirmationMode", "localPaths")
+    return all((requested.get(key) or ([] if key == "localPaths" else None)) ==
+               (saved.get(key) or ([] if key == "localPaths" else None)) for key in keys)
 
 
 def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITIAL_ADMIN, authorization=None, policy=None, project_id=None, file_ids=None):
@@ -1632,6 +1656,7 @@ def task_capabilities(role):
         "networkModes": ["restricted", "internet"] + (["lan", "full"] if role in {"power_user", "admin"} else []),
         "executionModes": ["prompt", "task", "login", "deny"],
         "approvalModes": ["manual"] + (["auto"] if role == "admin" else []),
+        "confirmationModes": sorted(task_policy.CONFIRMATION_MODES),
         "sandbox": {"runtime": "openshell" if container_mode() else "host", "version": os.environ.get("PRIME_OPENSHELL_VERSION") if container_mode() else None, "driver": "docker" if container_mode() else "none", "staticPolicy": "recreated-per-task" if container_mode() else "host-process", "networkPolicy": "default-deny" if container_mode() else "host", "egressControl": "broker-channel" if container_mode() else "none"},
         "defaults": task_policy.ROLE_DEFAULTS[role].__dict__,
         "maximums": task_policy.ROLE_MAXIMUMS[role].__dict__,
@@ -1769,6 +1794,7 @@ class Handler(legacy.Handler):
             elif path == "/api/tasks/start":
                 requested = payload.get("taskPolicy") or {}
                 preference = policy_preference(payload.get("conversationPolicy"), role)
+                persistent_confirmation = persistent_confirmation_allowed(requested, payload.get("sessionId"), payload.get("projectId"), user)
                 authorization = task_policy.authorize_task(
                     requested,
                     role,
@@ -1776,6 +1802,7 @@ class Handler(legacy.Handler):
                     task_execution_confirmed=payload.get("executionConfirm") == "allow-execution-task",
                     network_confirmed=payload.get("networkConfirm") == f"allow-network-{requested.get('networkMode')}",
                     files_confirmed=payload.get("filesConfirm") == "allow-local-files-task",
+                    persistent_confirmation=persistent_confirmation,
                 )
                 self.send_json(202, {"task": launch_task(payload.get("message"), payload.get("sessionId"), thinking=payload.get("thinking"), owner=user, authorization=authorization, policy=preference, project_id=payload.get("projectId"), file_ids=payload.get("fileIds"))})
             elif path == "/api/tasks/stop":
