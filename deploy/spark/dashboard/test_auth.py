@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -41,8 +42,12 @@ class CredentialTests(unittest.TestCase):
         self.path.chmod(0o600)
         self.environment = patch.dict(os.environ, {"PRIME_AUTH_CREDENTIAL": str(self.path)})
         self.environment.start()
+        with auth.LOCK:
+            auth.SESSIONS.clear()
 
     def tearDown(self):
+        with auth.LOCK:
+            auth.SESSIONS.clear()
         self.environment.stop()
         self.temporary.cleanup()
 
@@ -76,6 +81,22 @@ class CredentialTests(unittest.TestCase):
         self.assertTrue(auth.authenticate("alice", "alice replacement password"))
         auth.manage_user("delete", {"username": "alice"}, "dbyte")
         self.assertFalse(auth.authenticate("alice", "alice replacement password"))
+
+    def test_sessions_survive_auth_service_restart(self):
+        now = time.time()
+        row = {"user": "dbyte", "role": "admin", "csrf": "csrf", "created": now, "seen": now, "persisted": now, "expires": now + 3600}
+        with auth.LOCK:
+            auth.SESSIONS["durable-token"] = row
+            auth.save_sessions_locked()
+            auth.SESSIONS.clear()
+        auth.load_sessions()
+        restored = auth.session_for("prime_session=durable-token", touch=False)
+        self.assertEqual(restored["user"], "dbyte")
+        self.assertEqual(auth.session_store_path().stat().st_mode & 0o777, 0o600)
+
+    def test_default_login_lifetime_is_long_lived(self):
+        self.assertGreaterEqual(auth.IDLE_SECONDS, 30 * 24 * 60 * 60)
+        self.assertGreaterEqual(auth.ABSOLUTE_SECONDS, 180 * 24 * 60 * 60)
 
 
 if __name__ == "__main__":

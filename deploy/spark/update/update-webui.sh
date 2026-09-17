@@ -75,5 +75,5 @@ printf 'Environment="PRIME_WEBUI_REPO=%s"\n' "$repo" >>"${HOME}/.config/systemd/
 systemctl --user daemon-reload
 
 "$live/install-static.sh" "$live"
-systemctl --user restart prime-dashboard-api.service
+systemctl --user restart prime-auth.service prime-dashboard-api.service
 echo "Prime WebUI now contains release ${release_tag} at $(git -C "$repo" rev-parse --short HEAD)."

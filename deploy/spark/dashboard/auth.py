@@ -15,8 +15,9 @@ from pathlib import Path
 
 SESSION_COOKIE = "prime_session"
 CSRF_COOKIE = "prime_csrf"
-ABSOLUTE_SECONDS = 12 * 60 * 60
-IDLE_SECONDS = 30 * 60
+ABSOLUTE_SECONDS = int(os.environ.get("PRIME_AUTH_ABSOLUTE_SECONDS", 180 * 24 * 60 * 60))
+IDLE_SECONDS = int(os.environ.get("PRIME_AUTH_IDLE_SECONDS", 30 * 24 * 60 * 60))
+PERSIST_INTERVAL_SECONDS = 5 * 60
 MAX_ATTEMPTS = 8
 ATTEMPT_WINDOW = 10 * 60
 SCRYPT_N = 1 << 15
@@ -28,6 +29,49 @@ SESSIONS = {}
 ATTEMPTS = {}
 LOCK = threading.Lock()
 KDF_LOCK = threading.Lock()
+
+
+def session_store_path():
+    configured = os.environ.get("PRIME_AUTH_SESSION_STORE", "")
+    return Path(configured).expanduser() if configured else credential_path().with_name("web-sessions.json")
+
+
+def save_sessions_locked():
+    path = session_store_path()
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=".web-sessions.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            os.fchmod(handle.fileno(), 0o600)
+            json.dump({"version": 1, "sessions": SESSIONS}, handle, separators=(",", ":"))
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+
+
+def load_sessions():
+    path = session_store_path()
+    now = time.time()
+    try:
+        details = path.lstat()
+        if not stat.S_ISREG(details.st_mode) or details.st_uid != os.getuid() or details.st_mode & 0o077:
+            return
+        value = json.loads(path.read_text(encoding="utf-8"))
+        rows = value.get("sessions", {}) if value.get("version") == 1 else {}
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return
+    with LOCK:
+        SESSIONS.clear()
+        for token, row in rows.items():
+            if not isinstance(token, str) or not isinstance(row, dict):
+                continue
+            if now <= float(row.get("expires", 0)) and now - float(row.get("seen", 0)) <= IDLE_SECONDS:
+                SESSIONS[token] = row
 
 
 def cookies(header):
@@ -51,9 +95,14 @@ def session_for(header, touch=True):
         row = SESSIONS.get(token)
         if not row or now > row["expires"] or now - row["seen"] > IDLE_SECONDS:
             SESSIONS.pop(token, None)
+            if row:
+                save_sessions_locked()
             return None
         if touch:
             row["seen"] = now
+            if now - row.get("persisted", 0) >= PERSIST_INTERVAL_SECONDS:
+                row["persisted"] = now
+                save_sessions_locked()
         return dict(row)
 
 
@@ -209,6 +258,7 @@ def manage_user(action, body, actor):
     with LOCK:
         for token, row in list(SESSIONS.items()):
             if row.get("user") == username: SESSIONS.pop(token, None)
+        save_sessions_locked()
     return {"users": user_rows()}
 
 
@@ -253,6 +303,7 @@ class Handler(BaseHTTPRequestHandler):
             token = cookies(self.headers.get("Cookie")).get(SESSION_COOKIE, "")
             with LOCK:
                 SESSIONS.pop(token, None)
+                save_sessions_locked()
             expired = "Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Strict"
             self.json(200, {"authenticated": False}, [f"{SESSION_COOKIE}=; {expired}", f"{CSRF_COOKIE}=; Path=/; Max-Age=0; Secure; SameSite=Strict"])
             return
@@ -299,8 +350,9 @@ class Handler(BaseHTTPRequestHandler):
         now = time.time()
         role = (load_users() or {}).get("users", {}).get(username, {}).get("role", "user")
         with LOCK:
-            SESSIONS[token] = {"user": username, "role": role, "csrf": csrf, "created": now, "seen": now, "expires": now + ABSOLUTE_SECONDS}
+            SESSIONS[token] = {"user": username, "role": role, "csrf": csrf, "created": now, "seen": now, "persisted": now, "expires": now + ABSOLUTE_SECONDS}
             ATTEMPTS.pop(ip, None)
+            save_sessions_locked()
         session_cookie = f"{SESSION_COOKIE}={token}; Path=/; Max-Age={ABSOLUTE_SECONDS}; Secure; HttpOnly; SameSite=Strict"
         csrf_cookie = f"{CSRF_COOKIE}={csrf}; Path=/; Max-Age={ABSOLUTE_SECONDS}; Secure; SameSite=Strict"
         self.json(200, {"authenticated": True, "user": username, "csrf": csrf}, [session_cookie, csrf_cookie])
@@ -310,4 +362,5 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    load_sessions()
     ThreadingHTTPServer(("127.0.0.1", 8764), Handler).serve_forever()

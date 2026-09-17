@@ -6,6 +6,7 @@ import json
 import os
 import pwd
 import secrets
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -71,8 +72,11 @@ def main():
             os.unlink(temporary)
         except FileNotFoundError:
             pass
+    (path.parent / "web-sessions.json").unlink(missing_ok=True)
+    subprocess.run(["systemctl", "--user", "restart", "prime-auth.service"], check=False,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     first = second = ""
-    print("Prime WebUI password updated. Existing sessions remain valid until expiry or service restart.")
+    print("Prime WebUI password updated. Existing browser sessions were revoked.")
 
 
 if __name__ == "__main__":

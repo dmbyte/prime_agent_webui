@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-webui_version="0.5.13"
+webui_version="0.5.14"
 prime_version="0.8.0"
 port=8443
 bind_address=""
@@ -130,6 +130,9 @@ After=network.target
 Type=simple
 Environment=PRIME_AUTH_USER=${USER}
 Environment=PRIME_AUTH_CREDENTIAL=${HOME}/.config/prime-agent/web-auth.json
+Environment=PRIME_AUTH_SESSION_STORE=${HOME}/.config/prime-agent/web-sessions.json
+Environment=PRIME_AUTH_IDLE_SECONDS=2592000
+Environment=PRIME_AUTH_ABSOLUTE_SECONDS=15552000
 ExecStart=/usr/bin/python3 ${dashboard}/auth.py
 Restart=on-failure
 RestartSec=3

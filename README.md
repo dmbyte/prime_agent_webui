@@ -23,7 +23,8 @@ skills belong outside the repository and are excluded from version control.
 - Dedicated WebUI passwords with `admin`, `power_user`, and `user` roles; Linux
   passwords and PAM are not used.
 - Private HTTPS through Nginx, secure cookies, CSRF/origin enforcement, rate and
-  connection limits, and LAN/VPN source restrictions.
+  connection limits, LAN/VPN source restrictions, and durable login sessions
+  with a 30-day idle window and 180-day maximum lifetime.
 - Native Prime RPC conversations with immediate message echo, safe live progress,
   `/steer`, `/follow-up`, and explicit stop.
 - Account-scoped collapsible projects and chats in the sidebar, with shared
@@ -66,7 +67,7 @@ providers are used.
 Clone the release and run the installer as the account that should own Prime:
 
 ```bash
-git clone --branch v0.5.13 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
+git clone --branch v0.5.14 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
 cd prime_agent_webui
 ./install.sh --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
@@ -488,6 +489,7 @@ Configuration and data live under:
   as `/project`
 - `~/.prime/agent/` — Prime sessions/settings and WebUI metadata
 - `~/.config/prime-agent/web-auth.json` — mode-0600 password records
+- `~/.config/prime-agent/web-sessions.json` — mode-0600 durable WebUI sessions
 - `/var/lib/prime-runner/users/USER/` — isolated Prime state
 - `/var/lib/prime-runner/credentials/` — protected global/per-user gateway credentials
 - `/var/lib/prime-runner/image-digests.json` — approved immutable profile images
@@ -512,7 +514,7 @@ For a manual upgrade:
 
 ```bash
 git fetch --tags origin
-git checkout v0.5.13
+git checkout v0.5.14
 ./install.sh --skip-packages --skip-prime --skip-password \
   --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
@@ -521,7 +523,7 @@ git checkout v0.5.13
 
 Read the [security hardening guide](deploy/spark/security/README.md),
 [OpenShell runtime-image guide](deploy/spark/container/README.md), and
-[OpenShell operations guide](deploy/spark/openshell/README.md). In v0.5.13,
+[OpenShell operations guide](deploy/spark/openshell/README.md). In v0.5.14,
 Prime tasks execute inside OpenShell sandboxes launched by the dedicated
 `prime-runner` service identity, with protected per-user Prime state and a
 host-visible task workspace under `~/prime-agent/tasks/USER/`. That workspace is
@@ -538,6 +540,14 @@ mode, network mode, policy-proposal mode, and local paths exactly match the save
 policy. Changing any of those controls requires the new policy to be saved in
 that scope. Role restrictions, OpenShell isolation, resource limits, and the
 read-only treatment of approved host paths remain enforced.
+
+WebUI logins remain valid for up to 30 days without activity and 180 days total,
+and survive `prime-auth.service` or WebUI updates through the private
+mode-0600 session store. Explicit sign-out, password rotation, administrator
+revocation, account disablement/deletion, idle expiry, and absolute expiry all
+invalidate access. A v0.5.14 upgrade restarts the authentication service once,
+so the first deployment may require one final sign-in before durable sessions
+take effect.
 
 This project provides research and workflow tooling, not investment advice or an
 unattended live-trading system. Keep broker credentials and deterministic risk
