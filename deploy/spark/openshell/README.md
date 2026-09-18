@@ -67,8 +67,10 @@ systemctl --user status openshell-gateway prime-dashboard-api
 deploy/spark/prime/validate.sh
 ```
 
-The gateway must listen only on loopback with mTLS. Runtime images must match
-`deploy/spark/openshell/image-digests.json`; a digest mismatch is a review gate,
+The gateway must listen only on loopback with mTLS. The installer copies the
+reviewed image context to a temporary directory, normalizes its timestamps, and
+requires every locally built image ID to match
+`deploy/spark/openshell/image-digests.json`. A mismatch remains a review gate,
 not an automatic upgrade.
 
 ## Updates

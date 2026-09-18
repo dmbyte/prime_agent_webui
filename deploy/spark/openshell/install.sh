@@ -8,7 +8,8 @@ deb_sha256=d39e93477e8a160012fc199ae1d08ddea15a2e76ba700dcf7c485593a9bd6e1b
 asset="openshell_${version}-1_arm64.deb"
 asset_url="https://github.com/NVIDIA/OpenShell/releases/download/v${version}/${asset}"
 staging=$(mktemp -d)
-trap 'rm -rf "$staging"' EXIT
+build_context=$(mktemp -d)
+trap 'rm -rf "$staging" "$build_context"' EXIT
 
 for command in docker jq setfacl rsync curl; do
   command -v "$command" >/dev/null || { echo "Missing OpenShell prerequisite: $command" >&2; exit 1; }
@@ -130,13 +131,15 @@ fi
 openshell --gateway spark-local status
 openshell --gateway spark-local settings set --global --key agent_policy_proposals_enabled --value true --yes
 
+cp -a "$repo/deploy/spark/container/." "$build_context/"
+find "$build_context" -exec touch -h -d '@0' {} +
 for profile in general development cad finance network-operations review; do
   expected_image=$(jq -r --arg profile "$profile" '.[$profile].image' "$repo/deploy/spark/openshell/image-digests.json")
   expected_id=$(jq -r --arg profile "$profile" '.[$profile].imageId' "$repo/deploy/spark/openshell/image-digests.json")
   build_image="local/prime-openshell-${profile}:0.8.0-build"
-  docker build --file "$repo/deploy/spark/container/Containerfile" \
+  docker build --file "$build_context/Containerfile" \
     --build-arg "PROFILE=$profile" --build-arg "PRIME_UID=$runner_uid" \
-    --build-arg "PRIME_GID=$runner_gid" -t "$build_image" "$repo/deploy/spark/container"
+    --build-arg "PRIME_GID=$runner_gid" -t "$build_image" "$build_context"
   actual_id=$(docker image inspect "$build_image" --format '{{.Id}}')
   test "$actual_id" = "$expected_id" || {
     echo "OpenShell image review required for $profile: expected $expected_id, built $actual_id" >&2
