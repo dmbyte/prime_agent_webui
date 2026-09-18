@@ -29,6 +29,9 @@ sudo loginctl enable-linger prime-runner
 sudo systemctl restart "user@${runner_uid}.service"
 
 sudo install -d -o prime-runner -g prime-runner -m 0700 /var/lib/prime-runner/credentials/global /var/lib/prime-runner/credentials/users /var/lib/prime-runner/users /var/lib/prime-runner/gateway /var/lib/prime-runner/openshell-policies
+for mode in restricted internet lan full; do
+  sudo install -d -o prime-runner -g prime-runner -m 0700 "/var/lib/prime-runner/gateway/${USER}/${mode}"
+done
 sudo chown prime-runner:prime-runner /var/lib/prime-runner /var/lib/prime-runner/users
 sudo chmod 0700 /var/lib/prime-runner /var/lib/prime-runner/users
 sudo setfacl -m "u:${USER}:--x,g:prime-web:--x,m::--x" /var/lib/prime-runner /var/lib/prime-runner/users

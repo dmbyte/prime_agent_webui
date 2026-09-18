@@ -31,6 +31,7 @@ class TaskCommonTests(unittest.TestCase):
         installer = (Path(__file__).parents[1] / "openshell" / "install.sh").read_text()
         self.assertIn("find \"$build_context\" -exec touch -h -d '@0'", installer)
         self.assertIn('chmod 0755 "$build_context/prime-container-entrypoint.sh"', installer)
+        self.assertIn('"/var/lib/prime-runner/gateway/${USER}/${mode}"', installer)
         self.assertIn('docker build --file "$build_context/Containerfile"', installer)
         self.assertIn('asset="openshell_${version}-1_arm64.deb"', installer)
         self.assertIn('installed_openshell=$(openshell --version', installer)

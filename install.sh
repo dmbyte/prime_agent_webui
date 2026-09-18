@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-webui_version="0.5.18"
+webui_version="0.5.19"
 prime_version="0.8.0"
 port=8443
 bind_address=""
