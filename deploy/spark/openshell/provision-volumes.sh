@@ -5,7 +5,7 @@ test "${EUID}" -ne 0 || { echo "Run as the Docker/WebUI owner, not root." >&2; e
 
 ensure_volume() {
   local name=$1 device=$2 legacy_device=${3:-} current
-  test -d "$device" || { echo "Missing Prime storage directory: $device" >&2; exit 1; }
+  sudo test -d "$device" || { echo "Missing Prime storage directory: $device" >&2; exit 1; }
   if docker volume inspect "$name" >/dev/null 2>&1; then
     current=$(docker volume inspect "$name" --format '{{ index .Options "device" }}')
     if [[ "$current" != "$device" ]]; then
