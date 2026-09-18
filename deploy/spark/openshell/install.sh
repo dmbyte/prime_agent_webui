@@ -133,6 +133,8 @@ openshell --gateway spark-local settings set --global --key agent_policy_proposa
 
 cp -a "$repo/deploy/spark/container/." "$build_context/"
 find "$build_context" -exec touch -h -d '@0' {} +
+chmod 0644 "$build_context/Containerfile"
+chmod 0755 "$build_context/prime-container-entrypoint.sh"
 for profile in general development cad finance network-operations review; do
   expected_image=$(jq -r --arg profile "$profile" '.[$profile].image' "$repo/deploy/spark/openshell/image-digests.json")
   expected_id=$(jq -r --arg profile "$profile" '.[$profile].imageId' "$repo/deploy/spark/openshell/image-digests.json")

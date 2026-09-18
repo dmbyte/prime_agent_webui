@@ -103,6 +103,6 @@ System packages are never installed during a task. Add a required binary to the
 appropriate reviewed profile in `Containerfile`, rebuild the normalized image
 context, record the immutable IDs in
 `deploy/spark/openshell/image-digests.json`, and deploy through the OpenShell
-installer. The installer normalizes copied build-context timestamps before
-requiring the exact approved image IDs. This preserves both the image-integrity
-gate and the non-root, read-only `/usr` boundary.
+installer. The installer normalizes copied build-context timestamps and modes
+before requiring the exact approved image IDs. This preserves both the
+image-integrity gate and the non-root, read-only `/usr` boundary.
