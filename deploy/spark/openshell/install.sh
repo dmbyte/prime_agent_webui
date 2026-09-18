@@ -5,7 +5,7 @@ test "${EUID}" -ne 0 || { echo "Run as the Docker/WebUI owner, not root." >&2; e
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 version=0.0.116
 deb_sha256=d39e93477e8a160012fc199ae1d08ddea15a2e76ba700dcf7c485593a9bd6e1b
-asset="openshell_${version}_arm64.deb"
+asset="openshell_${version}-1_arm64.deb"
 asset_url="https://github.com/NVIDIA/OpenShell/releases/download/v${version}/${asset}"
 staging=$(mktemp -d)
 trap 'rm -rf "$staging"' EXIT
@@ -107,9 +107,12 @@ Environment=PRIME_RUNNER_WORKSPACE_ROOT=${workspace_root}
 ReadWritePaths=/var/lib/prime-runner/users ${HOME}/prime-agent
 EOF
 
-curl -fL "$asset_url" -o "$staging/$asset"
-echo "$deb_sha256  $staging/$asset" | sha256sum --check --strict
-sudo apt-get install -y "$staging/$asset"
+installed_openshell=$(openshell --version 2>/dev/null | awk 'NR == 1 {print $2}' || true)
+if [[ "$installed_openshell" != "$version" ]]; then
+  curl -fL "$asset_url" -o "$staging/$asset"
+  echo "$deb_sha256  $staging/$asset" | sha256sum --check --strict
+  sudo apt-get install -y "$staging/$asset"
+fi
 
 install -d -m 0700 "$HOME/.config/openshell" "$HOME/.config/systemd/user/openshell-gateway.service.d"
 install -m 0600 "$repo/deploy/spark/openshell/gateway.toml" "$HOME/.config/openshell/gateway.toml"

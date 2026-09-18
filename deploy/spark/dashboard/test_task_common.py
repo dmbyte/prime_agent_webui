@@ -30,6 +30,8 @@ class TaskCommonTests(unittest.TestCase):
         self.assertIn("workspace-backup-", entrypoint)
         installer = (Path(__file__).parents[1] / "openshell" / "install.sh").read_text()
         self.assertIn('docker build --file "$repo/deploy/spark/container/Containerfile"', installer)
+        self.assertIn('asset="openshell_${version}-1_arm64.deb"', installer)
+        self.assertIn('installed_openshell=$(openshell --version', installer)
         self.assertLess(
             containerfile.index("uv-aarch64-unknown-linux-gnu.tar.gz"),
             containerfile.index('if [ "$PROFILE" = "development" ]'),
