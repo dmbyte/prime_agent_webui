@@ -11,7 +11,7 @@ ARG PRIME_GID=1000
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        bash ca-certificates curl fd-find git iproute2 jq openssh-client \
-       nftables procps python3 python3-venv ripgrep socat tini \
+       nftables procps python3 python3-pip python3-venv ripgrep socat tini \
     && curl -fsSL "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-aarch64-unknown-linux-gnu.tar.gz" -o /tmp/uv.tar.gz \
     && echo "${UV_AARCH64_SHA256}  /tmp/uv.tar.gz" | sha256sum --check --strict \
     && tar -xzf /tmp/uv.tar.gz -C /tmp \
@@ -21,7 +21,7 @@ RUN apt-get update \
        elif [ "$PROFILE" = "cad" ]; then \
          apt-get install -y --no-install-recommends openscad; \
        elif [ "$PROFILE" = "network-operations" ]; then \
-         apt-get install -y --no-install-recommends dnsutils iputils-ping nmap traceroute; \
+         apt-get install -y --no-install-recommends chromium dnsutils ipmitool iputils-ping nmap traceroute; \
        fi \
     && curl -fsSL "https://pub-728493de92a943e2a9b2d17b4719f318.r2.dev/releases/v${PRIME_AGENT_VERSION}/prime-agent-${PRIME_AGENT_VERSION}.tgz" -o /tmp/prime-agent.tgz \
     && echo "${PRIME_AGENT_SHA256}  /tmp/prime-agent.tgz" | sha256sum --check --strict \
@@ -42,7 +42,13 @@ RUN groupmod --new-name prime node \
     && install -d -o prime -g prime -m 0700 /home/prime/.prime/agent /workspace /sandbox
 
 ENV HOME=/home/prime \
-    PATH=/usr/local/bin:/usr/bin:/bin \
+    PATH=/home/prime/.prime/tools/npm/bin:/project/.venv/bin:/usr/local/bin:/usr/bin:/bin \
+    XDG_CACHE_HOME=/home/prime/.prime/cache \
+    UV_CACHE_DIR=/home/prime/.prime/cache/uv \
+    PIP_CACHE_DIR=/home/prime/.prime/cache/pip \
+    NPM_CONFIG_CACHE=/home/prime/.prime/cache/npm \
+    NPM_CONFIG_PREFIX=/home/prime/.prime/tools/npm \
+    PLAYWRIGHT_BROWSERS_PATH=/home/prime/.prime/tools/playwright \
     PRIME_AGENT_KERNEL_PYTHON=/opt/prime-kernel/bin/python \
     NODE_ENV=production
 WORKDIR /workspace

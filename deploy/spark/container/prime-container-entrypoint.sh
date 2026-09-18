@@ -1,6 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 umask 0007
+
+# The mounted Prime state is the durable home for skills, tool caches, and
+# user-level runtimes. Keep the project-visible compatibility path connected to
+# that registry so agent-authored skills cannot silently land in workspace-only
+# storage. A pre-existing workspace skill directory is copied, then retained as
+# a timestamped recovery directory rather than deleted.
+prime_state=/home/prime/.prime
+skill_registry="$prime_state/agent/skills"
+legacy_skills=/project/.prime/agent/skills
+install -d -m 0700 "$skill_registry" "$prime_state/cache/uv" "$prime_state/cache/pip" \
+  "$prime_state/cache/npm" "$prime_state/tools/npm" "$prime_state/tools/playwright"
+if test -d "$legacy_skills" && ! test -L "$legacy_skills"; then
+  cp -a "$legacy_skills/." "$skill_registry/"
+  legacy_backup="${legacy_skills}.workspace-backup-$(date -u +%Y%m%dT%H%M%SZ)"
+  mv "$legacy_skills" "$legacy_backup"
+  ln -s "$skill_registry" "$legacy_skills"
+elif ! test -e "$legacy_skills"; then
+  install -d -m 0700 "$(dirname "$legacy_skills")"
+  ln -s "$skill_registry" "$legacy_skills"
+fi
+
 socat TCP-LISTEN:31000,bind=127.0.0.1,reuseaddr,fork UNIX-CONNECT:/run/prime-gateway/model.sock &
 bridge_pid=$!
 proxy_pid=""

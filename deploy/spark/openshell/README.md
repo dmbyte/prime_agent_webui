@@ -36,11 +36,20 @@ The installer:
 8. Creates the Docker volumes that expose per-user Prime state, the
    host-visible task workspace, model gateway sockets, and approved shared
    source roots.
+9. Prepares persistent skill, package-cache, npm-tool, and Playwright-browser
+   directories inside each user's protected Prime-state volume.
 
 Inside a task sandbox, `/project` maps to `~/prime-agent/tasks/OWNER/` on the
 host. Prime state remains protected under `/var/lib/prime-runner/users/OWNER/`.
 The local-path picker still rejects arbitrary `/home` paths; the home-backed
 task workspace is the controlled exception created by the installer.
+
+Task images provide pip, uv, and npm, but tasks remain non-root and `/usr`
+remains read-only. Install Python dependencies into `/project/.venv`; npm user
+tools, package caches, downloaded browser engines, and registered skills persist
+under `/home/prime/.prime`. Package downloads require the task's **Internet**
+network mode. The `network-operations` profile includes reviewed Chromium and
+ipmitool binaries for BMC work without runtime system-package installation.
 
 The WebUI's **Security prompts** control can persist **Always allow** at a chat
 or project scope. The dashboard API accepts quiet execution/network/file

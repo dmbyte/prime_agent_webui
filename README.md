@@ -67,7 +67,7 @@ providers are used.
 Clone the release and run the installer as the account that should own Prime:
 
 ```bash
-git clone --branch v0.5.14 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
+git clone --branch v0.5.15 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
 cd prime_agent_webui
 ./install.sh --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
@@ -371,6 +371,13 @@ openshell --gateway spark-local sandbox exec
   --env NO_PROXY=127.0.0.1,localhost,::1
   --env no_proxy=127.0.0.1,localhost,::1
   --env TINI_SUBREAPER=1
+  --env PATH=/home/prime/.prime/tools/npm/bin:/project/.venv/bin:/usr/local/bin:/usr/bin:/bin
+  --env XDG_CACHE_HOME=/home/prime/.prime/cache
+  --env UV_CACHE_DIR=/home/prime/.prime/cache/uv
+  --env PIP_CACHE_DIR=/home/prime/.prime/cache/pip
+  --env NPM_CONFIG_CACHE=/home/prime/.prime/cache/npm
+  --env NPM_CONFIG_PREFIX=/home/prime/.prime/tools/npm
+  --env PLAYWRIGHT_BROWSERS_PATH=/home/prime/.prime/tools/playwright
   --env PRIME_AGENT_KERNEL_PYTHON=/opt/prime-kernel/bin/python
   --env IPYTHONDIR=/home/prime/.prime/ipython
   -- /usr/local/bin/prime-container-entrypoint
@@ -420,6 +427,28 @@ volumes:
 The local-path picker still rejects arbitrary `/home` paths. The controlled
 `~/prime-agent/tasks/USER/` workspace is the only home-backed writeable task
 mount in the default Spark recipe.
+
+### Skills and additional tools
+
+Installed skills live at `/home/prime/.prime/agent/skills` inside a task and in
+the protected per-user Prime volume on the host. For compatibility with agents
+that write beneath the work directory, `/project/.prime/agent/skills` is linked
+to the same registry. Existing workspace-only skills are copied into the
+registry and retained in a timestamped recovery directory during migration.
+
+The images include pip, uv, and npm. Use a persistent project environment for
+additional Python packages:
+
+```bash
+uv venv /project/.venv
+uv pip install --python /project/.venv/bin/python PACKAGE
+```
+
+Select **Internet** for tasks that must download packages. Caches and user-level
+npm/Playwright content persist under `/home/prime/.prime`; `/usr` remains
+read-only and tasks do not receive sudo. System binaries must be added to a
+reviewed image profile. The `network-operations` profile includes Chromium and
+ipmitool for browser-assisted BMC and IPMI work.
 
 ## Firewall examples
 
@@ -514,7 +543,7 @@ For a manual upgrade:
 
 ```bash
 git fetch --tags origin
-git checkout v0.5.14
+git checkout v0.5.15
 ./install.sh --skip-packages --skip-prime --skip-password \
   --bind-address 192.168.1.50 --server-name prime.example.lan
 ```

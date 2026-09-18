@@ -8,13 +8,12 @@ approved image, filesystem policy, resource limits, and selected network mode.
 
 ## Profiles
 
-- `general`, `finance`, and `review` contain Prime, Python, Git, curl, jq, and
-  ripgrep.
-- `development` adds native build tools, Python headers, and checksum-pinned
-  ARM64 `uv`/`uvx` 0.12.8.
+- `general`, `finance`, and `review` contain Prime, Python, pip, Git, curl, jq,
+  ripgrep, and checksum-pinned ARM64 `uv`/`uvx` 0.12.8.
+- `development` adds native build tools and Python headers.
 - `cad` adds OpenSCAD.
-- `network-operations` adds nmap, ping, DNS, and traceroute tools and is limited
-  to power users and administrators.
+- `network-operations` adds Chromium, ipmitool, nmap, ping, DNS, and traceroute
+  tools and is limited to power users and administrators.
 
 Every task receives only its owner's protected Prime state, host-visible task
 workspace, selected model gateway socket, and explicitly approved read-only
@@ -74,3 +73,34 @@ dashboard API drop-in, OpenShell gateway configuration, Docker volumes, and the
 six digest-checked task images. It also copies existing owner sessions into the
 runner state tree and workspace files into `~/prime-agent/tasks/OWNER/` so
 current conversations continue under OpenShell.
+
+## Installing skills and task dependencies
+
+Prime's persistent skill registry is
+`/home/prime/.prime/agent/skills/NAME/SKILL.md`. The compatibility path
+`/project/.prime/agent/skills` is linked to that registry when a task starts.
+If an older task created a real directory at the compatibility path, the
+entrypoint copies its contents into the registry and retains the original as a
+timestamped `skills.workspace-backup-*` directory before creating the link.
+
+Python dependencies belong in a project virtual environment, never in the
+read-only system interpreter:
+
+```bash
+uv venv /project/.venv
+uv pip install --python /project/.venv/bin/python PACKAGE
+```
+
+The runner prepends `/project/.venv/bin` to `PATH`. Python, uv, pip, npm, and
+Playwright caches are persisted beneath `/home/prime/.prime/cache`; npm global
+user tools go beneath `/home/prime/.prime/tools/npm`, and Playwright-downloaded
+browsers go beneath `/home/prime/.prime/tools/playwright`. Downloads require an
+**Internet** task network mode. Restricted tasks can use only packages already
+present in the image, `/opt/prime-kernel`, a populated project virtual
+environment, or the persistent user-tool directories.
+
+System packages are never installed during a task. Add a required binary to the
+appropriate reviewed profile in `Containerfile`, rebuild all affected images,
+record their immutable IDs in `deploy/spark/openshell/image-digests.json`, and
+deploy through the OpenShell installer. This preserves the non-root task and
+read-only `/usr` boundary.

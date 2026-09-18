@@ -54,9 +54,15 @@ sudo chown -R prime-runner:prime-runner "$owner_workspace"
 sudo setfacl -Rm "u:${USER}:rwX,g:prime-web:rwX,m::rwX,o::---" "$owner_workspace"
 sudo find "$owner_workspace" -type d -exec setfacl -m "d:u:${USER}:rwx,d:g:prime-web:rwx,d:m::rwx,d:o::---" {} +
 sudo setfacl -m "u:${USER}:--x,g:prime-web:--x,m::--x" "/var/lib/prime-runner/users/${USER}" "/var/lib/prime-runner/users/${USER}/prime" "$owner_agent"
-sudo install -d -o prime-runner -g prime-runner -m 0770 "$owner_agent/sessions" "$owner_agent/trash" "$owner_agent/project-sources"
-sudo setfacl -Rm "u:${USER}:rwx,g:prime-web:rwx,m::rwx,o::---" "$owner_agent/sessions" "$owner_agent/trash" "$owner_agent/project-sources"
-sudo find "$owner_agent/sessions" "$owner_agent/trash" "$owner_agent/project-sources" -type d -exec setfacl -m "d:u:${USER}:rwx,d:g:prime-web:rwx,d:m::rwx,d:o::---" {} +
+sudo install -d -o prime-runner -g prime-runner -m 0770 \
+  "$owner_agent/sessions" "$owner_agent/trash" "$owner_agent/project-sources" "$owner_agent/skills" \
+  "/var/lib/prime-runner/users/${USER}/prime/cache/uv" \
+  "/var/lib/prime-runner/users/${USER}/prime/cache/pip" \
+  "/var/lib/prime-runner/users/${USER}/prime/cache/npm" \
+  "/var/lib/prime-runner/users/${USER}/prime/tools/npm" \
+  "/var/lib/prime-runner/users/${USER}/prime/tools/playwright"
+sudo setfacl -Rm "u:${USER}:rwx,g:prime-web:rwx,m::rwx,o::---" "$owner_agent/sessions" "$owner_agent/trash" "$owner_agent/project-sources" "$owner_agent/skills"
+sudo find "$owner_agent/sessions" "$owner_agent/trash" "$owner_agent/project-sources" "$owner_agent/skills" -type d -exec setfacl -m "d:u:${USER}:rwx,d:g:prime-web:rwx,d:m::rwx,d:o::---" {} +
 
 sudo install -d -o root -g root -m 0755 /usr/local/lib/prime-runner /usr/local/libexec
 sudo install -o root -g root -m 0644 "$repo/deploy/spark/container/task_common.py" "$repo/deploy/spark/container/model_gateway.py" "$repo/deploy/spark/container/openshell_runner.py" /usr/local/lib/prime-runner/
@@ -125,7 +131,9 @@ for profile in general development cad finance network-operations review; do
   expected_image=$(jq -r --arg profile "$profile" '.[$profile].image' "$repo/deploy/spark/openshell/image-digests.json")
   expected_id=$(jq -r --arg profile "$profile" '.[$profile].imageId' "$repo/deploy/spark/openshell/image-digests.json")
   build_image="local/prime-openshell-${profile}:0.8.0-build"
-  docker build --build-arg "PROFILE=$profile" --build-arg "PRIME_UID=$runner_uid" --build-arg "PRIME_GID=$runner_gid" -t "$build_image" "$repo/deploy/spark/container"
+  docker build --file "$repo/deploy/spark/container/Containerfile" \
+    --build-arg "PROFILE=$profile" --build-arg "PRIME_UID=$runner_uid" \
+    --build-arg "PRIME_GID=$runner_gid" -t "$build_image" "$repo/deploy/spark/container"
   actual_id=$(docker image inspect "$build_image" --format '{{.Id}}')
   test "$actual_id" = "$expected_id" || {
     echo "OpenShell image review required for $profile: expected $expected_id, built $actual_id" >&2

@@ -22,6 +22,14 @@ class TaskCommonTests(unittest.TestCase):
         self.assertIn("PRIME_AGENT_KERNEL_PYTHON=/opt/prime-kernel/bin/python", containerfile)
         self.assertIn("ipykernel /usr/local/lib/node_modules/prime-agent/dist/prime-agent-runtime", containerfile)
         self.assertIn("uv venv --python /usr/bin/python3.11 /opt/prime-kernel", containerfile)
+        self.assertIn("python3-pip", containerfile)
+        self.assertIn("UV_CACHE_DIR=/home/prime/.prime/cache/uv", containerfile)
+        self.assertIn("chromium dnsutils ipmitool", containerfile)
+        entrypoint = (Path(__file__).parents[1] / "container" / "prime-container-entrypoint.sh").read_text()
+        self.assertIn("skill_registry=\"$prime_state/agent/skills\"", entrypoint)
+        self.assertIn("workspace-backup-", entrypoint)
+        installer = (Path(__file__).parents[1] / "openshell" / "install.sh").read_text()
+        self.assertIn('docker build --file "$repo/deploy/spark/container/Containerfile"', installer)
         self.assertLess(
             containerfile.index("uv-aarch64-unknown-linux-gnu.tar.gz"),
             containerfile.index('if [ "$PROFILE" = "development" ]'),

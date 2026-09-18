@@ -49,6 +49,13 @@ done
 
 while IFS= read -r owner; do
   [[ $owner =~ ^[A-Za-z0-9_.-]{2,32}$ ]] || { echo "Unsafe Prime owner directory: $owner" >&2; exit 1; }
+  sudo install -d -o prime-runner -g prime-runner -m 0770 \
+    "/var/lib/prime-runner/users/${owner}/prime/agent/skills" \
+    "/var/lib/prime-runner/users/${owner}/prime/cache/uv" \
+    "/var/lib/prime-runner/users/${owner}/prime/cache/pip" \
+    "/var/lib/prime-runner/users/${owner}/prime/cache/npm" \
+    "/var/lib/prime-runner/users/${owner}/prime/tools/npm" \
+    "/var/lib/prime-runner/users/${owner}/prime/tools/playwright"
   owner_workspace=$(ensure_workspace "$owner")
   ensure_volume "prime-${owner}-prime" "/var/lib/prime-runner/users/${owner}/prime"
   ensure_volume "prime-${owner}-workspace" "$owner_workspace" "/var/lib/prime-runner/users/${owner}/workspace"
