@@ -1,8 +1,8 @@
 {
-  "general": {"image": "local/prime-openshell-general:0.8.0-300e1fad5c1f", "imageId": "sha256:300e1fad5c1f4ccb50ea10b8344b305b5b78aa0f2af75765329717e4fec80b44"},
-  "development": {"image": "local/prime-openshell-development:0.8.0-b9e0c756878c", "imageId": "sha256:b9e0c756878c16172254d271a3071879ecbea0201fe1d532ef68f7217e949ecd"},
-  "cad": {"image": "local/prime-openshell-cad:0.8.0-cda943c7b618", "imageId": "sha256:cda943c7b61893832fe9853a45565a259fb25f11380d8e2da6e6f3b9a22fe556"},
-  "finance": {"image": "local/prime-openshell-finance:0.8.0-3e8d4cbc3790", "imageId": "sha256:3e8d4cbc37901dc2152315493f1fe41b9a6767f8625cc769cdf7daa3252ad03d"},
-  "network-operations": {"image": "local/prime-openshell-network-operations:0.8.0-1494b3891599", "imageId": "sha256:1494b3891599b6ff9c6a4e58b3622f265f9f727fcb1a0fcc51981e621ad6f45a"},
-  "review": {"image": "local/prime-openshell-review:0.8.0-6a780a8a4d24", "imageId": "sha256:6a780a8a4d2441c1f38a3ad56290cd0eeff79cf9c1ec1d65ebc2d5e738273675"}
+  "general": {"image": "local/prime-openshell-general:0.8.0-6084c1028e3c", "imageId": "sha256:6084c1028e3c9e9281fe369ce60ae9e26f86f8687d6a87b80f69e19ba8fb9ee3"},
+  "development": {"image": "local/prime-openshell-development:0.8.0-1f7d919d6529", "imageId": "sha256:1f7d919d6529ee5f91e94dec4de8bb9423cd56c1a2b4dcf28112120d21efcd90"},
+  "cad": {"image": "local/prime-openshell-cad:0.8.0-5fee20d92898", "imageId": "sha256:5fee20d92898b1e0b65360ac6844036a9acf15c0445dc991ac335de823fe8c28"},
+  "finance": {"image": "local/prime-openshell-finance:0.8.0-1fc71484b6d9", "imageId": "sha256:1fc71484b6d9f7f7f713219fe3f23dd76e0e1efe197f645b873e4a26f47500fc"},
+  "network-operations": {"image": "local/prime-openshell-network-operations:0.8.0-a9bf0467e07e", "imageId": "sha256:a9bf0467e07e77afb873a3549ec68ff8469984b81672dad96416288fd7d22f21"},
+  "review": {"image": "local/prime-openshell-review:0.8.0-b5e86ef15ced", "imageId": "sha256:b5e86ef15ced061e13bbb956a01fcadaee5011489d0b4d70d47214683a51ab4b"}
 }

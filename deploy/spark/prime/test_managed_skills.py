@@ -47,6 +47,8 @@ class ManagedSkillTests(unittest.TestCase):
         installer = (ROOT.parent / "openshell/install.sh").read_text()
         self.assertIn("COPY --chown=root:root managed-skills /opt/prime-managed-skills", containerfile)
         self.assertIn("playwright==1.63.0", containerfile)
+        self.assertIn("-name __pycache__", installer)
+        self.assertIn("-name '*.pyc'", installer)
         for name in load_installer().BUNDLED_SKILLS:
             self.assertIn(f"/opt/prime-managed-skills/{name}", containerfile)
             self.assertIn("$repo/deploy/spark/prime/skills/$skill", installer)
