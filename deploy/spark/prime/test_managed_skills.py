@@ -42,6 +42,15 @@ class ManagedSkillTests(unittest.TestCase):
         self.assertNotIn("apt-get", browser)
         self.assertNotIn("playwright install", browser)
 
+    def test_immutable_kernel_contains_managed_modules(self):
+        containerfile = (ROOT.parent / "container/Containerfile").read_text()
+        installer = (ROOT.parent / "openshell/install.sh").read_text()
+        self.assertIn("COPY --chown=root:root managed-skills /opt/prime-managed-skills", containerfile)
+        self.assertIn("playwright==1.63.0", containerfile)
+        for name in load_installer().BUNDLED_SKILLS:
+            self.assertIn(f"/opt/prime-managed-skills/{name}", containerfile)
+            self.assertIn("$repo/deploy/spark/prime/skills/$skill", installer)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -54,7 +54,17 @@ ENV HOME=/home/prime \
 WORKDIR /workspace
 USER prime
 COPY --chown=root:root prime-container-entrypoint.sh /usr/local/bin/prime-container-entrypoint
+COPY --chown=root:root managed-skills /opt/prime-managed-skills
 USER root
-RUN chmod 0755 /usr/local/bin/prime-container-entrypoint
+RUN uv pip install --python /opt/prime-kernel/bin/python --no-deps \
+       /opt/prime-managed-skills/bmc-headless-browser \
+       /opt/prime-managed-skills/ipmi-redfish-bmc \
+       /opt/prime-managed-skills/prime-nvidia-catalog \
+    && if [ "$PROFILE" = "network-operations" ]; then \
+         uv pip install --python /opt/prime-kernel/bin/python playwright==1.63.0; \
+       fi \
+    && /opt/prime-kernel/bin/python -c \
+       'import bmc_headless_browser, ipmi_redfish_bmc, prime_nvidia_catalog' \
+    && chmod 0755 /usr/local/bin/prime-container-entrypoint
 USER prime
 ENTRYPOINT ["/usr/local/bin/prime-container-entrypoint"]

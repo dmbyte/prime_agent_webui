@@ -5,9 +5,8 @@ from __future__ import annotations
 import os
 import shutil
 from pathlib import Path
+from typing import Any
 from urllib.parse import urljoin, urlparse
-
-from playwright.async_api import Browser, BrowserContext, Page, Playwright, async_playwright
 
 
 def _browser_executable() -> str:
@@ -31,12 +30,16 @@ class BMCBrowser:
         self.base_url = base_url.rstrip("/") + "/"
         self.ignore_https_errors = bool(ignore_https_errors)
         self.timeout_ms = int(timeout_ms)
-        self._playwright: Playwright | None = None
-        self._browser: Browser | None = None
-        self._context: BrowserContext | None = None
-        self._page: Page | None = None
+        self._playwright: Any = None
+        self._browser: Any = None
+        self._context: Any = None
+        self._page: Any = None
 
     async def __aenter__(self) -> "BMCBrowser":
+        try:
+            from playwright.async_api import async_playwright
+        except ImportError as error:
+            raise RuntimeError("Playwright is available only in the network-operations profile") from error
         self._playwright = await async_playwright().start()
         self._browser = await self._playwright.chromium.launch(
             executable_path=_browser_executable(),
@@ -55,7 +58,7 @@ class BMCBrowser:
         await self.close()
 
     @property
-    def page(self) -> Page:
+    def page(self) -> Any:
         if self._page is None:
             raise RuntimeError("Use BMCBrowser as an async context manager")
         return self._page

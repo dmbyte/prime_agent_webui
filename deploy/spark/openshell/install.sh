@@ -139,6 +139,10 @@ openshell --gateway spark-local status
 openshell --gateway spark-local settings set --global --key agent_policy_proposals_enabled --value true --yes
 
 cp -a "$repo/deploy/spark/container/." "$build_context/"
+install -d -m 0755 "$build_context/managed-skills"
+for skill in bmc-headless-browser ipmi-redfish-bmc prime-nvidia-catalog; do
+  cp -a "$repo/deploy/spark/prime/skills/$skill" "$build_context/managed-skills/"
+done
 find "$build_context" -exec touch -h -d '@0' {} +
 chmod 0644 "$build_context/Containerfile"
 chmod 0755 "$build_context/prime-container-entrypoint.sh"

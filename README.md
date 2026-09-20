@@ -67,7 +67,7 @@ providers are used.
 Clone the release and run the installer as the account that should own Prime:
 
 ```bash
-git clone --branch v0.5.23 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
+git clone --branch v0.5.24 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
 cd prime_agent_webui
 ./install.sh --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
@@ -479,7 +479,10 @@ ipmitool for browser-assisted BMC and IPMI work.
 The supported Spark bundle includes Prime-native `bmc-headless-browser` and
 `ipmi-redfish-bmc` packages. The browser adapter uses the profile's existing
 Chromium, and both adapters require explicit confirmation before any
-power-changing action. Credentials are supplied only at runtime.
+power-changing action. Credentials are supplied only at runtime. Prime sees the
+short skill metadata for routing, but imports these adapters only after a task
+selects them. Playwright is present only in the `network-operations` image and
+starts only when the BMC browser is opened.
 
 `deploy/spark/prime/install-skills.sh` also validates and stores all 366 upstream
 NVIDIA skills unchanged in protected global Prime state. Prime advertises one
@@ -586,7 +589,7 @@ For a manual upgrade:
 
 ```bash
 git fetch --tags origin
-git checkout v0.5.23
+git checkout v0.5.24
 ./install.sh --skip-packages --skip-prime --skip-password \
   --bind-address 192.168.1.50 --server-name prime.example.lan
 ```

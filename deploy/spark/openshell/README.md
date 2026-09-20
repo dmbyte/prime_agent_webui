@@ -72,7 +72,10 @@ run `apt` or download a Playwright browser. Both BMC packages require runtime
 credentials, never store them, and require an explicit `confirm=True` gate for
 power-changing actions. Their presence does not grant LAN access: select the
 role-authorized `network-operations` profile and LAN policy for an actual BMC
-task.
+task. The small Python adapters are preinstalled in Prime's immutable kernel so
+Prime can invoke them reliably, but they are imported only when selected.
+Playwright is installed only in `network-operations` and starts only when the
+headless browser context is opened.
 
 The WebUI's **Security prompts** control can persist **Always allow** at a chat
 or project scope. The dashboard API accepts quiet execution/network/file
