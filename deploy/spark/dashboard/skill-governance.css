@@ -1,0 +1,17 @@
+.skill-dialog{width:min(680px,92vw)}
+.skill-dialog form{height:calc(100% - 55px);overflow:auto;padding:15px 18px}
+.skill-dialog fieldset{border:1px solid var(--line);border-radius:9px;margin:12px 0;padding:8px 10px}
+.skill-check{display:flex;align-items:center;gap:8px;margin:6px 0}
+.skill-check input{width:auto}
+.skill-toolbar{display:flex;justify-content:flex-end;margin-bottom:8px}
+.skill-row{display:flex;align-items:flex-start;gap:10px}
+.skill-row>div{min-width:0;flex:1}
+.skill-row strong,.skill-row small{display:block}
+.skill-row p,.skill-admin-row p{margin:6px 0 0;color:var(--muted);font-size:10px;overflow-wrap:anywhere}
+.skill-admin-row{align-items:flex-start}
+.skill-admin-actions{display:flex!important;flex:0 0 auto!important;gap:5px}
+.skill-admin-actions button{font-size:10px;padding:6px 8px}
+.tool-inventory{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.tool-inventory .admin-card{margin:0}
+.status-pill{display:inline-flex;padding:2px 7px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:9px;white-space:nowrap}
+@media(max-width:600px){.tool-inventory{grid-template-columns:1fr}.skill-admin-row{display:block}.skill-admin-actions{margin-top:8px}}

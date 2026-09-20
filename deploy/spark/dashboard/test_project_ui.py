@@ -67,6 +67,19 @@ class ProjectUiTests(unittest.TestCase):
         self.assertIn(".telemetry-card:hover", css)
         self.assertIn("transform:scale(1.9)", css)
 
+    def test_skills_have_user_request_admin_review_and_project_selection(self):
+        index = (ROOT / "index.html").read_text()
+        app = (ROOT / "app-v2.js").read_text()
+        css = (ROOT / "skill-governance.css").read_text()
+        installer = (ROOT / "install-static.sh").read_text()
+        self.assertIn('id="skillRequestDialog"', index)
+        self.assertIn("function submitSkillRequest", app)
+        self.assertIn("function renderSkillAdmin", app)
+        self.assertIn("function renderProjectSkills", app)
+        self.assertIn('skillIds:', app)
+        self.assertIn(".skill-admin-row", css)
+        self.assertIn("skill-governance.css", installer)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -67,7 +67,7 @@ providers are used.
 Clone the release and run the installer as the account that should own Prime:
 
 ```bash
-git clone --branch v0.5.20 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
+git clone --branch v0.5.21 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
 cd prime_agent_webui
 ./install.sh --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
@@ -436,6 +436,29 @@ that write beneath the work directory, `/project/.prime/agent/skills` is linked
 to the same registry. Existing workspace-only skills are copied into the
 registry and retained in a timestamped recovery directory during migration.
 
+The WebUI provides a governed **Skills & tools** workflow:
+
+1. A user opens **Settings → Skills & tools**, chooses **Request skill**, and
+   uploads a ZIP containing exactly one `SKILL.md` at the archive root or inside
+   one top-level directory. The request declares intended access, project
+   dependencies, and any required system tools.
+2. An administrator reviews the request under **Admin → Skills & tools**. The UI
+   exposes the requesting account, scope, archive SHA-256, requested access,
+   dependencies, and system tools before approval.
+3. Approval safely validates and unpacks instruction skills into the requesting
+   user's host-visible `~/prime-agent/tasks/USER/.prime/agent/skills/` registry.
+   Existing same-name installs are moved to recovery storage. Approval never
+   executes package managers or grants root.
+4. An approved skill can be enabled for a project in **Project settings →
+   Project skills**. New project chats receive that selection as shared context.
+   Administrators can later disable, re-enable, deny, or recoverably remove it.
+
+Requests for operating-system tools enter the `Sandbox image change required`
+state. They must be added to a reviewed, rebuilt, digest-pinned OpenShell image;
+the dashboard does not install them into a live task. Python/npm dependencies
+remain explicit review data and are installed only through the normal
+non-root project-environment workflow below.
+
 The images include pip, uv, and npm. Use a persistent project environment for
 additional Python packages:
 
@@ -543,7 +566,7 @@ For a manual upgrade:
 
 ```bash
 git fetch --tags origin
-git checkout v0.5.20
+git checkout v0.5.21
 ./install.sh --skip-packages --skip-prime --skip-password \
   --bind-address 192.168.1.50 --server-name prime.example.lan
 ```

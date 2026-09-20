@@ -13,6 +13,7 @@ required=(
   deploy/spark/dashboard/app-v2.js
   deploy/spark/dashboard/auth.py
   deploy/spark/dashboard/index.html
+  deploy/spark/dashboard/skill-governance.css
   deploy/spark/nginx/prime-agent.conf
   deploy/spark/nginx/prime-security.conf
   deploy/spark/update/update-prime-agent.sh
@@ -39,7 +40,7 @@ required=(
   deploy/spark/llama-qwen38/llama.env.template
   deploy/spark/llama-qwen38/start.sh
   deploy/spark/systemd/llama-qwen38.service
-  docs/releases/v0.5.20.md
+  docs/releases/v0.5.21.md
 )
 for path in "${required[@]}"; do
   [[ -f $path ]] || { echo "Missing release file: $path" >&2; exit 1; }
@@ -59,7 +60,7 @@ else
 fi
 
 grep -Fq 'docs/prime-webui-sample.jpg' README.md
-grep -Fq 'v0.5.20' README.md
+grep -Fq 'v0.5.21' README.md
 grep -Fq 'does **not** authenticate with PAM' README.md
 grep -Fq 'prime-web-password' README.md
 echo "Release validation passed."

@@ -10,6 +10,7 @@ import select
 import shutil
 import signal
 import subprocess
+import tempfile
 import threading
 import time
 import urllib.parse
@@ -295,6 +296,218 @@ def save_metadata(data):
         legacy.atomic_json(META, data)
 
 
+SKILL_PERMISSIONS = {"instructions", "execution", "internet", "local-files", "credentials"}
+SKILL_STATUSES = {"pending", "installed", "denied", "disabled", "image-required", "removed"}
+
+
+def skill_catalog(user=None, admin=False):
+    rows = []
+    for skill_id, value in metadata().get("skills", {}).items():
+        if not isinstance(value, dict) or not admin and value.get("owner", INITIAL_ADMIN) != user:
+            continue
+        row = {"id": skill_id, **value}
+        row.setdefault("description", "")
+        row.setdefault("scope", "personal")
+        row.setdefault("sourceHash", "")
+        row.setdefault("dependencies", [])
+        row.setdefault("permissions", [])
+        row.setdefault("systemTools", [])
+        row.setdefault("status", "pending")
+        row.setdefault("enabled", False)
+        row.pop("installPath", None)
+        rows.append(row)
+    return sorted(rows, key=lambda row: row.get("createdAt", ""), reverse=True)
+
+
+def tool_inventory():
+    return [
+        {"profile": "General", "tools": ["Python", "pip", "uv", "npm", "git", "curl", "jq", "ripgrep"]},
+        {"profile": "Development", "tools": ["General tools", "C/C++ build tools", "Python headers"]},
+        {"profile": "CAD / 3D", "tools": ["General tools", "OpenSCAD"]},
+        {"profile": "Network operations", "tools": ["General tools", "Chromium", "ipmitool", "nmap", "ping", "DNS tools", "traceroute"]},
+        {"profile": "Finance / review", "tools": ["General tools"]},
+    ]
+
+
+def normalize_skill_list(values, label, maximum=30):
+    if values is None:
+        return []
+    if not isinstance(values, list):
+        raise ValueError(f"{label} must be a list")
+    clean = []
+    for value in values:
+        item = re.sub(r"\s+", " ", str(value)).strip()[:160]
+        if item and item not in clean:
+            clean.append(item)
+    if len(clean) > maximum:
+        raise ValueError(f"Choose no more than {maximum} {label.lower()}")
+    return clean
+
+
+def request_skill(payload, user):
+    payload = payload if isinstance(payload, dict) else {}
+    name = re.sub(r"\s+", " ", str(payload.get("name") or "")).strip()[:80]
+    description = str(payload.get("description") or "").strip()[:1000]
+    slug = re.sub(r"[^a-z0-9]+", "-", name.casefold()).strip("-")[:48]
+    if not name or not slug:
+        raise ValueError("Skill name is required")
+    source_file_id = str(payload.get("sourceFileId") or "")
+    source = upload_path(source_file_id, user)
+    if not zipfile.is_zipfile(source):
+        raise ValueError("Skills must be supplied as a ZIP archive")
+    inspect_skill_archive(source)
+    project_id = str(payload.get("projectId") or "")
+    scope = "project" if project_id else "personal"
+    if project_id:
+        require_project(project_id, user)
+    permissions = normalize_skill_list(payload.get("permissions"), "Permissions", 5)
+    if not set(permissions).issubset(SKILL_PERMISSIONS):
+        raise ValueError("Unsupported skill permission")
+    dependencies = normalize_skill_list(payload.get("dependencies"), "Dependencies")
+    system_tools = normalize_skill_list(payload.get("systemTools"), "System tools")
+    skill_id = f"s_{uuid.uuid4().hex[:24]}"
+    row = {
+        "owner": user, "name": name, "slug": slug, "description": description,
+        "scope": scope, "projectId": project_id or None, "sourceFileId": source_file_id,
+        "sourceName": source.name.split("-", 1)[-1],
+        "sourceHash": hashlib.sha256(source.read_bytes()).hexdigest(),
+        "dependencies": dependencies, "permissions": permissions,
+        "systemTools": system_tools, "status": "pending", "enabled": False,
+        "createdAt": now_iso(),
+    }
+    data = metadata()
+    data.setdefault("skills", {})[skill_id] = row
+    save_metadata(data)
+    legacy.audit("skill_requested", skill=skill_id, owner=user, scope=scope,
+                 permissions=permissions, dependencies=len(dependencies), systemTools=len(system_tools))
+    return {"id": skill_id, **row}
+
+
+def inspect_skill_archive(path):
+    if not zipfile.is_zipfile(path):
+        raise ValueError("Skills must be supplied as a ZIP archive")
+    file_count = total_size = 0
+    skill_files = []
+    with zipfile.ZipFile(path) as archive:
+        for info in archive.infolist():
+            candidate = Path(info.filename)
+            mode = (info.external_attr >> 16) & 0o170000
+            if candidate.is_absolute() or ".." in candidate.parts or mode not in {0, 0o100000}:
+                raise ValueError("Skill archive contains an unsafe path or link")
+            if info.is_dir():
+                continue
+            file_count += 1
+            total_size += info.file_size
+            if candidate.name == "SKILL.md":
+                skill_files.append(candidate)
+    if not file_count or file_count > 200 or total_size > 20 * 1024 * 1024:
+        raise ValueError("Skill archives are limited to 200 files and 20 MiB unpacked")
+    if len(skill_files) != 1 or len(skill_files[0].parts) > 2:
+        raise ValueError("The archive must contain one SKILL.md at its root or in one top-level folder")
+    return skill_files[0].parent
+
+
+def skill_install_root(user):
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{2,32}", str(user)):
+        raise ValueError("Invalid skill owner")
+    workspace = Path(os.environ.get("PRIME_RUNNER_WORKSPACE_ROOT", str(legacy.HOME / "prime-agent/tasks")))
+    return workspace / user / ".prime/agent/skills"
+
+
+def install_skill_archive(row):
+    source = upload_path(row["sourceFileId"], row["owner"])
+    prefix = inspect_skill_archive(source)
+    root = skill_install_root(row["owner"])
+    root.mkdir(mode=0o755, parents=True, exist_ok=True)
+    target = root / row["slug"]
+    recovery_root = root.parent / "skill-recovery"
+    with tempfile.TemporaryDirectory(prefix=".skill-stage-", dir=root) as temporary:
+        stage = Path(temporary) / row["slug"]
+        stage.mkdir()
+        with zipfile.ZipFile(source) as archive:
+            for info in archive.infolist():
+                if info.is_dir():
+                    continue
+                parts = Path(info.filename).parts[len(prefix.parts):]
+                if not parts:
+                    continue
+                destination = stage.joinpath(*parts)
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                with archive.open(info) as source_file, destination.open("wb") as target_file:
+                    shutil.copyfileobj(source_file, target_file)
+                os.chmod(destination, 0o644)
+        if not (stage / "SKILL.md").is_file():
+            raise ValueError("SKILL.md was not found after validation")
+        if target.exists():
+            recovery_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+            os.replace(target, recovery_root / f"{row['slug']}-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:8]}")
+        os.replace(stage, target)
+    return target
+
+
+def review_skill(payload, reviewer):
+    action = str(payload.get("action") or "")
+    skill_id = str(payload.get("id") or "")
+    data = metadata()
+    row = data.get("skills", {}).get(skill_id)
+    if not isinstance(row, dict):
+        raise ValueError("Skill request not found")
+    if action == "approve":
+        if row.get("status") != "pending":
+            raise ValueError("Only pending skill requests can be approved")
+        if row.get("systemTools"):
+            row.update(status="image-required", enabled=False,
+                       reviewNote="System tools require a reviewed sandbox image update.")
+        else:
+            target = install_skill_archive(row)
+            row.update(status="installed", enabled=True, installPath=str(target), installedAt=now_iso(), reviewNote="")
+            if row.get("scope") == "project":
+                project = data.get("projects", {}).get(row.get("projectId"))
+                if isinstance(project, dict) and project.get("owner", INITIAL_ADMIN) == row.get("owner"):
+                    project.setdefault("skillIds", [])
+                    if skill_id not in project["skillIds"]:
+                        project["skillIds"].append(skill_id)
+                    project["updatedAt"] = now_iso()
+    elif action == "deny":
+        row.update(status="denied", enabled=False, reviewNote=str(payload.get("note") or "Request was not approved")[:500])
+    elif action in {"enable", "disable"}:
+        if row.get("status") not in {"installed", "disabled"}:
+            raise ValueError("Only installed skills can be enabled or disabled")
+        row.update(status="installed" if action == "enable" else "disabled", enabled=action == "enable")
+    elif action == "remove":
+        target = Path(row.get("installPath") or skill_install_root(row["owner"]) / row["slug"])
+        if target.is_dir() and skill_install_root(row["owner"]).resolve() in target.resolve().parents:
+            recovery = target.parent.parent / "skill-recovery" / f"{row['slug']}-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:8]}"
+            recovery.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            os.replace(target, recovery)
+        row.update(status="removed", enabled=False, removedAt=now_iso())
+        for project in data.get("projects", {}).values():
+            if isinstance(project, dict):
+                project["skillIds"] = [value for value in project.get("skillIds", []) if value != skill_id]
+    else:
+        raise ValueError("Unsupported skill review action")
+    row.update(reviewedAt=now_iso(), reviewedBy=reviewer)
+    save_metadata(data)
+    legacy.audit("skill_reviewed", skill=skill_id, owner=row.get("owner"), reviewer=reviewer, action=action, status=row["status"])
+    return {"id": skill_id, **{key: value for key, value in row.items() if key != "installPath"}}
+
+
+def normalize_skill_ids(values, user, project_id=None, maximum=40):
+    available = {row["id"] for row in skill_catalog(user)
+                 if row.get("status") == "installed" and row.get("enabled")
+                 and (row.get("scope") != "project" or row.get("projectId") == project_id)}
+    selected = []
+    for value in values or []:
+        value = str(value)
+        if value not in available:
+            raise ValueError("A selected project skill is unavailable")
+        if value not in selected:
+            selected.append(value)
+    if len(selected) > maximum:
+        raise ValueError(f"Choose no more than {maximum} project skills")
+    return selected
+
+
 def container_mode():
     return os.environ.get("PRIME_TASK_RUNTIME") == "openshell"
 
@@ -346,6 +559,7 @@ def project_catalog(user=INITIAL_ADMIN):
                      "icon": project.get("icon", "folder"), "color": project.get("color", "blue"),
                      "instructions": project.get("instructions", ""),
                      "fileIds": list(project.get("fileIds", [])),
+                     "skillIds": list(project.get("skillIds", [])),
                      "taskPolicy": dict(project.get("taskPolicy") or {"profile": "general", "executionMode": "prompt", "networkMode": "restricted", "approvalMode": "manual", "confirmationMode": "prompt"}),
                      "pinned": bool(project.get("pinned")),
                      "createdAt": project.get("createdAt"), "updatedAt": project.get("updatedAt"),
@@ -411,7 +625,7 @@ def sync_project_sources(project_id, user, file_ids):
     return rows
 
 
-def normalize_project_fields(payload, user, role="user"):
+def normalize_project_fields(payload, user, role="user", project_id=None):
     payload = payload if isinstance(payload, dict) else {}
     name = re.sub(r"\s+", " ", str(payload.get("name", ""))).strip()[:80]
     if not name:
@@ -426,12 +640,14 @@ def normalize_project_fields(payload, user, role="user"):
     if len(instructions) > 8000:
         raise ValueError("Project instructions are limited to 8,000 characters")
     file_ids = normalize_file_ids(payload.get("fileIds"), user, 40)
+    skill_ids = normalize_skill_ids(payload.get("skillIds"), user, project_id, 40)
     task_policy_value = policy_preference(payload.get("taskPolicy"), role)
     task_policy_value.setdefault("approvalMode", "manual")
     task_policy_value.setdefault("confirmationMode", "prompt")
     task_policy_value.setdefault("localPaths", [])
     return {"name": name, "icon": icon, "color": color, "instructions": instructions,
-            "fileIds": file_ids, "taskPolicy": task_policy_value, "pinned": bool(payload.get("pinned"))}
+            "fileIds": file_ids, "skillIds": skill_ids,
+            "taskPolicy": task_policy_value, "pinned": bool(payload.get("pinned"))}
 
 
 def create_project(payload, user=INITIAL_ADMIN, role="user"):
@@ -449,7 +665,7 @@ def create_project(payload, user=INITIAL_ADMIN, role="user"):
 def update_project(project_id, payload, user=INITIAL_ADMIN, role="user"):
     data = metadata()
     current = require_project(project_id, user, data)
-    fields = normalize_project_fields({**current, **(payload if isinstance(payload, dict) else {})}, user, role)
+    fields = normalize_project_fields({**current, **(payload if isinstance(payload, dict) else {})}, user, role, project_id)
     current.update(fields)
     current["updatedAt"] = now_iso()
     save_metadata(data)
@@ -568,6 +784,13 @@ def project_context(project_id, user):
     if sources:
         sections.append("Project source files (shared by every chat in this project):\n" +
                         "\n".join(f"- {value}" for value in sources))
+    enabled = {row["id"]: row for row in skill_catalog(user)
+               if row.get("status") == "installed" and row.get("enabled")}
+    skills = [enabled[value] for value in project.get("skillIds", []) if value in enabled
+              and (enabled[value].get("scope") != "project" or enabled[value].get("projectId") == project_id)]
+    if skills:
+        sections.append("Enabled project skills (use when relevant; their reviewed instructions are available in Prime's skill registry):\n" +
+                        "\n".join(f"- {row['name']}: /home/prime/.prime/agent/skills/{row['slug']}/SKILL.md" for row in skills))
     if not sections:
         return ""
     return "\n\n<prime_project_context>\n" + "\n\n".join(sections) + "\n</prime_project_context>"
@@ -1431,6 +1654,14 @@ def purge_user_cache(username):
     for project_id, row in list(data.get("projects", {}).items()):
         if row.get("owner", INITIAL_ADMIN) == username:
             data["projects"].pop(project_id, None)
+    for skill_id, row in list(data.get("skills", {}).items()):
+        if row.get("owner", INITIAL_ADMIN) == username:
+            data["skills"].pop(skill_id, None)
+    installed_skills = skill_install_root(username)
+    if installed_skills.is_dir():
+        target = recovery / "skills"
+        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        os.replace(installed_skills, target)
     with TASK_LOCK:
         owned_tasks = {task_id for task_id, row in TASKS.items() if row.get("owner", INITIAL_ADMIN) == username}
     owned_tasks.update(task_id for task_id, row in data.get("tasks", {}).items() if row.get("owner", INITIAL_ADMIN) == username)
@@ -1595,8 +1826,12 @@ def apply_retention(days):
     data["retentionDays"] = days
     save_metadata(data)
     cutoff = time.time() - days * 86400
+    retained_skill_files = {row.get("sourceFileId") for row in data.get("skills", {}).values()
+                            if isinstance(row, dict) and row.get("status") in {"pending", "image-required"}}
     removed = 0
     for row in upload_rows():
+        if row["id"] in retained_skill_files:
+            continue
         path = upload_path(row["id"])
         if path.stat().st_mtime < cutoff:
             path.unlink()
@@ -1722,6 +1957,8 @@ class Handler(legacy.Handler):
             elif path == "/api/files":
                 rows = upload_rows(self.request_user())
                 self.send_json(200, {"files": rows, "usedBytes": sum(row["sizeBytes"] for row in rows), "limitBytes": legacy.MAX_UPLOAD_STORAGE_BYTES})
+            elif path == "/api/skills":
+                self.send_json(200, {"skills": skill_catalog(self.request_user()), "toolProfiles": tool_inventory()})
             elif path == "/api/files/content":
                 file = upload_path(query.get("id", [""])[0], self.request_user())
                 if file.stat().st_size > 10 * 1024 * 1024:
@@ -1742,6 +1979,9 @@ class Handler(legacy.Handler):
             elif path == "/api/admin/routing-rules":
                 self.require_admin()
                 self.send_json(200, {"rules": routing_rules()})
+            elif path == "/api/admin/skills":
+                self.require_admin()
+                self.send_json(200, {"skills": skill_catalog(admin=True), "toolProfiles": tool_inventory()})
             else:
                 super().do_GET()
         except ValueError as error:
@@ -1752,7 +1992,7 @@ class Handler(legacy.Handler):
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
-        v2 = {"/api/settings", "/api/tasks/start", "/api/tasks/stop", "/api/tasks/message", "/api/tasks/authorization", "/api/conversations/update", "/api/conversations/delete", "/api/conversations/duplicate", "/api/conversations/promote", "/api/projects/create", "/api/projects/update", "/api/projects/delete", "/api/files/delete", "/api/admin/restart", "/api/admin/retention", "/api/admin/update", "/api/admin/user-cache", "/api/admin/routing-rules", "/api/providers/configure", "/api/files/upload"}
+        v2 = {"/api/settings", "/api/skills", "/api/tasks/start", "/api/tasks/stop", "/api/tasks/message", "/api/tasks/authorization", "/api/conversations/update", "/api/conversations/delete", "/api/conversations/duplicate", "/api/conversations/promote", "/api/projects/create", "/api/projects/update", "/api/projects/delete", "/api/files/delete", "/api/admin/restart", "/api/admin/retention", "/api/admin/update", "/api/admin/user-cache", "/api/admin/routing-rules", "/api/admin/skills", "/api/providers/configure", "/api/files/upload"}
         if path not in v2:
             if not csrf_ok(self.headers):
                 self.send_json(403, {"error": "CSRF validation failed"})
@@ -1785,12 +2025,17 @@ class Handler(legacy.Handler):
             if path == "/api/settings":
                 self.require_admin()
                 self.send_json(200, {"settings": legacy.save_settings(payload)})
+            elif path == "/api/skills":
+                self.send_json(201, {"skill": request_skill(payload, user)})
             elif path == "/api/providers/configure":
                 self.require_admin()
                 self.send_json(200, configure_provider(payload))
             elif path == "/api/admin/routing-rules":
                 self.require_admin()
                 self.send_json(200, update_routing_rules(payload))
+            elif path == "/api/admin/skills":
+                self.require_admin()
+                self.send_json(200, {"skill": review_skill(payload, user)})
             elif path == "/api/tasks/start":
                 requested = payload.get("taskPolicy") or {}
                 preference = policy_preference(payload.get("conversationPolicy"), role)

@@ -512,6 +512,57 @@ class DashboardV2Tests(unittest.TestCase):
                 api.upload_path(encoded)
         api.legacy.UPLOADS = original
 
+    def test_skill_request_and_admin_approval_install_reviewed_archive(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            uploads = root / "uploads"
+            uploads.mkdir()
+            archive_path = uploads / "alice-sample.zip"
+            with zipfile.ZipFile(archive_path, "w") as archive:
+                archive.writestr("sample/SKILL.md", "# Sample\n")
+                archive.writestr("sample/reference.txt", "reviewed")
+            relative = archive_path.relative_to(uploads).as_posix()
+            file_id = base64.urlsafe_b64encode(relative.encode()).decode().rstrip("=")
+            meta_path = root / "metadata.json"
+            meta_path.write_text(json.dumps({"files": {relative: {"owner": "alice"}}, "skills": {}, "projects": {}, "conversations": {}}))
+            with mock.patch.object(api, "META", meta_path), mock.patch.object(api.legacy, "UPLOADS", uploads), mock.patch.object(api.legacy, "audit"), mock.patch.dict(api.os.environ, {"PRIME_RUNNER_WORKSPACE_ROOT": str(root / "tasks")}):
+                requested = api.request_skill({"name": "Sample Skill", "description": "Does useful work", "sourceFileId": file_id, "permissions": ["instructions"], "dependencies": ["httpx"]}, "alice")
+                self.assertEqual(requested["status"], "pending")
+                self.assertEqual(api.skill_catalog("bob"), [])
+                approved = api.review_skill({"id": requested["id"], "action": "approve"}, "admin")
+                installed = root / "tasks/alice/.prime/agent/skills/sample-skill"
+                self.assertEqual(approved["status"], "installed")
+                self.assertEqual((installed / "SKILL.md").read_text(), "# Sample\n")
+                self.assertFalse((root / "tasks/alice/.venv").exists())
+
+    def test_skill_archive_traversal_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "unsafe-skill.zip"
+            with zipfile.ZipFile(path, "w") as archive:
+                archive.writestr("SKILL.md", "# Unsafe")
+                archive.writestr("../escape", "no")
+            with self.assertRaisesRegex(ValueError, "unsafe path"):
+                api.inspect_skill_archive(path)
+
+    def test_system_tool_request_requires_image_instead_of_installing(self):
+        skill_id = "s_" + "a" * 24
+        with tempfile.TemporaryDirectory() as directory:
+            meta_path = Path(directory) / "metadata.json"
+            meta_path.write_text(json.dumps({"skills": {skill_id: {"owner": "alice", "name": "Scanner", "slug": "scanner", "status": "pending", "enabled": False, "systemTools": ["masscan"]}}, "projects": {}, "conversations": {}}))
+            with mock.patch.object(api, "META", meta_path), mock.patch.object(api.legacy, "audit"):
+                result = api.review_skill({"id": skill_id, "action": "approve"}, "admin")
+            self.assertEqual(result["status"], "image-required")
+            self.assertFalse(result["enabled"])
+
+    def test_project_skills_require_an_enabled_owned_install(self):
+        skill_id = "s_" + "b" * 24
+        meta = {"skills": {skill_id: {"owner": "alice", "name": "Reviewed", "slug": "reviewed", "status": "installed", "enabled": True}}, "projects": {}, "conversations": {}}
+        with mock.patch.object(api, "metadata", return_value=meta), mock.patch.object(api, "normalize_file_ids", return_value=[]):
+            fields = api.normalize_project_fields({"name": "Work", "skillIds": [skill_id]}, "alice")
+            self.assertEqual(fields["skillIds"], [skill_id])
+            with self.assertRaisesRegex(ValueError, "unavailable"):
+                api.normalize_project_fields({"name": "Work", "skillIds": [skill_id]}, "bob")
+
 
 if __name__ == "__main__":
     unittest.main()
