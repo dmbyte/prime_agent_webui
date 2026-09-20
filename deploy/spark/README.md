@@ -31,8 +31,12 @@ account.
 5. Install OpenShell with `deploy/spark/openshell/install.sh`. The installer
    validates the pinned upstream package, provisions `prime-runner`, installs
    the model gateway and task broker, builds the six approved Docker images,
-   provisions per-user volumes, and verifies `prime-runner` gateway access.
-6. Restart `prime-dashboard-api.service` and run `deploy/spark/prime/validate.sh`.
+   provisions per-user volumes, installs the reviewed BMC skills, and verifies
+   `prime-runner` gateway access.
+6. Run `deploy/spark/prime/install-skills.sh` to install the pinned 366-skill
+   NVIDIA catalog for global, lazy-routed use. The command also refreshes the
+   two BMC packages and retains replaced content in recovery storage.
+7. Restart `prime-dashboard-api.service` and run `deploy/spark/prime/validate.sh`.
 
 The expected steady state is:
 

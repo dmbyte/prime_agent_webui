@@ -34,13 +34,22 @@ required=(
   deploy/spark/openshell/install.sh
   deploy/spark/openshell/provision-volumes.sh
   deploy/spark/openshell/README.md
+  deploy/spark/prime/install-skills.sh
+  deploy/spark/prime/install-managed-skills.py
+  deploy/spark/prime/test_managed_skills.py
+  deploy/spark/prime/skills/bmc-headless-browser/SKILL.md
+  deploy/spark/prime/skills/bmc-headless-browser/pyproject.toml
+  deploy/spark/prime/skills/ipmi-redfish-bmc/SKILL.md
+  deploy/spark/prime/skills/ipmi-redfish-bmc/pyproject.toml
+  deploy/spark/prime/skills/prime-nvidia-catalog/SKILL.md
+  deploy/spark/prime/skills/prime-nvidia-catalog/pyproject.toml
   deploy/spark/vllm-nemotron35/README.md
   deploy/spark/llama-qwen38/README.md
   deploy/spark/llama-qwen38/build-image.sh
   deploy/spark/llama-qwen38/llama.env.template
   deploy/spark/llama-qwen38/start.sh
   deploy/spark/systemd/llama-qwen38.service
-  docs/releases/v0.5.22.md
+  docs/releases/v0.5.23.md
 )
 for path in "${required[@]}"; do
   [[ -f $path ]] || { echo "Missing release file: $path" >&2; exit 1; }
@@ -48,10 +57,12 @@ done
 
 bash -n install.sh deploy/spark/update/update-prime-agent.sh deploy/spark/update/update-webui.sh deploy/spark/update/update-openshell.sh \
   deploy/spark/container/install-user-codex-credential.sh \
+  deploy/spark/prime/install-skills.sh \
   deploy/spark/openshell/install.sh deploy/spark/openshell/provision-volumes.sh \
   deploy/spark/container/prime-container-entrypoint.sh
 python3 -m compileall -q deploy/spark/dashboard
 python3 -m unittest discover -s deploy/spark/dashboard -p 'test*.py'
+python3 -m unittest deploy/spark/prime/test_managed_skills.py
 
 if command -v node >/dev/null; then
   node --check deploy/spark/dashboard/app-v2.js
@@ -60,7 +71,7 @@ else
 fi
 
 grep -Fq 'docs/prime-webui-sample.jpg' README.md
-grep -Fq 'v0.5.22' README.md
+grep -Fq 'v0.5.23' README.md
 grep -Fq 'does **not** authenticate with PAM' README.md
 grep -Fq 'prime-web-password' README.md
 echo "Release validation passed."

@@ -67,7 +67,7 @@ providers are used.
 Clone the release and run the installer as the account that should own Prime:
 
 ```bash
-git clone --branch v0.5.22 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
+git clone --branch v0.5.23 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
 cd prime_agent_webui
 ./install.sh --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
@@ -203,6 +203,7 @@ Install the local model catalog and OpenShell integration:
 install -m 0600 deploy/spark/prime/models.json ~/.prime/agent/models.json
 install -m 0600 deploy/spark/prime/settings.json ~/.prime/agent/settings.json
 deploy/spark/openshell/install.sh
+deploy/spark/prime/install-skills.sh
 systemctl --user restart prime-dashboard-api.service
 deploy/spark/prime/validate.sh
 ```
@@ -211,7 +212,9 @@ The OpenShell installer uses the pinned ARM64 package, validates the published
 checksum, provisions `prime-runner`, installs the model gateway and task broker,
 copies existing owner state into protected runner storage, builds the approved
 Docker runtime images, provisions per-user volumes, and restarts the local
-gateway. See the component guides for details:
+gateway. It installs the reviewed BMC adapters; the following skill installer
+pins the official NVIDIA catalog at commit
+`fd9f1466ff8a39178e488981e8b5118709392949`. See the component guides for details:
 [Nemotron](deploy/spark/vllm-nemotron35/README.md),
 [Qwen 3.8](deploy/spark/llama-qwen38/README.md), and
 [OpenShell](deploy/spark/openshell/README.md).
@@ -473,6 +476,23 @@ read-only and tasks do not receive sudo. System binaries must be added to a
 reviewed image profile. The `network-operations` profile includes Chromium and
 ipmitool for browser-assisted BMC and IPMI work.
 
+The supported Spark bundle includes Prime-native `bmc-headless-browser` and
+`ipmi-redfish-bmc` packages. The browser adapter uses the profile's existing
+Chromium, and both adapters require explicit confirmation before any
+power-changing action. Credentials are supplied only at runtime.
+
+`deploy/spark/prime/install-skills.sh` also validates and stores all 366 upstream
+NVIDIA skills unchanged in protected global Prime state. Prime advertises one
+`prime-nvidia-catalog` router and loads only a selected skill on demand;
+directly advertising every entry would consume roughly 13,000 tokens before
+each task. Catalog instructions do not override OpenShell access, role,
+confirmation, or immutable-image boundaries. Re-running the installer is
+recoverable. To use an already-reviewed checkout without another clone:
+
+```bash
+deploy/spark/prime/install-skills.sh --nvidia-source /path/to/NVIDIA-skills
+```
+
 ## Firewall examples
 
 Expose only the chosen HTTPS port to private LAN/VPN sources. Never expose the
@@ -566,7 +586,7 @@ For a manual upgrade:
 
 ```bash
 git fetch --tags origin
-git checkout v0.5.22
+git checkout v0.5.23
 ./install.sh --skip-packages --skip-prime --skip-password \
   --bind-address 192.168.1.50 --server-name prime.example.lan
 ```

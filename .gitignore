@@ -17,4 +17,13 @@ __pycache__/
 /cad/
 /deploy/spark/prime/AGENTS.md
 /deploy/spark/prime/EVALS.md
-/deploy/spark/prime/skills/
+/deploy/spark/prime/skills/*
+# These three reviewed, distribution-managed adapters are part of the installer.
+!/deploy/spark/prime/skills/bmc-headless-browser/
+!/deploy/spark/prime/skills/bmc-headless-browser/**
+!/deploy/spark/prime/skills/ipmi-redfish-bmc/
+!/deploy/spark/prime/skills/ipmi-redfish-bmc/**
+!/deploy/spark/prime/skills/prime-nvidia-catalog/
+!/deploy/spark/prime/skills/prime-nvidia-catalog/**
+/deploy/spark/prime/skills/**/__pycache__/
+/deploy/spark/prime/skills/**/*.py[co]

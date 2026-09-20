@@ -68,6 +68,10 @@ sudo install -d -o prime-runner -g prime-runner -m 0770 \
 sudo setfacl -Rm "u:${USER}:rwx,g:prime-web:rwx,m::rwx,o::---" "$owner_agent/sessions" "$owner_agent/trash" "$owner_agent/project-sources" "$owner_agent/skills"
 sudo find "$owner_agent/sessions" "$owner_agent/trash" "$owner_agent/project-sources" "$owner_agent/skills" -type d -exec setfacl -m "d:u:${USER}:rwx,d:g:prime-web:rwx,d:m::rwx,d:o::---" {} +
 
+# Install the reviewed BMC adapters on every OpenShell deployment. The larger
+# pinned NVIDIA catalog remains an explicit follow-on download.
+"$repo/deploy/spark/prime/install-skills.sh" --bundled-only
+
 sudo install -d -o root -g root -m 0755 /usr/local/lib/prime-runner /usr/local/libexec
 sudo install -o root -g root -m 0644 "$repo/deploy/spark/container/task_common.py" "$repo/deploy/spark/container/model_gateway.py" "$repo/deploy/spark/container/openshell_runner.py" /usr/local/lib/prime-runner/
 install -m 0644 "$repo/deploy/spark/container/task_common.py" "${HOME}/prime-dgx-dashboard/task_common.py"

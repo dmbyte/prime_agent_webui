@@ -1,0 +1,13 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "prime-bmc-headless-browser"
+version = "1.0.0"
+description = "Prime/OpenShell browser adapter for BMC web interfaces"
+requires-python = ">=3.10"
+dependencies = ["playwright>=1.50,<2"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bmc_headless_browser"]

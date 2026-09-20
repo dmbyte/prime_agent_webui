@@ -1,0 +1,12 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "prime-nvidia-catalog"
+version = "1.0.0"
+description = "Lazy NVIDIA skill catalog router for Prime Agent"
+requires-python = ">=3.10"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/prime_nvidia_catalog"]

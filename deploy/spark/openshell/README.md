@@ -17,6 +17,7 @@ Run on Ubuntu 24.04 ARM64 DGX Spark as the non-root WebUI/Docker owner.
 
 ```bash
 deploy/spark/openshell/install.sh
+deploy/spark/prime/install-skills.sh
 systemctl --user restart prime-dashboard-api.service
 deploy/spark/prime/validate.sh
 ```
@@ -38,6 +39,9 @@ The installer:
    source roots.
 9. Prepares persistent skill, package-cache, npm-tool, and Playwright-browser
    directories inside each user's protected Prime-state volume.
+10. Installs the reviewed `bmc-headless-browser` and `ipmi-redfish-bmc` Prime
+    packages. The follow-on skill command pins and installs the complete NVIDIA
+    catalog plus its lazy Prime router.
 
 Inside a task sandbox, `/project` maps to `~/prime-agent/tasks/OWNER/` on the
 host. Prime state remains protected under `/var/lib/prime-runner/users/OWNER/`.
@@ -50,6 +54,25 @@ tools, package caches, downloaded browser engines, and registered skills persist
 under `/home/prime/.prime`. Package downloads require the task's **Internet**
 network mode. The `network-operations` profile includes reviewed Chromium and
 ipmitool binaries for BMC work without runtime system-package installation.
+
+`deploy/spark/prime/install-skills.sh` clones the official NVIDIA skills
+repository at commit `fd9f1466ff8a39178e488981e8b5118709392949`, validates all
+366 skills and their size/path bounds, and installs the unchanged upstream tree
+under `/home/prime/.prime/agent/catalogs/nvidia`. Only the small
+`prime-nvidia-catalog` router is advertised in every Prime prompt; it searches
+and reads a selected upstream skill on demand. This keeps the catalog globally
+available without adding roughly 13,000 description tokens to every task.
+Re-running the command moves prior managed packages and catalog content to
+timestamped recovery storage. Use
+`--nvidia-source /path/to/reviewed/checkout` for an offline checkout at the same
+pinned commit.
+
+The BMC browser uses `/usr/bin/chromium` from the immutable profile and does not
+run `apt` or download a Playwright browser. Both BMC packages require runtime
+credentials, never store them, and require an explicit `confirm=True` gate for
+power-changing actions. Their presence does not grant LAN access: select the
+role-authorized `network-operations` profile and LAN policy for an actual BMC
+task.
 
 The WebUI's **Security prompts** control can persist **Always allow** at a chat
 or project scope. The dashboard API accepts quiet execution/network/file
