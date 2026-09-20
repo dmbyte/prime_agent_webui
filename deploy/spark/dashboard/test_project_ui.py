@@ -75,6 +75,7 @@ class ProjectUiTests(unittest.TestCase):
         self.assertIn('id="skillRequestDialog"', index)
         self.assertIn("function submitSkillRequest", app)
         self.assertIn("function renderSkillAdmin", app)
+        self.assertIn("/api/admin/skills/source", app)
         self.assertIn("function renderProjectSkills", app)
         self.assertIn('skillIds:', app)
         self.assertIn(".skill-admin-row", css)

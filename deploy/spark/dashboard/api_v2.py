@@ -1982,6 +1982,14 @@ class Handler(legacy.Handler):
             elif path == "/api/admin/skills":
                 self.require_admin()
                 self.send_json(200, {"skills": skill_catalog(admin=True), "toolProfiles": tool_inventory()})
+            elif path == "/api/admin/skills/source":
+                self.require_admin()
+                skill_id = query.get("id", [""])[0]
+                row = metadata().get("skills", {}).get(skill_id)
+                if not isinstance(row, dict):
+                    raise ValueError("Skill request not found")
+                source = upload_path(str(row.get("sourceFileId") or ""), row.get("owner", INITIAL_ADMIN))
+                self.send_bytes(200, source.read_bytes(), "application/zip", row.get("sourceName") or f"{skill_id}.zip")
             else:
                 super().do_GET()
         except ValueError as error:
