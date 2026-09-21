@@ -41,6 +41,10 @@ class ManagedSkillTests(unittest.TestCase):
         self.assertIn("confirmed_click", browser)
         self.assertNotIn("apt-get", browser)
         self.assertNotIn("playwright install", browser)
+        self.assertIn('TemporaryDirectory(prefix="prime-bmc-chromium-", dir="/tmp")', browser)
+        self.assertIn("XDG_CONFIG_HOME", browser)
+        self.assertIn('"--disable-gpu"', browser)
+        self.assertIn('"--no-zygote"', browser)
 
     def test_immutable_kernel_contains_managed_modules(self):
         containerfile = (ROOT.parent / "container/Containerfile").read_text()

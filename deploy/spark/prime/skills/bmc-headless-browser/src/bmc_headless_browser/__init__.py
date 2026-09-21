@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
@@ -34,25 +35,49 @@ class BMCBrowser:
         self._browser: Any = None
         self._context: Any = None
         self._page: Any = None
+        self._runtime_dir: Any = None
 
     async def __aenter__(self) -> "BMCBrowser":
         try:
             from playwright.async_api import async_playwright
         except ImportError as error:
             raise RuntimeError("Playwright is available only in the network-operations profile") from error
-        self._playwright = await async_playwright().start()
-        self._browser = await self._playwright.chromium.launch(
-            executable_path=_browser_executable(),
-            headless=True,
-            args=["--disable-dev-shm-usage", "--no-first-run", "--no-default-browser-check"],
-        )
-        self._context = await self._browser.new_context(
-            ignore_https_errors=self.ignore_https_errors,
-            viewport={"width": 1920, "height": 1080},
-        )
-        self._page = await self._context.new_page()
-        self._page.set_default_timeout(self.timeout_ms)
-        return self
+        # OpenShell deliberately makes the image home read-only. Debian's
+        # Chromium initializes crashpad before using Playwright's temporary
+        # profile and aborts if its HOME/XDG state cannot be created. Give this
+        # browser instance private state under the policy-approved /tmp tree.
+        self._runtime_dir = tempfile.TemporaryDirectory(prefix="prime-bmc-chromium-", dir="/tmp")
+        runtime = Path(self._runtime_dir.name)
+        config = runtime / "config"
+        cache = runtime / "cache"
+        config.mkdir(mode=0o700)
+        cache.mkdir(mode=0o700)
+        browser_env = dict(os.environ)
+        browser_env.update(HOME=str(runtime), XDG_CONFIG_HOME=str(config), XDG_CACHE_HOME=str(cache))
+        try:
+            self._playwright = await async_playwright().start()
+            self._browser = await self._playwright.chromium.launch(
+                executable_path=_browser_executable(),
+                headless=True,
+                env=browser_env,
+                args=[
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                    "--no-zygote",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                ],
+            )
+            self._context = await self._browser.new_context(
+                ignore_https_errors=self.ignore_https_errors,
+                viewport={"width": 1920, "height": 1080},
+            )
+            self._page = await self._context.new_page()
+            self._page.set_default_timeout(self.timeout_ms)
+            return self
+        except BaseException:
+            await self.close()
+            raise
 
     async def __aexit__(self, *_args) -> None:
         await self.close()
@@ -71,6 +96,9 @@ class BMCBrowser:
         if self._playwright is not None:
             await self._playwright.stop()
         self._page = self._context = self._browser = self._playwright = None
+        if self._runtime_dir is not None:
+            self._runtime_dir.cleanup()
+            self._runtime_dir = None
 
     async def goto(self, path: str = "/", **kwargs):
         target = path if urlparse(path).scheme in {"http", "https"} else urljoin(self.base_url, path.lstrip("/"))
