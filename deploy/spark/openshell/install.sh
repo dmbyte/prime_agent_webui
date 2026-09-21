@@ -148,7 +148,8 @@ done
 # which commands ran before installation.
 find "$build_context" -depth \( -type d -name __pycache__ -o -type f \( -name '*.pyc' -o -name '*.pyo' \) \) -delete
 find "$build_context" -exec touch -h -d '@0' {} +
-chmod 0644 "$build_context/Containerfile"
+find "$build_context" -type d -exec chmod 0755 {} +
+find "$build_context" -type f -exec chmod 0644 {} +
 chmod 0755 "$build_context/prime-container-entrypoint.sh"
 for profile in general development cad finance network-operations review; do
   expected_image=$(jq -r --arg profile "$profile" '.[$profile].image' "$repo/deploy/spark/openshell/image-digests.json")

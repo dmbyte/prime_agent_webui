@@ -53,6 +53,8 @@ class ManagedSkillTests(unittest.TestCase):
         self.assertIn("playwright==1.63.0", containerfile)
         self.assertIn("-name __pycache__", installer)
         self.assertIn("-name '*.pyc'", installer)
+        self.assertIn('-type f -exec chmod 0644', installer)
+        self.assertIn('-type d -exec chmod 0755', installer)
         for name in load_installer().BUNDLED_SKILLS:
             self.assertIn(f"/opt/prime-managed-skills/{name}", containerfile)
             self.assertIn("$repo/deploy/spark/prime/skills/$skill", installer)
