@@ -25,6 +25,11 @@ class UpdateScriptTests(unittest.TestCase):
         for helper in ("task_common.py", "openshell_runner.py", "model_gateway.py", "runner_broker.py"):
             self.assertIn(f"deploy/spark/container/{helper}", script)
 
+    def test_webui_update_activates_release_pinned_openshell_images(self):
+        script = (ROOT / "deploy/spark/update/update-webui.sh").read_text()
+        self.assertIn('"$repo/deploy/spark/openshell/install.sh"', script)
+        self.assertIn("PRIME_RUNNER_WORKSPACE_ROOT", script)
+
     def test_webui_update_refreshes_runner_unit_and_home_workspace_volume(self):
         script = (ROOT / "deploy/spark/update/update-webui.sh").read_text()
         provision = (ROOT / "deploy/spark/openshell/provision-volumes.sh").read_text()

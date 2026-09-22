@@ -40,6 +40,16 @@ fi
 
 python3 -m py_compile "$source_dir/api.py" "$source_dir/api_v2.py" "$source_dir/auth.py"
 python3 -m unittest discover -s "$source_dir" -p 'test*.py'
+
+# A WebUI release can change the immutable task images, managed skills, or
+# generated OpenShell policy as well as the dashboard. Reuse the reviewed,
+# identity-verifying installer so the updater cannot report success while old
+# sandbox images remain active. Generic non-OpenShell installations skip this.
+if command -v openshell >/dev/null 2>&1 && command -v docker >/dev/null 2>&1; then
+  PRIME_RUNNER_WORKSPACE_ROOT="${PRIME_RUNNER_WORKSPACE_ROOT:-${HOME}/prime-agent/tasks}" \
+    "$repo/deploy/spark/openshell/install.sh"
+fi
+
 install -d -m 0755 "$live"
 install -m 0644 "$source_dir"/*.py "$source_dir"/*.js "$source_dir"/*.css "$source_dir"/*.html "$live"/
 install -m 0644 "$repo/deploy/spark/container/task_common.py" "$live/task_common.py"
