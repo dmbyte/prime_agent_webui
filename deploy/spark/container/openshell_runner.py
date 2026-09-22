@@ -89,7 +89,12 @@ def task_spec(task_id, owner, authorization, provider, model, thinking,
     lines = [
         "version: 1", "filesystem_policy:", "  include_workdir: true", "  read_only:",
         *[f"    - {path}" for path in read_only],
-        "  read_write:", "    - /home/prime/.prime", "    - /project", "    - /tmp", "    - /dev/null",
+        "  read_write:", "    - /home/prime/.prime", "    - /project", "    - /tmp",
+        # Chromium's NSS runtime opens the random devices directly and uses
+        # shared memory. These grants must be present when the sandbox is
+        # created because a later OpenShell policy update cannot widen the
+        # process' existing Landlock domain.
+        "    - /dev/null", "    - /dev/urandom", "    - /dev/random", "    - /dev/shm",
         "landlock:", "  compatibility: hard_requirement", "network_policies: {}", "",
     ]
     temporary = policy_path.with_suffix(".tmp")

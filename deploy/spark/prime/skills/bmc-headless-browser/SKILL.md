@@ -8,6 +8,9 @@ description: Inspect and operate JavaScript-based BMC web interfaces through the
 Use this skill only in the `network-operations` OpenShell profile with LAN access.
 It controls the Chromium already present in that immutable image; it never installs
 OS packages or downloads a second browser at task time.
+The image starts a private per-task browser broker before Prime. `BMCBrowser`
+connects to that broker automatically, keeping Chromium out of Prime's forked
+IPython kernel while preserving the same async API.
 
 Import `BMCBrowser` from `bmc_headless_browser` and use it as an async context
 manager. Supply credentials at runtime. Never put credentials in source, prompts,

@@ -13,6 +13,9 @@ filesystem_policy:
     - /project
     - /tmp
     - /dev/null
+    - /dev/urandom
+    - /dev/random
+    - /dev/shm
 landlock:
   compatibility: hard_requirement
 network_policies: {}

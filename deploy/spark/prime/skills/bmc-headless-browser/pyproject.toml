@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-# Thread-backed worker I/O stays reliable across repeated launches in Prime's persistent kernel.
+# A pre-Prime broker keeps Chromium outside Prime's forked persistent kernel.
 name = "prime-bmc-headless-browser"
-version = "1.1.1"
+version = "1.2.0"
 description = "Prime/OpenShell browser adapter for BMC web interfaces"
 requires-python = ">=3.10"
 dependencies = []

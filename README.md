@@ -67,7 +67,7 @@ providers are used.
 Clone the release and run the installer as the account that should own Prime:
 
 ```bash
-git clone --branch v0.5.32 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
+git clone --branch v0.5.33 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
 cd prime_agent_webui
 ./install.sh --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
@@ -424,7 +424,15 @@ and only these paths writable:
 /project
 /tmp
 /dev/null
+/dev/urandom
+/dev/random
+/dev/shm
 ```
+
+The device entries are granted when the sandbox is created. Chromium's TLS
+runtime reads the kernel random devices and uses shared memory; because
+OpenShell confinement is monotonic, adding these paths to an already-running
+sandbox cannot repair a browser process that started without them.
 
 The sandbox receives Docker bind volumes only through pre-provisioned local
 volumes:
@@ -602,7 +610,7 @@ For a manual upgrade:
 
 ```bash
 git fetch --tags origin
-git checkout v0.5.32
+git checkout v0.5.33
 ./install.sh --skip-packages --skip-prime --skip-password \
   --bind-address 192.168.1.50 --server-name prime.example.lan
 ```

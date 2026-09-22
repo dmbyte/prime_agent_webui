@@ -98,6 +98,11 @@ class OpenShellRunnerTests(unittest.TestCase):
         self.assertIn("    - /home/prime/.prime/agent/project-sources", policy)
         self.assertIn("    - /home/prime/.prime", policy)
 
+    def test_browser_runtime_devices_are_granted_at_sandbox_creation(self):
+        policy = self.build()["policy"].read_text()
+        for path in ("/dev/urandom", "/dev/random", "/dev/shm"):
+            self.assertIn(f"    - {path}", policy)
+
 
 if __name__ == "__main__":
     unittest.main()

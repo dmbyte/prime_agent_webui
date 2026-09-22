@@ -25,6 +25,7 @@ fi
 socat TCP-LISTEN:31000,bind=127.0.0.1,reuseaddr,fork UNIX-CONNECT:/run/prime-gateway/model.sock &
 bridge_pid=$!
 proxy_pid=""
+bmc_broker_pid=""
 if test -S /run/prime-gateway/network.sock; then
   socat TCP-LISTEN:31080,bind=127.0.0.1,reuseaddr,fork UNIX-CONNECT:/run/prime-gateway/network.sock &
   proxy_pid=$!
@@ -34,7 +35,31 @@ if test -S /run/prime-gateway/network.sock; then
   # otherwise send 127.0.0.1 through a proxy that correctly rejects loopback.
   export NO_PROXY="127.0.0.1,localhost,::1" no_proxy="127.0.0.1,localhost,::1"
 fi
-trap 'kill "$bridge_pid" ${proxy_pid:-} 2>/dev/null || true' EXIT
+if command -v chromium >/dev/null 2>&1; then
+  bmc_socket=/tmp/prime-bmc-browser.sock
+  bmc_log=/tmp/prime-bmc-browser.log
+  rm -f "$bmc_socket"
+  : >"$bmc_log"
+  chmod 0600 "$bmc_log"
+  /opt/prime-kernel/bin/python -m bmc_headless_browser --daemon "$bmc_socket" \
+    </dev/null >>"$bmc_log" 2>&1 &
+  bmc_broker_pid=$!
+  export BMC_BROWSER_BROKER="$bmc_socket"
+  export BMC_BROWSER_LOG="$bmc_log"
+  for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    test -S "$bmc_socket" && break
+    kill -0 "$bmc_broker_pid" 2>/dev/null || {
+      echo "BMC browser broker failed to start" >&2
+      exit 1
+    }
+    sleep 0.1
+  done
+  test -S "$bmc_socket" || {
+    echo "BMC browser broker did not become ready" >&2
+    exit 1
+  }
+fi
+trap 'kill "$bridge_pid" ${proxy_pid:-} ${bmc_broker_pid:-} 2>/dev/null || true' EXIT
 for attempt in 1 2 3 4 5; do
   test -S /run/prime-gateway/model.sock && break
   sleep 0.1

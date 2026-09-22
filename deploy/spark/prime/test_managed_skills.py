@@ -49,6 +49,8 @@ class ManagedSkillTests(unittest.TestCase):
         self.assertIn("asyncio.to_thread", browser)
         self.assertIn("Browser step '{action}' timed out", browser)
         self.assertIn('"-m", "bmc_headless_browser", "--worker"', browser)
+        self.assertIn("def _daemon_main", browser)
+        self.assertIn("socket.AF_UNIX", browser)
         self.assertTrue((ROOT / "skills/bmc-headless-browser/src/bmc_headless_browser/__main__.py").is_file())
 
     def test_immutable_kernel_contains_managed_modules(self):
@@ -56,6 +58,9 @@ class ManagedSkillTests(unittest.TestCase):
         installer = (ROOT.parent / "openshell/install.sh").read_text()
         self.assertIn("COPY --chown=root:root managed-skills /opt/prime-managed-skills", containerfile)
         self.assertIn("playwright==1.63.0", containerfile)
+        entrypoint = (ROOT.parent / "container/prime-container-entrypoint.sh").read_text()
+        self.assertIn("bmc_headless_browser --daemon", entrypoint)
+        self.assertIn("BMC_BROWSER_BROKER", entrypoint)
         self.assertIn("-name __pycache__", installer)
         self.assertIn("-name '*.pyc'", installer)
         self.assertIn('-type f -exec chmod 0644', installer)
