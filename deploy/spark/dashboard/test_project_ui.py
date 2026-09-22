@@ -48,6 +48,16 @@ class ProjectUiTests(unittest.TestCase):
         self.assertIn(".trace-event", css)
         self.assertIn(".collapsed-trace", css)
 
+    def test_task_output_can_be_inspected_live_from_trace(self):
+        index = (ROOT / "index.html").read_text()
+        app = (ROOT / "app-v2.js").read_text()
+        self.assertIn('id="taskLogDialog"', index)
+        self.assertIn("row.oncontextmenu=event=>", app)
+        self.assertIn("Complete output…", app)
+        self.assertIn("/api/tasks/log/chunk", app)
+        self.assertIn("task.silentSeconds", app)
+        self.assertIn("decorateTaskTrace($(\"messages\"),liveTask||taskTrace)", app)
+
     def test_security_prompts_can_persist_for_chat_or_project(self):
         app = (ROOT / "app-v2.js").read_text()
         self.assertIn('"confirmationMode","chat"', app)

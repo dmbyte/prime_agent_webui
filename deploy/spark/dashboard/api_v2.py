@@ -912,9 +912,11 @@ def conversation_messages(session_id, user=INITIAL_ADMIN):
     require_conversation_owner(session_id, user)
     try:
         path = legacy.session_path(session_id, session_root(user))
-    except ValueError as error:
-        raise ValueError("Conversation not found") from error
+    except ValueError:
+        return []
     rows = []
+    if not path.is_file():
+        return rows
     with path.open(errors="replace") as handle:
         for line in handle:
             try:
@@ -958,9 +960,10 @@ def task_snapshot(user=None):
         for task_id, task in TASKS.items():
             if user is not None and task.get("owner", INITIAL_ADMIN) != user:
                 continue
-            row = {key: value for key, value in task.items() if key not in {"process", "usage", "rpcResponses", "agentEnded", "liveLogBytes"}}
+            row = {key: value for key, value in task.items() if key not in {"process", "usage", "rpcResponses", "agentEnded", "liveLogBytes", "lastOutputEpoch"} and not key.startswith("_")}
             if row.get("status") == "running":
                 row["elapsedSeconds"] = round(time.time() - row["startedEpoch"], 1)
+                row["silentSeconds"] = round(time.time() - task.get("lastOutputEpoch", task["startedEpoch"]), 1)
             rows.append(row)
         return sorted(rows, key=lambda row: row["started"], reverse=True)[:50]
 
@@ -1083,6 +1086,7 @@ def sanitize_runtime_text(value, limit=1000):
     value = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", str(value or ""))
     value = re.sub(r"(?i)sk-(?:proj-)?[A-Za-z0-9_-]{20,}", "[REDACTED_API_KEY]", value)
     value = re.sub(r"(?i)(authorization\s*[:=]\s*bearer\s+)[^\s\"']+", r"\1[REDACTED]", value)
+    value = re.sub(r"(?i)\b((?:api[_-]?key|password|secret|access[_-]?token|refresh[_-]?token)\s*[:=]\s*)([\"']?)[^\s,;\"']+\2", r"\1[REDACTED]", value)
     return re.sub(r"\s+", " ", value).strip()[:limit]
 
 
@@ -1100,7 +1104,7 @@ def redact_runtime_value(value, key=""):
     if isinstance(value, list):
         return [redact_runtime_value(item) for item in value]
     if isinstance(value, str):
-        return sanitize_runtime_text(value, 20000)
+        return sanitize_runtime_text(value, 262144)
     return value
 
 
@@ -1108,7 +1112,7 @@ def safe_runtime_line(line):
     try:
         return json.dumps(redact_runtime_value(json.loads(line)), separators=(",", ":"), ensure_ascii=False)
     except (json.JSONDecodeError, TypeError, ValueError):
-        return sanitize_runtime_text(line, 20000)
+        return sanitize_runtime_text(line, 262144)
 
 
 def append_live_log(task, line):
@@ -1117,6 +1121,15 @@ def append_live_log(task, line):
         return
     size = len(line.encode("utf-8", errors="replace"))
     task.setdefault("liveLog", []).append({"at": now_iso(), "line": line})
+    task["lastOutputEpoch"] = time.time()
+    task["lastOutputAt"] = now_iso()
+    if re.fullmatch(r"[a-f0-9]{32}", str(task.get("id", ""))):
+        TASK_LOGS.mkdir(mode=0o700, parents=True, exist_ok=True)
+        path = TASK_LOGS / f"{task['id']}.log"
+        with path.open("a", encoding="utf-8") as handle:
+            os.chmod(path, 0o600)
+            handle.write(line + "\n")
+        task["logAvailable"] = True
     task["liveLogBytes"] = task.get("liveLogBytes", 0) + size
     while len(task["liveLog"]) > 5000 or task["liveLogBytes"] > 2 * 1024 * 1024:
         removed = task["liveLog"].pop(0)["line"]
@@ -1128,10 +1141,44 @@ def add_runtime_event(task, kind, label, detail=""):
     detail = sanitize_runtime_text(detail)
     if detail:
         row["detail"] = detail
-    previous = (task.get("runtimeEvents") or [{}])[-1]
-    if row["label"] and (previous.get("kind"), previous.get("label"), previous.get("detail")) != (row["kind"], row["label"], row.get("detail")):
+    key = (row["kind"], row["label"], row.get("detail"))
+    recent = task.setdefault("_recentRuntimeEvents", {})
+    now = time.time()
+    if row["label"] and now - recent.get(key, 0) >= 5:
+        recent[key] = now
+        if len(recent) > 100:
+            task["_recentRuntimeEvents"] = {item: at for item, at in recent.items() if now - at < 30}
         task.setdefault("runtimeEvents", []).append(row)
         task["runtimeEvents"] = task["runtimeEvents"][-200:]
+
+
+def task_log_chunk(task_id, user, offset=0, limit=262144):
+    if not re.fullmatch(r"[a-f0-9]{32}", str(task_id)) or not isinstance(offset, int) or offset < 0:
+        raise ValueError("Task log not found")
+    with TASK_LOCK:
+        live = TASKS.get(task_id)
+        owner = live.get("owner") if live else None
+    if owner is None:
+        owner = metadata().get("tasks", {}).get(task_id, {}).get("owner")
+    if owner != user:
+        raise ValueError("Task log not found")
+    path = TASK_LOGS / f"{task_id}.log"
+    if not path.is_file():
+        return {"text": "", "nextOffset": offset, "size": 0}
+    with path.open("rb") as handle:
+        size = handle.seek(0, os.SEEK_END)
+        if offset > size:
+            offset = 0
+        handle.seek(offset)
+        rows, count = [], 0
+        while count < limit:
+            line = handle.readline()
+            if not line:
+                break
+            rows.append(line)
+            count += len(line)
+        next_offset = handle.tell()
+    return {"text": b"".join(rows).decode("utf-8", errors="replace"), "nextOffset": next_offset, "size": size}
 
 
 def apply_task_event(task_id, event):
@@ -1140,7 +1187,11 @@ def apply_task_event(task_id, event):
         if not task or not isinstance(event, dict):
             return
         event_type = event.get("type")
-        if event_type == "response":
+        if event_type == "runtime_stage":
+            label = sanitize_runtime_text(event.get("label") or "Preparing Prime", 160)
+            add_task_progress(task, label)
+            add_runtime_event(task, "runtime", label)
+        elif event_type == "response":
             request_id = str(event.get("id") or "")
             if request_id:
                 task.setdefault("rpcResponses", {})[request_id] = event
@@ -1302,13 +1353,7 @@ def monitor_task(task_id, before):
             task["sessionId"] = created[0]
         task.update({"status": status, "finished": now_iso(), "elapsedSeconds": round(time.time() - task["startedEpoch"], 1)})
         add_task_progress(task, status.replace("_", " ").title())
-        log_path = TASK_LOGS / f"{task_id}.log"
-        TASK_LOGS.mkdir(mode=0o700, parents=True, exist_ok=True)
-        sanitized = re.sub(r"(?i)sk-(?:proj-)?[A-Za-z0-9_-]{20,}", "[REDACTED_API_KEY]", output[-200000:])
-        sanitized = re.sub(r"(?i)(authorization\s*[:=]\s*bearer\s+)[^\s\"']+", r"\1[REDACTED]", sanitized)
-        log_path.write_text(sanitized)
-        os.chmod(log_path, 0o600)
-        task["logAvailable"] = True
+        task["logAvailable"] = (TASK_LOGS / f"{task_id}.log").is_file()
         recovered = recover_failed_task_conversation(task, status)
         if recovered:
             task["sessionId"] = recovered
@@ -1950,10 +1995,15 @@ class Handler(legacy.Handler):
             elif path == "/api/tasks/log":
                 task_id = query.get("id", [""])[0]
                 log = TASK_LOGS / f"{task_id}.log"
-                task = next((row for row in task_snapshot(self.request_user()) if row["id"] == task_id), None)
-                if not task or not re.fullmatch(r"[a-f0-9]{32}", task_id) or not log.is_file():
+                task_log_chunk(task_id, self.request_user())
+                if not log.is_file():
                     raise ValueError("Task log not found")
                 self.send_bytes(200, log.read_bytes(), "text/plain; charset=utf-8", f"task-{task_id}.log")
+            elif path == "/api/tasks/log/chunk":
+                raw_offset = query.get("offset", ["0"])[0]
+                if not re.fullmatch(r"\d{1,12}", raw_offset):
+                    raise ValueError("Invalid log offset")
+                self.send_json(200, task_log_chunk(query.get("id", [""])[0], self.request_user(), int(raw_offset)))
             elif path == "/api/files":
                 rows = upload_rows(self.request_user())
                 self.send_json(200, {"files": rows, "usedBytes": sum(row["sizeBytes"] for row in rows), "limitBytes": legacy.MAX_UPLOAD_STORAGE_BYTES})

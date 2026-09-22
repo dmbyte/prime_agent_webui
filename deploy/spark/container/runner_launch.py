@@ -9,6 +9,8 @@ import task_common
 
 ROOT=Path("/var/lib/prime-runner")
 OPENSHELL_COMMON = ["/usr/bin/openshell", "--gateway", "spark-local"]
+def stage(label):
+    print(json.dumps({"type": "runtime_stage", "label": label}, separators=(",", ":")), flush=True)
 def fake_jwt():
     enc=lambda value: base64.urlsafe_b64encode(json.dumps(value,separators=(",", ":")).encode()).decode().rstrip("=")
     return f"{enc({'alg':'none'})}.{enc({'https://api.openai.com/auth':{'chatgpt_account_id':'gateway'}})}.gateway"
@@ -65,6 +67,7 @@ def main():
     request=json.loads(base64.urlsafe_b64decode(sys.argv[1]+"=="))
     allowed={"taskId","owner","authorization","provider","model","thinking","sessionId","fork"}
     if set(request)!=allowed: raise SystemExit(2)
+    stage("Preparing task storage")
     configure(request["owner"])
     child = None
     sandbox = None
@@ -79,6 +82,7 @@ def main():
     signal.signal(signal.SIGTERM, stop_child)
     signal.signal(signal.SIGINT, stop_child)
     try:
+        stage("Checking model gateway")
         gateway=ROOT/"gateway"/request["owner"]/request["authorization"].get("networkMode","restricted")/"model.sock"
         for _ in range(30):
             if gateway.is_socket(): break
@@ -89,12 +93,15 @@ def main():
         # Path validation and argv construction can fail before OpenShell starts.
         # Keep them inside the restoration boundary so a rejected local path
         # cannot leave the WebUI unable to traverse its conversation storage.
+        stage("Preparing OpenShell policy")
         spec=openshell_runner.task_spec(request["taskId"],request["owner"],request["authorization"],request["provider"],request["model"],request["thinking"],request["sessionId"],request["fork"],ROOT/"users",ROOT/"openshell-image-digests.json",ROOT/"openshell-policies",Path(os.environ.get("PRIME_RUNNER_WORKSPACE_ROOT", f"/home/{os.environ.get('PRIME_WEB_OWNER', 'dbyte')}/prime-agent/tasks")))
         sandbox, policy_path = spec["name"], spec["policy"]
+        stage("Creating OpenShell sandbox")
         child = subprocess.Popen(spec["create"], stdin=subprocess.DEVNULL, start_new_session=True)
         if child.wait() != 0:
             raise SystemExit("OpenShell could not create the task sandbox")
         subprocess.run(spec["prepareInput"], stdin=subprocess.DEVNULL, check=True)
+        stage("Launching Prime inside sandbox")
         child = subprocess.Popen(spec["execute"], stdin=subprocess.DEVNULL, start_new_session=True)
         threading.Thread(target=forward_stdin_to_fifo, args=(sandbox, spec["inputFifo"]), daemon=True).start()
         if stop_requested and child.poll() is None:

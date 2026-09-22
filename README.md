@@ -67,7 +67,7 @@ providers are used.
 Clone the release and run the installer as the account that should own Prime:
 
 ```bash
-git clone --branch v0.5.27 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
+git clone --branch v0.5.28 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
 cd prime_agent_webui
 ./install.sh --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
@@ -341,6 +341,15 @@ Source files:
 | Prime daemon socket | `/tmp/prime-daemon-<task-prefix>.sock` per task |
 | Prime RPC FIFO | `/tmp/prime-rpc-<task-prefix>.fifo` per task |
 
+If a task appears stuck, expand its in-chat task trace. It reports the last
+OpenShell startup/tool stage and how many seconds have passed since runtime
+output. Right-click the trace or choose **Complete output…** for the
+owner-scoped, live-updating redacted log; use **Download** to retain a copy.
+The output view refreshes every three seconds. Private reasoning and recognized
+credentials are hidden; events above the 262 KiB runtime safety limit are not
+retained. A silent tool call may still require waiting for the 30-minute task
+limit or explicitly stopping that task.
+
 Each OpenShell sandbox is created with these important switches:
 
 ```text
@@ -589,7 +598,7 @@ For a manual upgrade:
 
 ```bash
 git fetch --tags origin
-git checkout v0.5.27
+git checkout v0.5.28
 ./install.sh --skip-packages --skip-prime --skip-password \
   --bind-address 192.168.1.50 --server-name prime.example.lan
 ```

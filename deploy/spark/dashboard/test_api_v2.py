@@ -58,6 +58,42 @@ class DashboardV2Tests(unittest.TestCase):
         self.assertNotIn("hidden ending", logged)
         self.assertNotIn("Bearer private", logged)
 
+    def test_complete_log_is_available_while_running_and_owner_scoped(self):
+        task_id = "c" * 32
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.object(api, "TASK_LOGS", Path(directory)):
+                task = {"id": task_id, "owner": "alice", "status": "running", "started": "2026-01-01T00:00:00Z", "startedEpoch": api.time.time(), "liveLog": []}
+                api.TASKS[task_id] = task
+                try:
+                    for number in range(3):
+                        api.append_live_log(task, json.dumps({"type": "console", "number": number, "password": "very-private"}))
+                    first = api.task_log_chunk(task_id, "alice", 0, 45)
+                    second = api.task_log_chunk(task_id, "alice", first["nextOffset"], 2000)
+                    self.assertIn('"number":0', first["text"])
+                    self.assertIn('"number":2', second["text"])
+                    self.assertEqual(second["nextOffset"], second["size"])
+                    self.assertNotIn("very-private", first["text"] + second["text"])
+                    self.assertTrue(task["logAvailable"])
+                    self.assertLess(api.task_snapshot("alice")[0]["silentSeconds"], 2)
+                    with self.assertRaisesRegex(ValueError, "not found"):
+                        api.task_log_chunk(task_id, "bob")
+                finally:
+                    api.TASKS.pop(task_id, None)
+
+    def test_runtime_stage_is_visible_in_progress(self):
+        task_id = "e" * 32
+        api.TASKS[task_id] = {"id": task_id, "owner": "alice", "status": "running", "progressEvents": [], "runtimeEvents": []}
+        try:
+            api.apply_task_event(task_id, {"type": "runtime_stage", "label": "Creating OpenShell sandbox"})
+            self.assertEqual(api.TASKS[task_id]["progress"], "Creating OpenShell sandbox")
+        finally:
+            api.TASKS.pop(task_id, None)
+
+    def test_missing_transcript_returns_empty_history(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.object(api, "require_conversation_owner"), mock.patch.object(api, "session_root", return_value=Path(directory)):
+                self.assertEqual(api.conversation_messages("missing-session-1234", "alice"), [])
+
     def test_steering_is_owner_scoped_and_uses_rpc_channel(self):
         task_id = "b" * 32
         stdin = mock.Mock()
