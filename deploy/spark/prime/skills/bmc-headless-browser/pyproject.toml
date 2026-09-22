@@ -3,8 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
+# The isolated worker fixes Playwright page creation in Prime's persistent kernel.
 name = "prime-bmc-headless-browser"
-version = "1.0.0"
+version = "1.1.0"
 description = "Prime/OpenShell browser adapter for BMC web interfaces"
 requires-python = ">=3.10"
 dependencies = []

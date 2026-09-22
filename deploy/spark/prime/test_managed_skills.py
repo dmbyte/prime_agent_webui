@@ -45,6 +45,10 @@ class ManagedSkillTests(unittest.TestCase):
         self.assertIn("XDG_CONFIG_HOME", browser)
         self.assertIn('"--disable-gpu"', browser)
         self.assertIn('"--no-zygote"', browser)
+        self.assertIn("asyncio.create_subprocess_exec", browser)
+        self.assertIn("Browser step '{action}' timed out", browser)
+        self.assertIn('"-m", "bmc_headless_browser", "--worker"', browser)
+        self.assertTrue((ROOT / "skills/bmc-headless-browser/src/bmc_headless_browser/__main__.py").is_file())
 
     def test_immutable_kernel_contains_managed_modules(self):
         containerfile = (ROOT.parent / "container/Containerfile").read_text()

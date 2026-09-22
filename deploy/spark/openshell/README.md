@@ -75,9 +75,12 @@ role-authorized `network-operations` profile and LAN policy for an actual BMC
 task. The small Python adapters are preinstalled in Prime's immutable kernel so
 Prime can invoke them reliably, but they are imported only when selected.
 Playwright is installed only in `network-operations` and starts only when the
-headless browser context is opened. Chromium receives a private ephemeral
-HOME/XDG directory under `/tmp` and runs without GPU or zygote subprocesses so
-it remains compatible with OpenShell's read-only home and process isolation.
+headless browser context is opened. The adapter isolates Playwright and
+Chromium in a clean worker subprocess, communicates over private standard-I/O
+pipes, bounds every operation, and captures worker errors. Chromium receives a
+private ephemeral HOME/XDG directory under `/tmp` and runs without GPU or
+zygote subprocesses so it remains compatible with OpenShell's read-only home
+and process isolation.
 
 The WebUI's **Security prompts** control can persist **Always allow** at a chat
 or project scope. The dashboard API accepts quiet execution/network/file

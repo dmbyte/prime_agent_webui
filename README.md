@@ -67,7 +67,7 @@ providers are used.
 Clone the release and run the installer as the account that should own Prime:
 
 ```bash
-git clone --branch v0.5.28 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
+git clone --branch v0.5.29 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
 cd prime_agent_webui
 ./install.sh --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
@@ -486,8 +486,10 @@ reviewed image profile. The `network-operations` profile includes Chromium and
 ipmitool for browser-assisted BMC and IPMI work.
 
 The supported Spark bundle includes Prime-native `bmc-headless-browser` and
-`ipmi-redfish-bmc` packages. The browser adapter uses the profile's existing
-Chromium, and both adapters require explicit confirmation before any
+`ipmi-redfish-bmc` packages. The browser adapter runs Playwright and the
+profile's existing Chromium in a clean, per-browser subprocess so Prime's
+persistent IPython event loop cannot block page creation. Each operation has a
+bounded timeout and captures worker diagnostics. Both adapters require explicit confirmation before any
 power-changing action. Credentials are supplied only at runtime. Prime sees the
 short skill metadata for routing, but imports these adapters only after a task
 selects them. Playwright is present only in the `network-operations` image and
@@ -598,7 +600,7 @@ For a manual upgrade:
 
 ```bash
 git fetch --tags origin
-git checkout v0.5.28
+git checkout v0.5.29
 ./install.sh --skip-packages --skip-prime --skip-password \
   --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
