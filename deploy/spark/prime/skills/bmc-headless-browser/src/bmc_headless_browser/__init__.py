@@ -6,8 +6,10 @@ import asyncio
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
+import threading
 from collections import deque
 from pathlib import Path
 from typing import Any
@@ -71,7 +73,7 @@ class BMCBrowser:
         self.ignore_https_errors = bool(ignore_https_errors)
         self.timeout_ms = max(1_000, min(int(timeout_ms), 120_000))
         self._process: Any = None
-        self._stderr_task: Any = None
+        self._stderr_thread: Any = None
         self._stderr = deque(maxlen=80)
         self._request_id = 0
         self._lock = asyncio.Lock()
@@ -82,12 +84,17 @@ class BMCBrowser:
             raise RuntimeError("This browser instance is already open")
         env = dict(os.environ)
         env["PYTHONUNBUFFERED"] = "1"
-        self._process = await asyncio.create_subprocess_exec(
-            sys.executable, "-m", "bmc_headless_browser", "--worker",
-            stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE, env=env,
+        # IPython owns a long-lived asyncio loop and child watcher. Repeated
+        # asyncio subprocess launches can stop delivering pipe readiness after
+        # an earlier cancellation, even though the child itself is healthy.
+        # Keep Playwright isolated, but perform the pipe I/O in worker threads.
+        self._process = subprocess.Popen(
+            [sys.executable, "-m", "bmc_headless_browser", "--worker"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            env=env, text=True, bufsize=1,
         )
-        self._stderr_task = asyncio.create_task(self._drain_stderr())
+        self._stderr_thread = threading.Thread(target=self._drain_stderr, daemon=True)
+        self._stderr_thread.start()
         try:
             await self._command("start", baseUrl=self.base_url,
                                 ignoreHttpsErrors=self.ignore_https_errors,
@@ -106,63 +113,81 @@ class BMCBrowser:
             raise RuntimeError("Use BMCBrowser as an async context manager")
         return self._page
 
-    async def _drain_stderr(self) -> None:
+    def _drain_stderr(self) -> None:
         while self._process and self._process.stderr:
-            line = await self._process.stderr.readline()
+            line = self._process.stderr.readline()
             if not line:
                 return
-            self._stderr.append(line.decode(errors="replace").rstrip()[:1000])
+            self._stderr.append(line.rstrip()[:1000])
 
     def _diagnostic(self) -> str:
         return " | ".join(self._stderr)[-4000:] or "no child-process diagnostics"
 
     async def _command(self, action: str, **values):
         async with self._lock:
-            process = self._process
-            if not process or process.returncode is not None or not process.stdin or not process.stdout:
-                raise RuntimeError(f"Browser subprocess is unavailable: {self._diagnostic()}")
             self._request_id += 1
             request_id = self._request_id
             request = {"id": request_id, "action": action, **values}
-            process.stdin.write((json.dumps(request, separators=(",", ":")) + "\n").encode())
-            await process.stdin.drain()
             try:
-                raw = await asyncio.wait_for(process.stdout.readline(), self.timeout_ms / 1000 + 5)
+                response = await asyncio.wait_for(
+                    asyncio.to_thread(self._command_blocking, request),
+                    self.timeout_ms / 1000 + 5,
+                )
+            except asyncio.CancelledError:
+                # A caller-level wait_for must not leave the blocking reader
+                # alive to consume a later command's response.
+                process = self._process
+                if process and process.poll() is None:
+                    process.kill()
+                    await asyncio.shield(asyncio.to_thread(process.wait))
+                raise
             except asyncio.TimeoutError as error:
-                process.kill()
-                await process.wait()
+                process = self._process
+                if process and process.poll() is None:
+                    process.kill()
+                    await asyncio.to_thread(process.wait)
                 raise TimeoutError(f"Browser step '{action}' timed out; {self._diagnostic()}") from error
-            if not raw:
-                await process.wait()
-                raise RuntimeError(f"Browser subprocess exited during '{action}' ({process.returncode}); {self._diagnostic()}")
-            response = json.loads(raw)
             if response.get("id") != request_id:
                 raise RuntimeError("Browser subprocess protocol lost synchronization")
             if not response.get("ok"):
                 raise RuntimeError(f"Browser step '{action}' failed: {response.get('error', 'unknown error')}; {self._diagnostic()}")
             return response.get("result")
 
+    def _command_blocking(self, request: dict[str, Any]) -> dict[str, Any]:
+        process = self._process
+        if not process or process.poll() is not None or not process.stdin or not process.stdout:
+            raise RuntimeError(f"Browser subprocess is unavailable: {self._diagnostic()}")
+        process.stdin.write(json.dumps(request, separators=(",", ":")) + "\n")
+        process.stdin.flush()
+        raw = process.stdout.readline()
+        if not raw:
+            process.wait()
+            raise RuntimeError(
+                f"Browser subprocess exited during '{request.get('action')}' "
+                f"({process.returncode}); {self._diagnostic()}"
+            )
+        return json.loads(raw)
+
     async def close(self) -> None:
         process = self._process
         if process is None:
             return
         try:
-            if process.returncode is None:
+            if process.poll() is None:
                 try:
                     await self._command("close")
                 except BaseException:
                     process.terminate()
-            await asyncio.wait_for(process.wait(), 5)
-        except (asyncio.TimeoutError, ProcessLookupError):
-            if process.returncode is None:
+            await asyncio.wait_for(asyncio.to_thread(process.wait), 5)
+        except (asyncio.TimeoutError, subprocess.TimeoutExpired, ProcessLookupError):
+            if process.poll() is None:
                 process.kill()
-                await process.wait()
+                await asyncio.to_thread(process.wait)
         finally:
             self._process = None
-            if self._stderr_task:
-                self._stderr_task.cancel()
-                await asyncio.gather(self._stderr_task, return_exceptions=True)
-            self._stderr_task = None
+            if self._stderr_thread:
+                await asyncio.to_thread(self._stderr_thread.join, 1)
+            self._stderr_thread = None
 
     async def goto(self, path: str = "/", **kwargs):
         return await self._command("goto", target=_safe_target(self.base_url, path), options=kwargs)

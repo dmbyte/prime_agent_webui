@@ -76,8 +76,9 @@ task. The small Python adapters are preinstalled in Prime's immutable kernel so
 Prime can invoke them reliably, but they are imported only when selected.
 Playwright is installed only in `network-operations` and starts only when the
 headless browser context is opened. The adapter isolates Playwright and
-Chromium in a clean worker subprocess, communicates over private standard-I/O
-pipes, bounds every operation, and captures worker errors. Chromium receives a
+Chromium in a clean worker subprocess, communicates over a thread-backed private
+standard-I/O bridge that remains reliable across repeated launches in Prime's
+persistent IPython loop, bounds every operation, and captures worker errors. Chromium receives a
 private ephemeral HOME/XDG directory under `/tmp` and runs without GPU or
 zygote subprocesses so it remains compatible with OpenShell's read-only home
 and process isolation.
