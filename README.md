@@ -67,7 +67,7 @@ providers are used.
 Clone the release and run the installer as the account that should own Prime:
 
 ```bash
-git clone --branch v0.5.36 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
+git clone --branch v0.5.37 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
 cd prime_agent_webui
 ./install.sh --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
@@ -612,7 +612,9 @@ sandbox APIs cannot drift. The managed task-workspace `AGENTS.md` explicitly
 uses Prime 0.9.5's `rlm.spawn` API with the exact
 `spark-qwen/qwen3.8-flash-next` selector and runs `agent_message.send` only
 inside `ipython`. An older managed policy is backed up before replacement;
-unrelated custom policies are left untouched. The WebUI updater resolves an
+unrelated custom policies are left untouched. The immutable kernel installs and
+import-verifies every Python-backed skill bundled with the pinned Prime release,
+including agent messaging and observation. The WebUI updater resolves an
 immutable GitHub release tag.
 OpenShell appears in the same section and updates only from NVIDIA's latest
 stable ARM64 release with the published checksum file, while refusing to run if
@@ -624,7 +626,7 @@ For a manual upgrade:
 
 ```bash
 git fetch --tags origin
-git checkout v0.5.36
+git checkout v0.5.37
 ./install.sh --skip-packages --skip-prime --skip-password \
   --bind-address 192.168.1.50 --server-name prime.example.lan
 ```

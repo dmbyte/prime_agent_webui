@@ -21,6 +21,8 @@ class TaskCommonTests(unittest.TestCase):
         containerfile = (Path(__file__).parents[1] / "container" / "Containerfile").read_text()
         self.assertIn("PRIME_AGENT_KERNEL_PYTHON=/opt/prime-kernel/bin/python", containerfile)
         self.assertIn("ipykernel /usr/local/lib/node_modules/prime-agent/dist/prime-agent-runtime", containerfile)
+        self.assertIn("agent-message agent-observe attach-image compact edit goal", containerfile)
+        self.assertIn("import agent_message, agent_observe, attach_image", containerfile)
         self.assertIn("uv venv --python /usr/bin/python3.11 /opt/prime-kernel", containerfile)
         self.assertIn("python3-pip", containerfile)
         self.assertIn("UV_CACHE_DIR=/home/prime/.prime/cache/uv", containerfile)

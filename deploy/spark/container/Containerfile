@@ -31,6 +31,11 @@ RUN apt-get update \
        ipykernel /usr/local/lib/node_modules/prime-agent/dist/prime-agent-runtime \
        dill requests httpx pyyaml tomli \
        python-dotenv pandas numpy scipy beautifulsoup4 lxml pydantic tyro \
+    && for skill in agent-message agent-observe attach-image compact edit goal linear notion refine rlm-heartbeat websearch; do \
+         uv pip install --python /opt/prime-kernel/bin/python "/usr/local/lib/node_modules/prime-agent/skills/${skill}"; \
+       done \
+    && /opt/prime-kernel/bin/python -c \
+       'import agent_message, agent_observe, attach_image, compact, edit, goal, linear, notion, refine, rlm_heartbeat, websearch' \
     && npm cache clean --force \
     && rm -rf /var/lib/apt/lists/* /tmp/prime-agent.tgz /tmp/uv.tar.gz /tmp/uv-aarch64-unknown-linux-gnu
 
