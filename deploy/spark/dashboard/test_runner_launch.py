@@ -12,6 +12,8 @@ class RunnerLaunchRegressionTests(unittest.TestCase):
     def test_task_workspace_defaults_to_home_prime_agent_tasks(self):
         source = (Path(__file__).parents[1] / "container" / "runner_launch.py").read_text()
         self.assertIn('PRIME_RUNNER_WORKSPACE_ROOT', source)
+        self.assertIn('os.read(sys.stdin.fileno(), 65536)', source)
+        self.assertNotIn('sys.stdin.buffer.readline()', source)
         self.assertIn('prime-agent/tasks', source)
         self.assertIn('setfacl", "-m", writable_acl, str(workspace)', source)
 

@@ -48,10 +48,10 @@ for name in sessions skills session-artifacts; do
   fi
 done
 if [[ -d /var/lib/prime-runner/users/${USER}/workspace ]]; then
-  sudo rsync -a "/var/lib/prime-runner/users/${USER}/workspace/" "$owner_workspace/"
+  sudo rsync -a --ignore-existing "/var/lib/prime-runner/users/${USER}/workspace/" "$owner_workspace/"
 fi
 if [[ -d ${HOME}/prime-dgx-agent ]]; then
-  sudo rsync -a --exclude uploads "${HOME}/prime-dgx-agent/" "$owner_workspace/"
+  sudo rsync -a --ignore-existing --exclude uploads "${HOME}/prime-dgx-agent/" "$owner_workspace/"
 fi
 managed_policy="$repo/deploy/spark/prime/AGENTS.managed.md"
 workspace_policy="$owner_workspace/AGENTS.md"

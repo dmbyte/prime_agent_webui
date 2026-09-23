@@ -46,6 +46,7 @@ class UpdateScriptTests(unittest.TestCase):
         self.assertIn("PRIME_RUNNER_WORKSPACE_ROOT", script)
         self.assertIn("prime-agent/tasks", script)
         self.assertIn("owner_workspace=\"${workspace_root}/${USER}\"", script)
+        self.assertIn('rsync -a --ignore-existing', script)
         self.assertIn('deploy/spark/prime/AGENTS.managed.md', script)
         self.assertIn('pre-prime-managed-', script)
 

@@ -56,7 +56,11 @@ def forward_stdin_to_fifo(sandbox, fifo_path):
         fifo_path,
     ]
     while True:
-        chunk = sys.stdin.buffer.readline()
+        # Use the unbuffered file descriptor. A daemon thread blocked in
+        # BufferedReader.readline() can hold stdin's internal lock while the
+        # interpreter finalizes after Prime exits, causing a fatal SIGABRT and
+        # a false "task broker exited" result for an otherwise completed task.
+        chunk = os.read(sys.stdin.fileno(), 65536)
         if not chunk:
             return
         payload = base64.b64encode(chunk).decode()
