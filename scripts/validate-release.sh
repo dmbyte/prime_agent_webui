@@ -43,13 +43,14 @@ required=(
   deploy/spark/prime/skills/ipmi-redfish-bmc/pyproject.toml
   deploy/spark/prime/skills/prime-nvidia-catalog/SKILL.md
   deploy/spark/prime/skills/prime-nvidia-catalog/pyproject.toml
+  deploy/spark/prime/AGENTS.managed.md
   deploy/spark/vllm-nemotron35/README.md
   deploy/spark/llama-qwen38/README.md
   deploy/spark/llama-qwen38/build-image.sh
   deploy/spark/llama-qwen38/llama.env.template
   deploy/spark/llama-qwen38/start.sh
   deploy/spark/systemd/llama-qwen38.service
-  docs/releases/v0.5.35.md
+  docs/releases/v0.5.36.md
 )
 for path in "${required[@]}"; do
   [[ -f $path ]] || { echo "Missing release file: $path" >&2; exit 1; }
@@ -71,7 +72,7 @@ else
 fi
 
 grep -Fq 'docs/prime-webui-sample.jpg' README.md
-grep -Fq 'v0.5.35' README.md
+grep -Fq 'v0.5.36' README.md
 grep -Fq 'does **not** authenticate with PAM' README.md
 grep -Fq 'prime-web-password' README.md
 echo "Release validation passed."

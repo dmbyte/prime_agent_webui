@@ -67,7 +67,7 @@ providers are used.
 Clone the release and run the installer as the account that should own Prime:
 
 ```bash
-git clone --branch v0.5.35 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
+git clone --branch v0.5.36 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
 cd prime_agent_webui
 ./install.sh --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
@@ -362,7 +362,7 @@ Each OpenShell sandbox is created with these important switches:
 ```text
 openshell --gateway spark-local sandbox create
   --name pt-<task-prefix>
-  --from local/prime-openshell-<profile>:0.8.0-<digest>
+  --from local/prime-openshell-<profile>:0.9.5-<digest>
   --policy /var/lib/prime-runner/openshell-policies/<task>.yaml
   --driver-config-json <pre-provisioned Docker volume mounts>
   --cpu <task cpus>
@@ -606,7 +606,14 @@ upgrade. Never commit credentials, provider settings, sessions, or TLS keys.
 
 Administrators can check and install published releases from Settings. Prime
 Agent updates use the official versioned artifact and verify its published
-SHA256SUMS entry. The WebUI updater resolves an immutable GitHub release tag.
+SHA256SUMS entry. The OpenShell task images pin that same Prime version and
+checksum; a WebUI update rebuilds and verifies all six task profiles so host and
+sandbox APIs cannot drift. The managed task-workspace `AGENTS.md` explicitly
+uses Prime 0.9.5's `rlm.spawn` API with the exact
+`spark-qwen/qwen3.8-flash-next` selector and runs `agent_message.send` only
+inside `ipython`. An older managed policy is backed up before replacement;
+unrelated custom policies are left untouched. The WebUI updater resolves an
+immutable GitHub release tag.
 OpenShell appears in the same section and updates only from NVIDIA's latest
 stable ARM64 release with the published checksum file, while refusing to run if
 OpenShell sandboxes still exist. In-app release checks require an authenticated
@@ -617,7 +624,7 @@ For a manual upgrade:
 
 ```bash
 git fetch --tags origin
-git checkout v0.5.35
+git checkout v0.5.36
 ./install.sh --skip-packages --skip-prime --skip-password \
   --bind-address 192.168.1.50 --server-name prime.example.lan
 ```

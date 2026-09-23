@@ -10,7 +10,7 @@ import task_common
 
 
 SAFE_OPEN_SHELL_IMAGE = re.compile(
-    r"local/prime-openshell-[a-z-]+:0\.8\.0-[a-f0-9]{12}\Z"
+    r"local/prime-openshell-[a-z-]+:0\.9\.5-[a-f0-9]{12}\Z"
 )
 DEFAULT_LIMITS = {"memoryGiB": 8, "cpus": 4, "runtimeMinutes": 30}
 

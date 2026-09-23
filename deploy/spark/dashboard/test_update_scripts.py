@@ -46,6 +46,14 @@ class UpdateScriptTests(unittest.TestCase):
         self.assertIn("PRIME_RUNNER_WORKSPACE_ROOT", script)
         self.assertIn("prime-agent/tasks", script)
         self.assertIn("owner_workspace=\"${workspace_root}/${USER}\"", script)
+        self.assertIn('deploy/spark/prime/AGENTS.managed.md', script)
+        self.assertIn('pre-prime-managed-', script)
+
+    def test_volume_provisioning_refreshes_only_managed_agent_policy(self):
+        script = (ROOT / "deploy/spark/openshell/provision-volumes.sh").read_text()
+        self.assertIn('deploy/spark/prime/AGENTS.managed.md', script)
+        self.assertIn("DGX Spark Prime Agent operating policy", script)
+        self.assertIn('pre-prime-managed-', script)
 
     def test_broker_unit_allows_only_prime_agent_home_workspace(self):
         unit = (ROOT / "deploy/spark/systemd/prime-runner-broker.service").read_text()

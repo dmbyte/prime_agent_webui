@@ -2,6 +2,7 @@
 set -euo pipefail
 
 test "${EUID}" -ne 0 || { echo "Run as the Docker/WebUI owner, not root." >&2; exit 2; }
+repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 
 ensure_volume() {
   local name=$1 device=$2 legacy_device=${3:-} current
@@ -36,6 +37,14 @@ ensure_workspace() {
   fi
   if [[ "$owner" == "$USER" && -d ${HOME}/prime-dgx-agent ]]; then
     sudo rsync -a --ignore-existing --exclude uploads "${HOME}/prime-dgx-agent/" "$target/"
+  fi
+  local managed_policy="$repo/deploy/spark/prime/AGENTS.managed.md" workspace_policy="$target/AGENTS.md" policy_backup
+  if ! sudo test -e "$workspace_policy"; then
+    sudo install -o prime-runner -g prime-runner -m 0640 "$managed_policy" "$workspace_policy"
+  elif sudo grep -q '^# DGX Spark Prime Agent operating policy$' "$workspace_policy" && ! sudo cmp -s "$managed_policy" "$workspace_policy"; then
+    policy_backup="${workspace_policy}.pre-prime-managed-$(date --utc +%Y%m%dT%H%M%SZ)"
+    sudo cp -a "$workspace_policy" "$policy_backup"
+    sudo install -o prime-runner -g prime-runner -m 0640 "$managed_policy" "$workspace_policy"
   fi
   sudo chown -R prime-runner:prime-runner "$target"
   sudo setfacl -Rm "u:${USER}:rwX,g:prime-web:rwX,m::rwX,o::---" "$target"

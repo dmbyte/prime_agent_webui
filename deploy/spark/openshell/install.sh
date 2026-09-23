@@ -53,6 +53,15 @@ fi
 if [[ -d ${HOME}/prime-dgx-agent ]]; then
   sudo rsync -a --exclude uploads "${HOME}/prime-dgx-agent/" "$owner_workspace/"
 fi
+managed_policy="$repo/deploy/spark/prime/AGENTS.managed.md"
+workspace_policy="$owner_workspace/AGENTS.md"
+if ! sudo test -e "$workspace_policy"; then
+  sudo install -o prime-runner -g prime-runner -m 0640 "$managed_policy" "$workspace_policy"
+elif sudo grep -q '^# DGX Spark Prime Agent operating policy$' "$workspace_policy" && ! sudo cmp -s "$managed_policy" "$workspace_policy"; then
+  policy_backup="${workspace_policy}.pre-prime-managed-$(date --utc +%Y%m%dT%H%M%SZ)"
+  sudo cp -a "$workspace_policy" "$policy_backup"
+  sudo install -o prime-runner -g prime-runner -m 0640 "$managed_policy" "$workspace_policy"
+fi
 sudo chown -R prime-runner:prime-runner "/var/lib/prime-runner/users/${USER}"
 sudo chown -R prime-runner:prime-runner "$owner_workspace"
 sudo setfacl -Rm "u:${USER}:rwX,g:prime-web:rwX,m::rwX,o::---" "$owner_workspace"
@@ -154,7 +163,7 @@ chmod 0755 "$build_context/prime-container-entrypoint.sh"
 for profile in general development cad finance network-operations review; do
   expected_image=$(jq -r --arg profile "$profile" '.[$profile].image' "$repo/deploy/spark/openshell/image-digests.json")
   expected_id=$(jq -r --arg profile "$profile" '.[$profile].imageId' "$repo/deploy/spark/openshell/image-digests.json")
-  build_image="local/prime-openshell-${profile}:0.8.0-build"
+  build_image="local/prime-openshell-${profile}:0.9.5-build"
   docker build --file "$build_context/Containerfile" \
     --build-arg "PROFILE=$profile" --build-arg "PRIME_UID=$runner_uid" \
     --build-arg "PRIME_GID=$runner_gid" -t "$build_image" "$build_context"
