@@ -67,7 +67,7 @@ providers are used.
 Clone the release and run the installer as the account that should own Prime:
 
 ```bash
-git clone --branch v0.5.34 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
+git clone --branch v0.5.35 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
 cd prime_agent_webui
 ./install.sh --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
@@ -239,9 +239,9 @@ Source files:
 | DSpark draft model | `nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4-DSpark` |
 | Served name | `nemotron-3.5-lightning` |
 | Listener | `127.0.0.1:30000` |
-| Context cap | `MAX_MODEL_LEN=81920` |
-| GPU memory target | `GPU_MEMORY_UTILIZATION=0.38` |
-| Explicit KV cache | `KV_CACHE_MEMORY_BYTES=4G` |
+| Context cap | `MAX_MODEL_LEN=65536` |
+| GPU memory target | `GPU_MEMORY_UTILIZATION=0.35` |
+| Explicit KV cache | `KV_CACHE_MEMORY_BYTES=2G` |
 | Parallel sequences | `MAX_NUM_SEQS=2` |
 | Speculation | `SPEC_TOKENS=3`, `--spec-method dspark` |
 | Container memory | `--memory=68g`, `--memory-swap=80g`, `--shm-size=24g` |
@@ -260,9 +260,9 @@ The vLLM command line includes:
 --reasoning-parser nemotron_v3
 --tool-call-parser qwen3_coder
 --enable-auto-tool-choice
---max-model-len 81920
---gpu-memory-utilization 0.38
---kv-cache-memory-bytes 4G
+--max-model-len 65536
+--gpu-memory-utilization 0.35
+--kv-cache-memory-bytes 2G
 --max-num-seqs 2
 --served-model-name nemotron-3.5-lightning
 ```
@@ -283,10 +283,10 @@ Source files:
 | MTP draft head | `MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf` |
 | Served name | `qwen3.8-flash-next` |
 | Listener | `127.0.0.1:30001` |
-| Context slot | `CONTEXT_SIZE=32768` |
+| Context slot | `CONTEXT_SIZE=98304` |
 | Parallel slots | `PARALLEL=1` |
 | GPU layers | `GPU_LAYERS=999` and `SPEC_DRAFT_GPU_LAYERS=999` |
-| KV cache | `CACHE_TYPE_K=q8_0`, `CACHE_TYPE_V=q8_0` |
+| KV cache | `CACHE_TYPE_K=q4_0`, `CACHE_TYPE_V=q4_0` |
 | Batching | `BATCH_SIZE=2048`, `UBATCH_SIZE=512` |
 | PLE loading | `--load-mode mmap`, `LAZY_MODE=on-direct` |
 | Speculation | `SPEC_DRAFT_MAX_TOKENS=2`, `SPEC_DRAFT_P_MIN=0.0` |
@@ -303,12 +303,12 @@ The llama.cpp server command line includes:
 --spec-draft-n-max 2
 --spec-draft-p-min 0.0
 --alias qwen3.8-flash-next
---ctx-size 32768
+--ctx-size 98304
 --parallel 1
 --gpu-layers 999
 --flash-attn on
---cache-type-k q8_0
---cache-type-v q8_0
+--cache-type-k q4_0
+--cache-type-v q4_0
 --batch-size 2048
 --ubatch-size 512
 --load-mode mmap
@@ -317,6 +317,13 @@ The llama.cpp server command line includes:
 --reasoning-format deepseek
 --metrics
 ```
+
+This profile was validated with both engines resident: a 78,000-token Qwen
+prompt completed, a separate 77,034-token long-range recall check returned the
+exact hidden value, and the stressed system retained 15.44% available memory.
+Long-context decode measured 29.56 token/s; a warm 600-token short-context run
+measured 44.76 model-eval token/s. Keep `PARALLEL=1` and Prime compaction enabled
+because the near-limit memory margin is intentionally narrow.
 
 #### OpenShell task runtime
 
@@ -610,7 +617,7 @@ For a manual upgrade:
 
 ```bash
 git fetch --tags origin
-git checkout v0.5.34
+git checkout v0.5.35
 ./install.sh --skip-packages --skip-prime --skip-password \
   --bind-address 192.168.1.50 --server-name prime.example.lan
 ```

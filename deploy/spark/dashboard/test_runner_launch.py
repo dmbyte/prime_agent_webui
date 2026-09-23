@@ -44,8 +44,31 @@ class RunnerLaunchRegressionTests(unittest.TestCase):
         root = Path(__file__).parents[3]
         template = (root / "deploy/spark/vllm-nemotron35/vllm.env.template").read_text()
         start = (root / "deploy/spark/vllm-nemotron35/start.sh").read_text()
-        self.assertIn("GPU_MEMORY_UTILIZATION=0.38", template)
-        self.assertIn('GPU_MEMORY_UTILIZATION:-0.38', start)
+        self.assertIn("MAX_MODEL_LEN=65536", template)
+        self.assertIn("GPU_MEMORY_UTILIZATION=0.35", template)
+        self.assertIn("KV_CACHE_MEMORY_BYTES=2G", template)
+        self.assertIn('MAX_MODEL_LEN:-65536', start)
+        self.assertIn('GPU_MEMORY_UTILIZATION:-0.35', start)
+        self.assertIn('KV_CACHE_MEMORY_BYTES:-2G', start)
+
+    def test_qwen_long_context_uses_q4_cache(self):
+        root = Path(__file__).parents[3]
+        template = (root / "deploy/spark/llama-qwen38/llama.env.template").read_text()
+        start = (root / "deploy/spark/llama-qwen38/start.sh").read_text()
+        self.assertIn("CONTEXT_SIZE=98304", template)
+        self.assertIn("CACHE_TYPE_K=q4_0", template)
+        self.assertIn("CACHE_TYPE_V=q4_0", template)
+        self.assertIn('CONTEXT_SIZE:-98304', start)
+        self.assertIn('CACHE_TYPE_K:-q4_0', start)
+        self.assertIn('CACHE_TYPE_V:-q4_0', start)
+
+    def test_prime_model_metadata_matches_live_context_limits(self):
+        root = Path(__file__).parents[3]
+        models = (root / "deploy/spark/prime/models.json").read_text()
+        launcher = (root / "deploy/spark/container/runner_launch.py").read_text()
+        for source in (models, launcher):
+            self.assertIn('"contextWindow":65536', source.replace(" ", ""))
+            self.assertIn('"contextWindow":98304', source.replace(" ", ""))
 
 
 if __name__ == "__main__":

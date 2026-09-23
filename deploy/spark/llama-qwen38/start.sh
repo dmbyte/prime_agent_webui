@@ -36,12 +36,12 @@ exec docker run -d --name "${container}" --restart unless-stopped \
   --spec-draft-p-min "${SPEC_DRAFT_P_MIN:-0.0}" \
   --alias "${SERVED_MODEL_NAME:-qwen3.8-flash-next}" \
   --host 0.0.0.0 --port "${port}" \
-  --ctx-size "${CONTEXT_SIZE:-32768}" \
+  --ctx-size "${CONTEXT_SIZE:-98304}" \
   --parallel "${PARALLEL:-1}" \
   --gpu-layers "${GPU_LAYERS:-999}" \
   --flash-attn on \
-  --cache-type-k "${CACHE_TYPE_K:-q8_0}" \
-  --cache-type-v "${CACHE_TYPE_V:-q8_0}" \
+  --cache-type-k "${CACHE_TYPE_K:-q4_0}" \
+  --cache-type-v "${CACHE_TYPE_V:-q4_0}" \
   --batch-size "${BATCH_SIZE:-2048}" \
   --ubatch-size "${UBATCH_SIZE:-512}" \
   --load-mode mmap \

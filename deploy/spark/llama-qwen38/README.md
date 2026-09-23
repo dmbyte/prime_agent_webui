@@ -39,8 +39,8 @@ systemctl --user enable --now llama-qwen38.service
 - Image: `local/llama-qwen38-mtp:560abb66`
 - Served model name: `qwen3.8-flash-next`
 - Port: `30001`
-- Context: `32768`
-- KV cache: Q8 K/V
+- Context: `98304`
+- KV cache: `q4_0` K/V
 - Batch / micro-batch: `2048` / `512`
 - Loading: mmap with `--lazy-mode on-direct`
 - Speculative draft head: shared-Q8 MTP
@@ -49,7 +49,10 @@ systemctl --user enable --now llama-qwen38.service
 The lazy direct-read setting keeps the PLE table on NVMe and pages it in on
 demand. On the reference Spark, this was the practical way to keep Qwen 3.8
 resident alongside Nemotron while preserving enough memory for OpenShell and the
-WebUI.
+WebUI. The reference Spark accepted an exact 78,000-token prompt and passed a
+77,034-token long-range recall check. Near-limit prompts reduce decode speed and
+leave little margin above the deployment's 15% available-memory gate, so retain
+one slot and automatic Prime compaction.
 
 ## Verify
 

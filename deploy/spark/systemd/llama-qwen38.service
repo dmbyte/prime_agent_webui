@@ -10,7 +10,7 @@ StartLimitBurst=2
 Type=oneshot
 RemainAfterExit=yes
 # The launcher owns model-file checks, loopback binding, mmap/direct-read mode,
-# Q8 K/V cache selection, and the reviewed shared-Q8 MTP draft head.
+# Q4 K/V cache selection, and the reviewed shared-Q8 MTP draft head.
 ExecStart=%h/llama-qwen38/start.sh
 ExecStop=/usr/bin/docker stop llama-qwen38
 TimeoutStartSec=0

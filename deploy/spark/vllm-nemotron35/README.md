@@ -31,8 +31,9 @@ token.
   `nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4-DSpark`
 - Served model name: `nemotron-3.5-lightning`
 - Port: `30000`
-- Maximum context: `81920`
-- KV cache cap: `4G`
+- Maximum context: `65536`
+- GPU memory startup ceiling: `0.35`
+- KV cache cap: `2G`
 - Speculative draft tokens: `3`
 
 ## Verify
