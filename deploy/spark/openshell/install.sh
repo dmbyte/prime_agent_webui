@@ -86,6 +86,7 @@ sudo install -o root -g root -m 0644 "$repo/deploy/spark/container/task_common.p
 install -m 0644 "$repo/deploy/spark/container/task_common.py" "${HOME}/prime-dgx-dashboard/task_common.py"
 sudo install -o root -g root -m 0755 "$repo/deploy/spark/container/runner_launch.py" /usr/local/libexec/prime-runner-launch
 sudo install -o root -g root -m 0755 "$repo/deploy/spark/container/runner_client.py" /usr/local/libexec/prime-runner-client
+sudo install -o root -g root -m 0755 "$repo/deploy/spark/container/runner_recover.py" /usr/local/libexec/prime-runner-recover
 sudo install -o root -g root -m 0644 "$repo/deploy/spark/container/runner_broker.py" /usr/local/lib/prime-runner/runner_broker.py
 sudo install -o root -g root -m 0644 "$repo/deploy/spark/systemd/prime-model-gateway.service" /etc/systemd/system/
 broker_unit=$(mktemp)

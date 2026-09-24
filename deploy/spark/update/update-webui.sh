@@ -63,6 +63,7 @@ sudo install -o root -g root -m 0644 \
   /usr/local/lib/prime-runner/
 sudo install -o root -g root -m 0755 "$repo/deploy/spark/container/runner_launch.py" /usr/local/libexec/prime-runner-launch
 sudo install -o root -g root -m 0755 "$repo/deploy/spark/container/runner_client.py" /usr/local/libexec/prime-runner-client
+sudo install -o root -g root -m 0755 "$repo/deploy/spark/container/runner_recover.py" /usr/local/libexec/prime-runner-recover
 if id prime-runner >/dev/null 2>&1; then
   runner_uid=$(id -u prime-runner)
   workspace_root="${PRIME_RUNNER_WORKSPACE_ROOT:-${HOME}/prime-agent/tasks}"

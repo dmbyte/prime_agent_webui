@@ -19,6 +19,8 @@ class UpdateScriptTests(unittest.TestCase):
         self.assertIn('/usr/local/libexec/prime-runner-launch', script)
         self.assertIn('deploy/spark/container/runner_client.py', script)
         self.assertIn('/usr/local/libexec/prime-runner-client', script)
+        self.assertIn('deploy/spark/container/runner_recover.py', script)
+        self.assertIn('/usr/local/libexec/prime-runner-recover', script)
 
     def test_webui_update_installs_privileged_runner_dependencies(self):
         script = (ROOT / "deploy/spark/update/update-webui.sh").read_text()
@@ -61,6 +63,14 @@ class UpdateScriptTests(unittest.TestCase):
         self.assertIn("PRIME_RUNNER_WORKSPACE_ROOT=/home/@WEB_OWNER@/prime-agent/tasks", unit)
         self.assertIn("/home/@WEB_OWNER@/prime-agent", unit)
         self.assertNotIn("InaccessiblePaths=/home", unit)
+
+    def test_broker_repairs_interrupted_task_acls_before_start(self):
+        unit = (ROOT / "deploy/spark/systemd/prime-runner-broker.service").read_text()
+        recovery = (ROOT / "deploy/spark/container/runner_recover.py").read_text()
+        self.assertIn("ExecStartPre=/usr/bin/python3 /usr/local/libexec/prime-runner-recover", unit)
+        self.assertIn('WRITABLE_DIRS = ("sessions", "trash", "project-sources", "skills")', recovery)
+        self.assertIn("m::--x", recovery)
+        self.assertIn("m::rwX", recovery)
 
     def test_openshell_install_moves_stale_user_broker_units_to_recovery(self):
         script = (ROOT / "deploy/spark/openshell/install.sh").read_text()

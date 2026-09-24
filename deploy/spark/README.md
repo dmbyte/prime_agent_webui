@@ -83,6 +83,12 @@ JavaScript and CSS belong in `/var/www/prime-agent/assets/`; placing assets in
 the web root leaves the login page visible but nonfunctional.
 
 `prime-web.service` provides a browser terminal on Spark loopback port 7681.
+
+Before the system task broker starts, `prime-runner-recover` restores the
+WebUI ACLs on protected conversations, skills, project sources, recovery data,
+and task workspaces. This makes an abrupt shutdown during a task recoverable:
+Prime may have tightened the parent ACL immediately before power was lost, but
+the next broker start repairs it before the dashboard reads the chat catalog.
 Nginx exposes it at `https://172.16.253.231:8443` with session authentication
 and allows only private LAN/VPN source ranges. The session broker validates a
 dedicated WebUI password against a mode-0600 salted scrypt record; it does not

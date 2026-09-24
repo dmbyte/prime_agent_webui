@@ -14,6 +14,7 @@ Environment=XDG_RUNTIME_DIR=/run/user/@RUNNER_UID@
 Environment=PRIME_WEB_OWNER=@WEB_OWNER@
 Environment=PRIME_TASK_RUNTIME=openshell
 Environment=PRIME_RUNNER_WORKSPACE_ROOT=/home/@WEB_OWNER@/prime-agent/tasks
+ExecStartPre=/usr/bin/python3 /usr/local/libexec/prime-runner-recover @WEB_OWNER@ /home/@WEB_OWNER@/prime-agent/tasks
 ExecStart=/usr/bin/python3 /usr/local/lib/prime-runner/runner_broker.py
 Restart=on-failure
 RestartSec=2
