@@ -3,6 +3,19 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-09-24 — v0175 — Preserve rotated Codex credentials and reliable fallback
+
+- Traced the task 502 to OpenAI's `refresh_token_reused` response; both remaining
+  copied credentials were expired while local Nemotron and Qwen were healthy.
+- Prevented updates from overwriting a newer gateway credential with an older
+  host copy by comparing OAuth expiry values before synchronization.
+- Added sanitized actionable Codex sign-in errors to task output and journald.
+- Made explicit slash-model directives override conflicting model names later
+  in the prompt, then restarted the preserved failed request on Qwen.
+- All 121 dashboard tests and release validation pass.
+- Decision: [ADR-0103](decisions/0103-preserve-gateway-oauth-rotation.md).
+- Snapshot: [v0175](versions/v0175.md)
+
 ## 2026-09-24 — v0174 — Recover protected chat access after abrupt shutdown
 
 - Confirmed the power failure preserved all conversation files and the durable

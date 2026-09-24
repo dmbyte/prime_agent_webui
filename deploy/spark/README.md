@@ -89,6 +89,13 @@ WebUI ACLs on protected conversations, skills, project sources, recovery data,
 and task workspaces. This makes an abrupt shutdown during a task recoverable:
 Prime may have tightened the parent ACL immediately before power was lost, but
 the next broker start repairs it before the dashboard reads the chat catalog.
+
+The OpenShell installer compares Codex OAuth expiry times before synchronizing
+the host credential into the isolated gateway. It never replaces a newer
+gateway credential with an older host copy, because OAuth refresh tokens rotate
+and replaying an already-used copy requires a fresh `/login`. A credential
+failure is reported in task activity as a sign-in problem instead of an opaque
+model-gateway 502; local Nemotron and Qwen routes remain available.
 Nginx exposes it at `https://172.16.253.231:8443` with session authentication
 and allows only private LAN/VPN source ranges. The session broker validates a
 dedicated WebUI password against a mode-0600 salted scrypt record; it does not

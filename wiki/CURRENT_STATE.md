@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-09-24
-Wiki version: `v0174`
+Wiki version: `v0175`
 
 ## Project summary
 
@@ -12,6 +12,16 @@ now also contains its first generated, kernel-validated 3D-print design: a vente
 case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 
 ## Repository state
+
+- The v0.5.40 repair identifies the post-reboot Codex 502 as an OAuth
+  `refresh_token_reused` failure. The OpenShell installer had copied an older
+  host credential over the gateway's independently rotated credential during
+  activation. It now compares expiry values and never replaces an equal or
+  newer gateway credential. Gateway errors report the required `/login` action
+  safely instead of returning only an opaque 502. Explicit slash-model
+  directives now override conflicting prose; the failed preserved request was
+  restarted successfully on `spark-qwen/qwen3.8-flash-next`. Nemotron and Qwen
+  endpoints remained healthy throughout.
 
 - The v0.5.39 recovery fix addresses a power failure during an OpenShell task
   that left the protected Prime agent

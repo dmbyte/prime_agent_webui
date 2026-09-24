@@ -51,6 +51,8 @@ class UpdateScriptTests(unittest.TestCase):
         self.assertIn('rsync -a --ignore-existing', script)
         self.assertIn('deploy/spark/prime/AGENTS.managed.md', script)
         self.assertIn('pre-prime-managed-', script)
+        self.assertIn("source_expiry > target_expiry", script)
+        self.assertIn("Retained the gateway Codex credential", script)
 
     def test_volume_provisioning_refreshes_only_managed_agent_policy(self):
         script = (ROOT / "deploy/spark/openshell/provision-volumes.sh").read_text()

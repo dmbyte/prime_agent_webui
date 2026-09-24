@@ -93,8 +93,21 @@ broker_unit=$(mktemp)
 sed -e "s/@RUNNER_UID@/${runner_uid}/g" -e "s/@WEB_OWNER@/${USER}/g" "$repo/deploy/spark/systemd/prime-runner-broker.service" >"$broker_unit"
 sudo install -o root -g root -m 0644 "$broker_unit" /etc/systemd/system/prime-runner-broker.service
 rm -f "$broker_unit"
-if [[ -f $HOME/.prime/agent/auth.json ]]; then
-  sudo install -o prime-runner -g prime-runner -m 0600 "$HOME/.prime/agent/auth.json" /var/lib/prime-runner/credentials/global/auth.json
+credential_source="$HOME/.prime/agent/auth.json"
+credential_target="/var/lib/prime-runner/credentials/global/auth.json"
+if [[ -f $credential_source ]]; then
+  source_expiry=$(jq -r '.["openai-codex"].expires // 0' "$credential_source")
+  target_expiry=0
+  if sudo test -f "$credential_target"; then
+    target_expiry=$(sudo jq -r '.["openai-codex"].expires // 0' "$credential_target")
+  fi
+  [[ $source_expiry =~ ^[0-9]+$ && $target_expiry =~ ^[0-9]+$ ]] || { echo "Invalid Codex credential expiry." >&2; exit 1; }
+  if (( source_expiry > target_expiry )); then
+    sudo install -o prime-runner -g prime-runner -m 0600 "$credential_source" "$credential_target"
+    echo "Installed the newer host Codex credential for the model gateway."
+  else
+    echo "Retained the gateway Codex credential because it is at least as new as the host copy."
+  fi
 else
   echo "No global ChatGPT/Codex credential found; local models remain available." >&2
 fi

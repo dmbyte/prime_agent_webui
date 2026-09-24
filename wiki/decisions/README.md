@@ -107,3 +107,4 @@ only historical evidence: when a decision changes, mark the old record
 - [ADR-0100: Install bundled Prime skills in the immutable kernel](0100-install-bundled-skills-in-immutable-kernel.md)
 - [ADR-0101: Use unbuffered runner control input](0101-use-unbuffered-runner-control-input.md)
 - [ADR-0102: Recover interrupted-task ACLs when the broker starts](0102-recover-task-acls-at-broker-start.md)
+- [ADR-0103: Preserve the gateway's rotated OAuth credential](0103-preserve-gateway-oauth-rotation.md)

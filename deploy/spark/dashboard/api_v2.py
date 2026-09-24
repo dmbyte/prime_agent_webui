@@ -262,6 +262,18 @@ def route_task(message, settings=None):
     selected = (settings["provider"], settings["model"])
     enabled = set(settings.get("enabledModels") or [])
     value = str(message).casefold()
+    directives = (("/nemotron", NEMOTRON_ROUTE), ("/qwen", QWEN_ROUTE),
+                  ("/codex", CODEX_ROUTE), ("/chatgpt", CODEX_ROUTE))
+    matches = [(match.start(), directive, target)
+               for directive, target in directives
+               if (match := re.search(rf"(?<!\w){re.escape(directive)}(?!\w)", value))]
+    if matches:
+        _, directive, target = min(matches, key=lambda row: row[0])
+        if "/".join(target) in enabled:
+            return {"provider": target[0], "model": target[1], "routingMode": "explicit",
+                    "routeReason": f"Explicit {directive} directive selected."}
+        return {"provider": selected[0], "model": selected[1], "routingMode": "fallback",
+                "routeReason": f"Explicit {directive} directive matched, but its target is disabled."}
     for rule in routing_rules():
         if not rule["enabled"] or rule["scope"] == "nemotron-default" and selected != NEMOTRON_ROUTE:
             continue

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Credential-holding Unix-socket proxy for isolated Prime task containers."""
-import http.client, ipaddress, json, os, select, socket, socketserver, stat, threading, time, urllib.parse
+import http.client, ipaddress, json, os, select, socket, socketserver, stat, sys, threading, time, urllib.parse
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
@@ -10,6 +10,9 @@ TARGETS = {"spark-nemotron": ("http", "127.0.0.1", 30000), "spark-qwen": ("http"
 HOP = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailers", "transfer-encoding", "upgrade", "host", "authorization", "chatgpt-account-id", "originator"}
 _credential_locks = {}
 _credential_locks_guard = threading.Lock()
+
+class CodexCredentialError(RuntimeError):
+    pass
 
 def secure_json(path):
     info = path.lstat()
@@ -47,7 +50,11 @@ def credential(user, force_refresh=False):
             conn.request("POST", "/oauth/token", body, {"Content-Type":"application/x-www-form-urlencoded"})
             response = conn.getresponse(); payload = json.loads(response.read(1024 * 1024)); conn.close()
             if response.status != 200 or not all(payload.get(key) for key in ("access_token", "refresh_token", "expires_in")):
-                raise RuntimeError("Codex credential refresh failed")
+                error = payload.get("error") or {}
+                code = error.get("code") if isinstance(error, dict) else error
+                if code == "refresh_token_reused":
+                    raise CodexCredentialError("Codex sign-in expired; run /login in the Prime console and install the renewed credential")
+                raise CodexCredentialError("Codex sign-in could not be refreshed; run /login in the Prime console")
             row.update(access=payload["access_token"], refresh=payload["refresh_token"], expires=int(time.time()*1000)+int(payload["expires_in"])*1000)
             temporary = path.with_name(path.name + ".tmp")
             descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
@@ -66,7 +73,14 @@ class Handler(BaseHTTPRequestHandler):
             self.proxy()
         except (BrokenPipeError, ConnectionError):
             self.close_connection = True
-        except Exception:
+        except CodexCredentialError as error:
+            print(json.dumps({"event":"codex_credential_error","message":str(error)}), file=sys.stderr, flush=True)
+            if not self.wfile.closed:
+                try: self.send_error(502, str(error))
+                except (BrokenPipeError, ConnectionError): pass
+            self.close_connection = True
+        except Exception as error:
+            print(json.dumps({"event":"model_gateway_error","type":type(error).__name__}), file=sys.stderr, flush=True)
             if not self.wfile.closed:
                 try: self.send_error(502, "Model gateway request failed")
                 except (BrokenPipeError, ConnectionError): pass

@@ -490,6 +490,11 @@ class DashboardV2Tests(unittest.TestCase):
         self.assertEqual((route["provider"], route["model"]), api.CODEX_ROUTE)
         self.assertEqual(route["routingMode"], "explicit")
 
+    def test_slash_directive_overrides_conflicting_prompt_phrases(self):
+        route = api.route_task("/qwen use Codex to review this chart", self.settings(codex=True))
+        self.assertEqual((route["provider"], route["model"]), api.QWEN_ROUTE)
+        self.assertEqual(route["routeReason"], "Explicit /qwen directive selected.")
+
     def test_architecture_rule_routes_to_codex_when_nemotron_is_default(self):
         route = api.route_task("Create the software architecture plan", self.settings(codex=True))
         self.assertEqual((route["provider"], route["model"]), api.CODEX_ROUTE)

@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 import socket
 import sys
+import json
+import os
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -27,6 +30,28 @@ class ModelGatewayNetworkTests(unittest.TestCase):
 
     def test_full_allows_public_and_private_but_not_host_loopback(self):
         self.assertEqual(self.addresses("full"), ["8.8.8.8", "10.2.3.4"])
+
+
+class ModelGatewayCredentialTests(unittest.TestCase):
+    def test_reused_refresh_token_has_actionable_safe_error(self):
+        class Response:
+            status = 401
+            def read(self, _limit):
+                return json.dumps({"error": {"code": "refresh_token_reused", "message": "secret upstream detail"}}).encode()
+        class Connection:
+            def request(self, *_args, **_kwargs): pass
+            def getresponse(self): return Response()
+            def close(self): pass
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "credentials/global/auth.json"
+            path.parent.mkdir(parents=True)
+            path.write_text(json.dumps({"openai-codex": {"access": "a", "refresh": "r", "accountId": "id", "expires": 1}}))
+            os.chmod(path, 0o600)
+            with mock.patch.object(model_gateway, "ROOT", root), mock.patch.object(model_gateway.http.client, "HTTPSConnection", return_value=Connection()):
+                with self.assertRaisesRegex(model_gateway.CodexCredentialError, "run /login"):
+                    model_gateway.credential("alice")
 
 
 if __name__ == "__main__":
