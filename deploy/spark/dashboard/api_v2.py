@@ -44,6 +44,7 @@ UPDATE_STATUS_DIR = legacy.HOME / ".prime/agent/update-status"
 USER_TRASH = legacy.HOME / ".prime/agent/user-trash"
 MAX_NATIVE_TASKS = 4
 MAX_TASK_SECONDS = 30 * 60
+RECOVERABLE_PYTHON_ERRORS = {"SyntaxError", "IndentationError", "TabError"}
 TASKS = {}
 TASK_LOCK = threading.Lock()
 SESSION_CACHE = {}
@@ -1226,6 +1227,10 @@ def apply_task_event(task_id, event):
                 task["rpcError"] = "Prime rejected the initial prompt"
                 add_task_progress(task, "Prime rejected a command")
                 add_runtime_event(task, "error", "Command rejected", task["rpcError"])
+            if request_id == task.get("autoRecoveryRequestId") and not event.get("success", False):
+                task["autoRecoveryPending"] = False
+                task["rpcError"] = "Prime rejected the automatic Python correction"
+                add_runtime_event(task, "error", "Python correction rejected")
             data = event.get("data") or {}
             session_id = data.get("sessionId") if isinstance(data, dict) else None
             if valid_id(session_id):
@@ -1239,6 +1244,7 @@ def apply_task_event(task_id, event):
             add_task_progress(task, "Prime connected")
         elif event_type == "agent_start":
             task["agentEnded"] = False
+            task["autoRecoveryPending"] = False
             add_task_progress(task, "Agent started")
             add_runtime_event(task, "agent", "Agent started")
         elif event_type == "agent_end":
@@ -1262,6 +1268,8 @@ def apply_task_event(task_id, event):
                     continue
                 if part.get("type") == "text" and part.get("text"):
                     task["liveResponse"] = str(part["text"])[-50000:]
+                    if event_type == "message_end" and message.get("stopReason") != "error":
+                        task["hasAssistantText"] = True
                     add_task_progress(task, "Drafting response")
                 elif part.get("type") in {"toolCall", "tool_call"}:
                     name = str(part.get("name") or part.get("toolName") or "tool")
@@ -1273,11 +1281,22 @@ def apply_task_event(task_id, event):
             if isinstance(usage, dict) and usage:
                 task["usage"] = usage
         elif event_type == "tool_execution_start":
+            task["hasAssistantText"] = False
             add_task_progress(task, f"Using {event.get('toolName') or event.get('tool') or 'tool'}")
             add_runtime_event(task, "tool", f"Started {event.get('toolName') or event.get('tool') or 'tool'}")
         elif event_type == "tool_execution_end":
-            add_task_progress(task, f"Finished {event.get('toolName') or event.get('tool') or 'tool'}")
-            add_runtime_event(task, "tool", f"Finished {event.get('toolName') or event.get('tool') or 'tool'}")
+            tool_name = str(event.get("toolName") or event.get("tool") or "tool")
+            result = event.get("result") or {}
+            details = result.get("details") or {}
+            if result.get("isError") or details.get("status") == "error":
+                error_name = sanitize_runtime_text(details.get("errorEname") or "ToolError", 80)
+                task["lastToolFailure"] = {"tool": tool_name, "error": error_name}
+                add_task_progress(task, f"{tool_name} failed")
+                add_runtime_event(task, "error", f"{tool_name} failed", error_name)
+            else:
+                task.pop("lastToolFailure", None)
+                add_task_progress(task, f"Finished {tool_name}")
+                add_runtime_event(task, "tool", f"Finished {tool_name}")
         elif event_type == "auto_retry_start":
             attempt, maximum = int(event.get("attempt") or 0), int(event.get("maxAttempts") or 0)
             error = sanitize_runtime_text(event.get("errorMessage") or "Request failed")
@@ -1289,6 +1308,55 @@ def apply_task_event(task_id, event):
             add_runtime_event(task, "error", "Isolated task runtime failed")
 
 
+def queue_python_parse_recovery(task_id):
+    with TASK_LOCK:
+        task = TASKS.get(task_id)
+        failure = (task or {}).get("lastToolFailure") or {}
+        if (not task or not task.get("agentEnded") or task.get("hasAssistantText")
+                or failure.get("tool") != "ipython"
+                or failure.get("error") not in RECOVERABLE_PYTHON_ERRORS
+                or task.get("autoRecoveryCount", 0) >= 1 or task.get("stopRequested")):
+            return False
+        process = task.get("process")
+        if not process or not process.stdin:
+            return False
+        task["autoRecoveryCount"] = 1
+        task["autoRecoveryPending"] = True
+        request_id = task["autoRecoveryRequestId"] = f"auto-recovery-{task_id}"
+        write_lock = task.setdefault("_stdinLock", threading.Lock())
+        add_task_progress(task, "Correcting invalid Python cell")
+        add_runtime_event(task, "retry", "Correcting invalid Python cell")
+    request = {
+        "id": request_id,
+        "type": "prompt",
+        "message": "The last ipython cell did not execute because its Python syntax was invalid. "
+                   "Rewrite it as a short Python-only cell, retry the intended check, then continue "
+                   "the original task and give the user a clear final result. Keep prose outside code.",
+    }
+    try:
+        with write_lock:
+            process.stdin.write(json.dumps(request, separators=(",", ":")) + "\n")
+            process.stdin.flush()
+    except (BrokenPipeError, OSError, ValueError):
+        with TASK_LOCK:
+            current = TASKS.get(task_id)
+            if current:
+                current["autoRecoveryPending"] = False
+                current["rpcError"] = "Prime could not queue a correction after invalid Python code"
+        return False
+    return True
+
+
+def terminal_task_error(task):
+    if task.get("rpcError"):
+        return task["rpcError"]
+    if task.get("autoRecoveryPending"):
+        return "Prime exited before completing its Python correction"
+    if task.get("agentEnded") and not task.get("hasAssistantText"):
+        return "Prime ended without answering after its tool work"
+    return None
+
+
 def monitor_task(task_id, before):
     with TASK_LOCK:
         task = TASKS[task_id]
@@ -1298,10 +1366,19 @@ def monitor_task(task_id, before):
     timed_out = False
     stdin_closed = False
     completed_deadline = None
+    recovery_deadline = None
     while process.poll() is None:
         if time.monotonic() >= deadline:
             timed_out = True
             os.killpg(process.pid, signal.SIGTERM)
+            break
+        if recovery_deadline and time.monotonic() >= recovery_deadline:
+            with TASK_LOCK:
+                current = TASKS.get(task_id)
+                if current and current.get("autoRecoveryPending"):
+                    current["rpcError"] = "Prime did not resume after its Python correction was queued"
+                    add_runtime_event(current, "error", "Python correction did not start")
+            process.terminate()
             break
         if completed_deadline and time.monotonic() >= completed_deadline:
             process.terminate()
@@ -1325,7 +1402,10 @@ def monitor_task(task_id, before):
             if current:
                 append_live_log(current, line)
         try:
-            apply_task_event(task_id, json.loads(line))
+            event = json.loads(line)
+            apply_task_event(task_id, event)
+            if event.get("type") == "agent_end":
+                queue_python_parse_recovery(task_id)
         except (json.JSONDecodeError, TypeError, ValueError):
             with TASK_LOCK:
                 current = TASKS.get(task_id)
@@ -1335,12 +1415,20 @@ def monitor_task(task_id, before):
             log_lines.append(safe_runtime_line(line) + "\n")
             log_lines = log_lines[-200:]
         with TASK_LOCK:
-            ended = bool(TASKS.get(task_id, {}).get("agentEnded"))
-        if ended and not stdin_closed and process.stdin:
-            process.stdin.close()
-            process.stdin = None
+            current = TASKS.get(task_id, {})
+            ended = bool(current.get("agentEnded"))
+            recovery_pending = bool(current.get("autoRecoveryPending"))
+        if ended and recovery_pending:
+            recovery_deadline = recovery_deadline or time.monotonic() + 30
+        elif ended and not stdin_closed and process.stdin:
+            recovery_deadline = None
+            with current.get("_stdinLock", threading.Lock()):
+                process.stdin.close()
+                process.stdin = None
             stdin_closed = True
             completed_deadline = time.monotonic() + 5
+        elif not recovery_pending:
+            recovery_deadline = None
     try:
         remainder, _ = process.communicate(timeout=10)
     except subprocess.TimeoutExpired:
@@ -1363,8 +1451,10 @@ def monitor_task(task_id, before):
     output = "".join(log_lines[-200:])
     with TASK_LOCK:
         current = TASKS.get(task_id, {})
-        rpc_error = current.get("rpcError")
+        rpc_error = terminal_task_error(current)
         agent_ended = bool(current.get("agentEnded"))
+        if rpc_error and current:
+            current["rpcError"] = rpc_error
     stopped = bool(current.get("stopRequested"))
     status = "timed_out" if timed_out else "stopped" if stopped else "failed" if rpc_error else "completed" if agent_ended or process.returncode == 0 else "failed"
     root = session_root(task.get("owner", INITIAL_ADMIN))
@@ -1505,7 +1595,7 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITI
     started = now_iso()
     runtime = "openshell" if container_mode() else "host"
     topic = legacy.safe_topic(message) or "Native task"
-    task = {"id": task_id, "sessionId": session_id if not fork else None, "agentSessionId": session_id if session_id and not fork else None, "rpcReady": True, "rpcResponses": {}, "owner": owner, "projectId": project_id, "fileIds": file_ids, "authorization": authorization or {}, "policyPreference": policy or {}, "persistPolicyOnSessionCreate": not bool(session_id) or fork, "submittedMessage": message, "submittedAt": started, "topic": topic, **route, "thinking": thinking, "contextWindow": details.get("contextWindow"), "maxTokens": details.get("maxTokens"), "runtime": runtime, "sandboxName": f"pt-{task_id[:16]}" if runtime == "openshell" else None, "policyRevision": 1 if runtime == "openshell" else None, "status": "running", "progress": "Starting Prime", "progressEvents": [{"at": started, "label": "Request received"}], "runtimeEvents": [{"at": started, "kind": "request", "label": "Request received"}], "liveLog": [], "liveLogBytes": 0, "liveResponse": "", "started": started, "startedEpoch": time.time(), "pid": process.pid, "process": process, "logAvailable": False}
+    task = {"id": task_id, "sessionId": session_id if not fork else None, "agentSessionId": session_id if session_id and not fork else None, "rpcReady": True, "rpcResponses": {}, "owner": owner, "projectId": project_id, "fileIds": file_ids, "authorization": authorization or {}, "policyPreference": policy or {}, "persistPolicyOnSessionCreate": not bool(session_id) or fork, "submittedMessage": message, "submittedAt": started, "topic": topic, **route, "thinking": thinking, "contextWindow": details.get("contextWindow"), "maxTokens": details.get("maxTokens"), "runtime": runtime, "sandboxName": f"pt-{task_id[:16]}" if runtime == "openshell" else None, "policyRevision": 1 if runtime == "openshell" else None, "status": "running", "progress": "Starting Prime", "progressEvents": [{"at": started, "label": "Request received"}], "runtimeEvents": [{"at": started, "kind": "request", "label": "Request received"}], "liveLog": [], "liveLogBytes": 0, "liveResponse": "", "started": started, "startedEpoch": time.time(), "pid": process.pid, "process": process, "logAvailable": False, "_stdinLock": threading.Lock()}
     with TASK_LOCK:
         TASKS[task_id] = task
     with META_LOCK:
@@ -1534,7 +1624,7 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITI
         raise RuntimeError("Prime could not accept the initial prompt") from error
     threading.Thread(target=monitor_task, args=(task_id, before), daemon=True).start()
     legacy.audit("native_task_started", task=task_id, session=session_id)
-    return {key: value for key, value in task.items() if key not in {"process", "rpcResponses", "agentEnded", "liveLogBytes"}}
+    return {key: value for key, value in task.items() if key not in {"process", "rpcResponses", "agentEnded", "liveLogBytes"} and not key.startswith("_")}
 
 
 def stop_native_task(task_id, owner=INITIAL_ADMIN):
@@ -1546,8 +1636,9 @@ def stop_native_task(task_id, owner=INITIAL_ADMIN):
         if not process.stdin:
             raise ValueError("Task is no longer accepting commands")
     try:
-        process.stdin.write('{"type":"abort"}\n')
-        process.stdin.flush()
+        with task.get("_stdinLock", threading.Lock()):
+            process.stdin.write('{"type":"abort"}\n')
+            process.stdin.flush()
     except (BrokenPipeError, OSError, ValueError) as error:
         raise RuntimeError("Prime is no longer accepting commands") from error
     with TASK_LOCK:
@@ -1589,8 +1680,9 @@ def message_native_task(task_id, message, mode="steer", owner=INITIAL_ADMIN):
             raise RuntimeError("Prime is still connecting; try again in a moment")
     request = {"id": request_id, "type": "steer" if mode == "steer" else "follow_up", "message": message}
     try:
-        process.stdin.write(json.dumps(request, separators=(",", ":")) + "\n")
-        process.stdin.flush()
+        with task.get("_stdinLock", threading.Lock()):
+            process.stdin.write(json.dumps(request, separators=(",", ":")) + "\n")
+            process.stdin.flush()
     except (BrokenPipeError, OSError, ValueError) as error:
         raise RuntimeError("Prime is no longer accepting task messages") from error
     deadline = time.monotonic() + 5

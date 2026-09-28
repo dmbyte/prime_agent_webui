@@ -109,3 +109,4 @@ only historical evidence: when a decision changes, mark the old record
 - [ADR-0102: Recover interrupted-task ACLs when the broker starts](0102-recover-task-acls-at-broker-start.md)
 - [ADR-0103: Preserve the gateway's rotated OAuth credential](0103-preserve-gateway-oauth-rotation.md)
 - [ADR-0104: Bound task polling log previews](0104-bound-task-polling-payload.md)
+- [ADR-0105: Recover unanswered Python parse failures once](0105-recover-unanswered-python-parse-failures.md)

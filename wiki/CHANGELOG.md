@@ -3,6 +3,19 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-09-28 — v0177 — Recover unanswered Python parse failures
+
+- Confirmed the malformed `ipython` cell contained English prose inside its
+  tool argument, so Python rejected it before execution. Prime ended without a
+  final answer, and the dashboard falsely classified the task as completed.
+- Added one bounded same-session correction prompt only when the last tool
+  failure is a Python parse error and no final answer exists. Failed recovery
+  now becomes a visible failed task, with the submitted prompt retained.
+- Updated the managed agent policy and added regression tests for one retry,
+  non-parse failures, and self-correction.
+- Decision: [ADR-0105](decisions/0105-recover-unanswered-python-parse-failures.md).
+- Snapshot: [v0177](versions/v0177.md).
+
 ## 2026-09-28 — v0176 — Bound dashboard task polling output
 
 - Diagnosed 9 MB responses from both `/api/tasks` and `/api/state` with only

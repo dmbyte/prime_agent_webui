@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import importlib.util
 import base64
+import io
 import json
 import tempfile
 import unittest
@@ -14,6 +15,75 @@ SPEC.loader.exec_module(api)
 
 
 class DashboardV2Tests(unittest.TestCase):
+    def test_invalid_python_cell_queues_one_correction_and_requires_an_answer(self):
+        task_id = "9" * 32
+        stdin = io.StringIO()
+        task = {"id": task_id, "owner": "alice", "status": "running", "process": mock.Mock(stdin=stdin), "progressEvents": [], "runtimeEvents": []}
+        api.TASKS[task_id] = task
+        event = {"type": "tool_execution_end", "toolName": "ipython", "result": {"isError": True, "details": {"status": "error", "errorEname": "SyntaxError"}}}
+        try:
+            api.apply_task_event(task_id, event)
+            self.assertEqual(task["lastToolFailure"]["error"], "SyntaxError")
+            self.assertFalse(api.queue_python_parse_recovery(task_id))
+            api.apply_task_event(task_id, {"type": "agent_end"})
+            self.assertTrue(api.queue_python_parse_recovery(task_id))
+            queued = json.loads(stdin.getvalue().strip())
+            self.assertEqual(queued["type"], "prompt")
+            self.assertIn("short Python-only cell", queued["message"])
+            self.assertFalse(api.queue_python_parse_recovery(task_id))
+            self.assertIn("before completing", api.terminal_task_error(task))
+            api.apply_task_event(task_id, {"type": "agent_start"})
+            self.assertFalse(task["autoRecoveryPending"])
+            api.apply_task_event(task_id, {"type": "message_update", "message": {"role": "assistant", "content": [{"type": "text", "text": "Partial draft"}]}})
+            api.apply_task_event(task_id, {"type": "agent_end"})
+            self.assertIn("without answering", api.terminal_task_error(task))
+            api.apply_task_event(task_id, {"type": "message_end", "message": {"role": "assistant", "content": [{"type": "text", "text": "Corrected and verified."}]}})
+            self.assertIsNone(api.terminal_task_error(task))
+        finally:
+            api.TASKS.pop(task_id, None)
+
+    def test_non_parse_tool_error_does_not_queue_automatic_retry(self):
+        task_id = "8" * 32
+        stdin = io.StringIO()
+        api.TASKS[task_id] = {"id": task_id, "owner": "alice", "status": "running", "process": mock.Mock(stdin=stdin)}
+        try:
+            event = {"type": "tool_execution_end", "toolName": "ipython", "result": {"details": {"status": "error", "errorEname": "PermissionError"}}}
+            api.apply_task_event(task_id, event)
+            api.apply_task_event(task_id, {"type": "agent_end"})
+            self.assertFalse(api.queue_python_parse_recovery(task_id))
+            self.assertEqual(stdin.getvalue(), "")
+        finally:
+            api.TASKS.pop(task_id, None)
+
+    def test_text_before_a_failed_tool_is_not_mistaken_for_a_final_answer(self):
+        task_id = "6" * 32
+        stdin = io.StringIO()
+        task = {"id": task_id, "owner": "alice", "status": "running", "process": mock.Mock(stdin=stdin)}
+        api.TASKS[task_id] = task
+        try:
+            api.apply_task_event(task_id, {"type": "message_end", "message": {"role": "assistant", "content": [{"type": "text", "text": "I will check."}]}})
+            api.apply_task_event(task_id, {"type": "tool_execution_start", "toolName": "ipython"})
+            api.apply_task_event(task_id, {"type": "tool_execution_end", "toolName": "ipython", "result": {"isError": True, "details": {"status": "error", "errorEname": "SyntaxError"}}})
+            api.apply_task_event(task_id, {"type": "agent_end"})
+            self.assertTrue(api.queue_python_parse_recovery(task_id))
+        finally:
+            api.TASKS.pop(task_id, None)
+
+    def test_agent_that_corrects_its_own_syntax_error_is_not_restarted(self):
+        task_id = "7" * 32
+        stdin = io.StringIO()
+        api.TASKS[task_id] = {"id": task_id, "owner": "alice", "status": "running", "process": mock.Mock(stdin=stdin)}
+        try:
+            api.apply_task_event(task_id, {"type": "tool_execution_end", "toolName": "ipython", "result": {"details": {"status": "error", "errorEname": "SyntaxError"}}})
+            api.apply_task_event(task_id, {"type": "tool_execution_end", "toolName": "ipython", "result": {"details": {"status": "ok"}}})
+            api.apply_task_event(task_id, {"type": "message_end", "message": {"role": "assistant", "content": [{"type": "text", "text": "The check now passes."}]}})
+            api.apply_task_event(task_id, {"type": "agent_end"})
+            self.assertFalse(api.queue_python_parse_recovery(task_id))
+            self.assertEqual(stdin.getvalue(), "")
+            self.assertIsNone(api.terminal_task_error(api.TASKS[task_id]))
+        finally:
+            api.TASKS.pop(task_id, None)
+
     def test_task_poll_keeps_large_logs_out_of_the_refresh_payload(self):
         task_id = "f" * 32
         api.TASKS[task_id] = {

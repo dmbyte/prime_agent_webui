@@ -26,6 +26,9 @@ paper-trading research, and supporting software work.
   with a retained child, use
   `await agent_message.send("<message>", receiver_role="child", receiver_name="<name>")`
   inside an `ipython` cell.
+- Keep `ipython` cells short and Python-only. Put explanations outside code.
+  If a cell fails with a syntax or indentation error, correct it in a new cell
+  and continue the user's task. End with a clear result even after tool errors.
 - Escalate to GPT-5.6 Sol only when an OpenAI API key is configured and the task
   justifies frontier cost or capability. State why the escalation is needed.
 

@@ -39,7 +39,7 @@ verified current state and enough history to understand or reverse changes.
 
 ## Status
 
-- Current wiki version: `v0176`
+- Current wiki version: `v0177`
 - Last verified: 2026-09-28
 - Project phase: Prime tasks running inside NVIDIA OpenShell
 

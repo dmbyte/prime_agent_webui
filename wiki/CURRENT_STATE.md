@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-09-28
-Wiki version: `v0176`
+Wiki version: `v0177`
 
 ## Project summary
 
@@ -12,6 +12,15 @@ now also contains its first generated, kernel-validated 3D-print design: a vente
 case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 
 ## Repository state
+
+- The v0.5.42 task-recovery repair addresses a Prime `ipython` call that mixed
+  prose into executable Python and failed with `SyntaxError`. Prime then ended
+  without answering, but the WebUI had labeled the task completed. The
+  dashboard now makes one bounded correction attempt only for a final Python
+  parse error with no finalized assistant answer. A rejected, stalled, or
+  unanswered correction is reported as failed; the submitted prompt and safe
+  task log remain available. Managed workspace instructions require short,
+  code-only Python cells and a clear final result. ADR-0105 records the guard.
 
 - The v0.5.41 dashboard repair bounds the log preview included in task and
   state polling to 32 entries and 32 KiB per task. Four completed tasks had
