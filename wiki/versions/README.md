@@ -6,6 +6,7 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0176](v0176.md) | 2026-09-28 | Bounded task refresh payload while retaining complete logs on demand |
 | [v0175](v0175.md) | 2026-09-24 | Preserved rotated Codex credentials and made explicit fallback authoritative |
 | [v0174](v0174.md) | 2026-09-24 | Recovered chat access and made interrupted-task ACL repair boot-safe |
 | [v0173](v0173.md) | 2026-09-23 | Fixed signal-6 false task-broker exits during normal teardown |

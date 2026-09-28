@@ -1,7 +1,7 @@
 # Current State
 
-Last verified: 2026-09-24
-Wiki version: `v0175`
+Last verified: 2026-09-28
+Wiki version: `v0176`
 
 ## Project summary
 
@@ -12,6 +12,13 @@ now also contains its first generated, kernel-validated 3D-print design: a vente
 case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 
 ## Repository state
+
+- The v0.5.41 dashboard repair bounds the log preview included in task and
+  state polling to 32 entries and 32 KiB per task. Four completed tasks had
+  accumulated about 9 MB of redacted log data per response, which the WebUI
+  repeatedly fetched and the API sometimes failed to write before the socket
+  timed out. The full owner-scoped log remains available through the existing
+  chunk endpoint and Complete output dialog. ADR-0104 records the decision.
 
 - The v0.5.40 repair identifies the post-reboot Codex 502 as an OAuth
   `refresh_token_reused` failure. The OpenShell installer had copied an older

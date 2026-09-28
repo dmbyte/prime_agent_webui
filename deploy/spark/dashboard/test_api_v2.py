@@ -14,6 +14,25 @@ SPEC.loader.exec_module(api)
 
 
 class DashboardV2Tests(unittest.TestCase):
+    def test_task_poll_keeps_large_logs_out_of_the_refresh_payload(self):
+        task_id = "f" * 32
+        api.TASKS[task_id] = {
+            "id": task_id, "owner": "alice", "status": "completed",
+            "started": "2026-01-01T00:00:00Z", "liveLog": [
+                {"at": "2026-01-01T00:00:00Z", "line": f"{number}:" + "x" * 2048}
+                for number in range(1000)
+            ],
+        }
+        try:
+            row = api.task_snapshot("alice")[0]
+            self.assertTrue(row["liveLogTruncated"])
+            self.assertLessEqual(sum(len(item["line"]) for item in row["liveLog"]), 32 * 1024)
+            self.assertLessEqual(len(row["liveLog"]), 32)
+            self.assertIn("999:", row["liveLog"][-1]["line"])
+            self.assertLess(len(json.dumps(row)), 40 * 1024)
+        finally:
+            api.TASKS.pop(task_id, None)
+
     def test_live_task_events_publish_safe_progress_without_reasoning(self):
         task_id = "a" * 32
         api.TASKS[task_id] = {"id": task_id, "owner": "alice", "status": "running", "started": "2026-01-01T00:00:00Z", "startedEpoch": api.time.time(), "progressEvents": [], "sessionId": None}

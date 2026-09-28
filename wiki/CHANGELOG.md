@@ -3,6 +3,17 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-09-28 — v0176 — Bound dashboard task polling output
+
+- Diagnosed 9 MB responses from both `/api/tasks` and `/api/state` with only
+  four completed tasks; their retained redacted logs accounted for nearly all
+  of the payload, and the API journal showed timed-out response writes.
+- Limited poll responses to a 32-entry, 32 KiB recent log preview per task.
+  Full owner-scoped logs remain available through Complete output and download.
+- Added a regression test for the payload bound and updated the activity label.
+- Decision: [ADR-0104](decisions/0104-bound-task-polling-payload.md).
+- Snapshot: [v0176](versions/v0176.md).
+
 ## 2026-09-24 — v0175 — Preserve rotated Codex credentials and reliable fallback
 
 - Traced the task 502 to OpenAI's `refresh_token_reused` response; both remaining

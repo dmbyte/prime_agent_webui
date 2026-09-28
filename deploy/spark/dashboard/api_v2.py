@@ -972,7 +972,21 @@ def task_snapshot(user=None):
         for task_id, task in TASKS.items():
             if user is not None and task.get("owner", INITIAL_ADMIN) != user:
                 continue
-            row = {key: value for key, value in task.items() if key not in {"process", "usage", "rpcResponses", "agentEnded", "liveLogBytes", "lastOutputEpoch"} and not key.startswith("_")}
+            row = {key: value for key, value in task.items() if key not in {"process", "usage", "rpcResponses", "agentEnded", "liveLog", "liveLogBytes", "lastOutputEpoch"} and not key.startswith("_")}
+            # The complete redacted log is served by /api/tasks/log/chunk. Sending
+            # every retained line on each dashboard poll can grow to megabytes.
+            preview = []
+            remaining = 32 * 1024
+            for entry in reversed(task.get("liveLog") or []):
+                if len(preview) >= 32 or remaining <= 0:
+                    break
+                line = entry.get("line", "")
+                if len(line) > remaining:
+                    line = line[-remaining:]
+                preview.append({"at": entry.get("at"), "line": line})
+                remaining -= len(line)
+            row["liveLog"] = list(reversed(preview))
+            row["liveLogTruncated"] = len(task.get("liveLog") or []) > len(preview)
             if row.get("status") == "running":
                 row["elapsedSeconds"] = round(time.time() - row["startedEpoch"], 1)
                 row["silentSeconds"] = round(time.time() - task.get("lastOutputEpoch", task["startedEpoch"]), 1)
