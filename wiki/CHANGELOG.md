@@ -3,6 +3,22 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-09-29 — v0179 — Raise Nemotron context to 256K
+
+- Set Nemotron's served and Prime-advertised context to 262,144 tokens while
+  holding the explicit FP8 KV pool at 2 GiB. vLLM reported 505,783 cache
+  tokens at the new setting, versus 275,587 under the old 65K profile.
+- Lowered the vLLM startup admission target from 35% to 30%: with Qwen
+  co-resident, only about 39.8 GiB GPU memory was free, below the old
+  42.6 GiB target. The 35% restart failed before weight loading.
+- Preserved two-way scheduling for shorter requests; only one 256K request can
+  fit in the fixed pool at a time.
+- Live 250,011-token prompt plus 16 output tokens completed in 73.89 seconds;
+  Qwen stayed healthy. Available memory was ~15.7 GiB (~12%), below the prior
+  15% target and comparable to the pre-restart reading.
+- Decision: [ADR-0107](decisions/0107-nemotron-256k-fixed-kv-pool.md).
+- Snapshot: [v0179](versions/v0179.md).
+
 ## 2026-09-28 — v0178 — Preserve Prime compaction continuation
 
 - Diagnosed two unanswered Nemotron tasks after successful `ipython` calls.

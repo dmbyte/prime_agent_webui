@@ -11,7 +11,7 @@ multimodal/deep specialist. Qwen's PLE table is read directly from NVMe on
 demand. A shared-Q8 MTP head drafts two tokens at a time for faster
 single-stream decode. Its confidence cutoff remains disabled after thresholds
 through 0.3 failed to improve representative throughput. The co-resident
-profile gives Nemotron a 65,536-token limit and gives Qwen one 98,304-token
+profile gives Nemotron a 262,144-token limit and gives Qwen one 98,304-token
 slot with Q4 K/V cache.
 
 ## Production install sequence

@@ -46,11 +46,11 @@ class RunnerLaunchRegressionTests(unittest.TestCase):
         root = Path(__file__).parents[3]
         template = (root / "deploy/spark/vllm-nemotron35/vllm.env.template").read_text()
         start = (root / "deploy/spark/vllm-nemotron35/start.sh").read_text()
-        self.assertIn("MAX_MODEL_LEN=65536", template)
-        self.assertIn("GPU_MEMORY_UTILIZATION=0.35", template)
+        self.assertIn("MAX_MODEL_LEN=262144", template)
+        self.assertIn("GPU_MEMORY_UTILIZATION=0.30", template)
         self.assertIn("KV_CACHE_MEMORY_BYTES=2G", template)
-        self.assertIn('MAX_MODEL_LEN:-65536', start)
-        self.assertIn('GPU_MEMORY_UTILIZATION:-0.35', start)
+        self.assertIn('MAX_MODEL_LEN:-262144', start)
+        self.assertIn('GPU_MEMORY_UTILIZATION:-0.30', start)
         self.assertIn('KV_CACHE_MEMORY_BYTES:-2G', start)
 
     def test_qwen_long_context_uses_q4_cache(self):
@@ -69,7 +69,7 @@ class RunnerLaunchRegressionTests(unittest.TestCase):
         models = (root / "deploy/spark/prime/models.json").read_text()
         launcher = (root / "deploy/spark/container/runner_launch.py").read_text()
         for source in (models, launcher):
-            self.assertIn('"contextWindow":65536', source.replace(" ", ""))
+            self.assertIn('"contextWindow":262144', source.replace(" ", ""))
             self.assertIn('"contextWindow":98304', source.replace(" ", ""))
 
 

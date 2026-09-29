@@ -67,7 +67,7 @@ providers are used.
 Clone the release and run the installer as the account that should own Prime:
 
 ```bash
-git clone --branch v0.5.43 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
+git clone --branch v0.5.44 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
 cd prime_agent_webui
 ./install.sh --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
@@ -239,12 +239,20 @@ Source files:
 | DSpark draft model | `nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4-DSpark` |
 | Served name | `nemotron-3.5-lightning` |
 | Listener | `127.0.0.1:30000` |
-| Context cap | `MAX_MODEL_LEN=65536` |
-| GPU memory target | `GPU_MEMORY_UTILIZATION=0.35` |
+| Context cap | `MAX_MODEL_LEN=262144` |
+| GPU memory target | `GPU_MEMORY_UTILIZATION=0.30` |
 | Explicit KV cache | `KV_CACHE_MEMORY_BYTES=2G` |
 | Parallel sequences | `MAX_NUM_SEQS=2` |
 | Speculation | `SPEC_TOKENS=3`, `--spec-method dspark` |
 | Container memory | `--memory=68g`, `--memory-swap=80g`, `--shm-size=24g` |
+
+At this 256K setting, vLLM reports 505,783 cache tokens from the fixed 2 GiB
+FP8 KV pool. One 262,144-token request leaves 243,639 cache tokens for other
+work, but two full-length requests (524,288 tokens) still cannot run
+concurrently. The two-sequence scheduler can serve a second shorter request.
+The context limit includes prompt and generated tokens. A 30% GPU
+startup target is required when Qwen is co-resident; the old 35% target fails
+vLLM's startup free-memory check on the current Spark.
 
 The vLLM command line includes:
 
@@ -260,8 +268,8 @@ The vLLM command line includes:
 --reasoning-parser nemotron_v3
 --tool-call-parser qwen3_coder
 --enable-auto-tool-choice
---max-model-len 65536
---gpu-memory-utilization 0.35
+--max-model-len 262144
+--gpu-memory-utilization 0.30
 --kv-cache-memory-bytes 2G
 --max-num-seqs 2
 --served-model-name nemotron-3.5-lightning
@@ -627,7 +635,7 @@ For a manual upgrade:
 
 ```bash
 git fetch --tags origin
-git checkout v0.5.43
+git checkout v0.5.44
 ./install.sh --skip-packages --skip-prime --skip-password \
   --bind-address 192.168.1.50 --server-name prime.example.lan
 ```

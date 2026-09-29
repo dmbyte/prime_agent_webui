@@ -1,7 +1,7 @@
 # Current State
 
-Last verified: 2026-09-28
-Wiki version: `v0178`
+Last verified: 2026-09-29
+Wiki version: `v0179`
 
 ## Project summary
 
@@ -12,6 +12,19 @@ now also contains its first generated, kernel-validated 3D-print design: a vente
 case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 
 ## Repository state
+
+- The v0.5.44 profile raises Nemotron's served and Prime-advertised context
+  to 262,144 tokens with its explicit 2 GiB FP8 KV pool unchanged. At the new
+  setting vLLM reports 505,783 cache tokens, leaving 243,639 after one
+  full-length request; two full-length requests need 524,288 and do not fit.
+  Co-resident Qwen leaves about 39.8 GiB free GPU
+  memory at Nemotron startup, below the old 35% admission target of 42.6 GiB.
+  The startup target is now 30%; it is not the KV allocation. ADR-0107 records
+  the capacity and co-residency tradeoff. The live endpoint advertises 262,144,
+  and a 250,011-token synthetic prompt plus 16 generated tokens completed in
+  73.89 seconds with Qwen healthy. MemAvailable after that test was about
+  15.7 GiB (~12%), below the previously targeted 15% headroom; the pre-change
+  live reading was already about 15 GiB.
 
 - The v0.5.43 repair fixes a second source of unanswered tasks: Prime 0.9.5
   can emit `agent_end` while pausing for threshold context compaction, then
@@ -825,8 +838,8 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   and a reviewable Continual Harness with snapshots and rollback.
 - Default local tier: `nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4`
   plus its DSpark drafter, served as `nemotron-3.5-lightning` on loopback port
-  30000. It uses Marlin, FP8 KV, 3 speculative tokens, 65,536 context, a 2 GiB
-  KV cache, and at most two sequences.
+  30000. It uses Marlin, FP8 KV, 3 speculative tokens, 262,144 context, a 2 GiB
+  KV cache, and at most two sequences (only one at full context length).
 - Multimodal/deep local tier: Unsloth Qwen3.8-Flash-Next UD-IQ4_XS, served as
   `qwen3.8-flash-next` on loopback port 30001 by a pinned CUDA llama.cpp image.
   It uses a single 98,304-token slot, Q4 K/V cache, F16 vision projector, and
@@ -870,9 +883,13 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 - With a 77,034-token Qwen prompt still resident, both model endpoints healthy,
   and a completed Nemotron generation, Linux reported 20,171,890,688 of
   130,661,138,432 bytes available (15.44%). This passes the 15% gate by only
-  0.44 percentage points. Nemotron's 2 GiB FP8 reserve provides 275,587 cache
-  tokens, or 4.21 full 65,536-token requests, which remains above its two-
-  sequence limit.
+  0.44 percentage points. That measurement predates the 256K change.
+  Nemotron's 2 GiB FP8 reserve at the new setting reports 505,783 cache tokens,
+  enough for one 262,144-token request with 243,639 tokens left, but not two
+  full-length requests. The previous 65K setting reported 275,587 cache
+  tokens. The current after-test MemAvailable reading of ~15.7 GiB (~12%)
+  does not meet that historical 15% gate; additional simultaneous long-context
+  work should be treated cautiously.
 - Qwen accepted exactly 78,000 prompt tokens plus 16 output tokens. Its warm
   short-context 600-token run measured 44.76 model-eval token/s; after the 78K
   prompt it decoded at 29.56 token/s. Across the 32K and 78K context tests the
@@ -957,9 +974,10 @@ case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
   one slot, Q4 KV, and an 88 GiB container memory ceiling with no extra swap.
 - Nemotron's weight checkpoint is 20.08 GiB. Its warm allocation fell from about
   34.0 GiB to 25.9 GiB after reducing the explicit KV reserve from 12 GiB to
-  2 GiB. Its 65,536-token maximum and two-sequence scheduler fit inside the
-  measured 275,587-token cache capacity. The 0.35 utilization setting is a
-  startup admission ceiling; the explicit 2 GiB value controls KV allocation.
+  2 GiB. Its 262,144-token maximum fits once inside the measured
+  505,783-token cache capacity; the two-sequence scheduler still allows two
+  shorter requests. The 0.30 utilization setting is a startup admission
+  ceiling; the explicit 2 GiB value controls KV allocation.
 - The retired Qwen runtime is fully removed from the live Spark. Its user unit,
   launcher/config directory, stopped container, cache, and checkpoint are absent.
 - MTP is enabled with the 2,786,568,256-byte
