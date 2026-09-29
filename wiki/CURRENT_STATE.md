@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-09-28
-Wiki version: `v0177`
+Wiki version: `v0178`
 
 ## Project summary
 
@@ -12,6 +12,15 @@ now also contains its first generated, kernel-validated 3D-print design: a vente
 case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 
 ## Repository state
+
+- The v0.5.43 repair fixes a second source of unanswered tasks: Prime 0.9.5
+  can emit `agent_end` while pausing for threshold context compaction, then
+  resume after `compaction_end`. The dashboard had closed RPC input on the
+  first end event, interrupting the resume. It now waits through compaction,
+  reads runtime events without text-buffer read-ahead, and issues at most one
+  nonduplicating same-session continuation if tool work truly ends without a
+  final answer. A subprocess test reproduces the pause/resume protocol.
+  ADR-0106 records the lifecycle choice.
 
 - The v0.5.42 task-recovery repair addresses a Prime `ipython` call that mixed
   prose into executable Python and failed with `SyntaxError`. Prime then ended

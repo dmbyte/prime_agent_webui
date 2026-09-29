@@ -3,7 +3,10 @@ import importlib.util
 import base64
 import io
 import json
+import subprocess
+import sys
 import tempfile
+import time
 import unittest
 import zipfile
 from unittest import mock
@@ -24,13 +27,13 @@ class DashboardV2Tests(unittest.TestCase):
         try:
             api.apply_task_event(task_id, event)
             self.assertEqual(task["lastToolFailure"]["error"], "SyntaxError")
-            self.assertFalse(api.queue_python_parse_recovery(task_id))
+            self.assertFalse(api.queue_unanswered_recovery(task_id))
             api.apply_task_event(task_id, {"type": "agent_end"})
-            self.assertTrue(api.queue_python_parse_recovery(task_id))
+            self.assertTrue(api.queue_unanswered_recovery(task_id))
             queued = json.loads(stdin.getvalue().strip())
             self.assertEqual(queued["type"], "prompt")
             self.assertIn("short Python-only cell", queued["message"])
-            self.assertFalse(api.queue_python_parse_recovery(task_id))
+            self.assertFalse(api.queue_unanswered_recovery(task_id))
             self.assertIn("before completing", api.terminal_task_error(task))
             api.apply_task_event(task_id, {"type": "agent_start"})
             self.assertFalse(task["autoRecoveryPending"])
@@ -50,7 +53,7 @@ class DashboardV2Tests(unittest.TestCase):
             event = {"type": "tool_execution_end", "toolName": "ipython", "result": {"details": {"status": "error", "errorEname": "PermissionError"}}}
             api.apply_task_event(task_id, event)
             api.apply_task_event(task_id, {"type": "agent_end"})
-            self.assertFalse(api.queue_python_parse_recovery(task_id))
+            self.assertFalse(api.queue_unanswered_recovery(task_id))
             self.assertEqual(stdin.getvalue(), "")
         finally:
             api.TASKS.pop(task_id, None)
@@ -65,8 +68,64 @@ class DashboardV2Tests(unittest.TestCase):
             api.apply_task_event(task_id, {"type": "tool_execution_start", "toolName": "ipython"})
             api.apply_task_event(task_id, {"type": "tool_execution_end", "toolName": "ipython", "result": {"isError": True, "details": {"status": "error", "errorEname": "SyntaxError"}}})
             api.apply_task_event(task_id, {"type": "agent_end"})
-            self.assertTrue(api.queue_python_parse_recovery(task_id))
+            self.assertTrue(api.queue_unanswered_recovery(task_id))
         finally:
+            api.TASKS.pop(task_id, None)
+
+    def test_successful_tool_work_gets_one_nonduplicating_continuation(self):
+        task_id = "5" * 32
+        stdin = io.StringIO()
+        task = {"id": task_id, "owner": "alice", "status": "running", "process": mock.Mock(stdin=stdin)}
+        api.TASKS[task_id] = task
+        try:
+            api.apply_task_event(task_id, {"type": "tool_execution_end", "toolName": "ipython", "result": {"isError": False, "details": {"status": "ok"}}})
+            api.apply_task_event(task_id, {"type": "agent_end"})
+            self.assertTrue(api.queue_unanswered_recovery(task_id))
+            queued = json.loads(stdin.getvalue().strip())
+            self.assertIn("Do not repeat completed", queued["message"])
+            self.assertEqual(task["autoRecoveryKind"], "continuation")
+            self.assertFalse(api.queue_unanswered_recovery(task_id))
+            api.apply_task_event(task_id, {"type": "agent_start"})
+            api.apply_task_event(task_id, {"type": "message_end", "message": {"role": "assistant", "stopReason": "stop", "content": [{"type": "text", "text": "Here is the result."}]}})
+            api.apply_task_event(task_id, {"type": "agent_end"})
+            self.assertIsNone(api.terminal_task_error(task))
+        finally:
+            api.TASKS.pop(task_id, None)
+
+    def test_monitor_keeps_rpc_open_for_post_turn_compaction_and_resume(self):
+        script = '''import json, sys, time
+def emit(event):
+    print(json.dumps(event), flush=True)
+for line in sys.stdin:
+    if json.loads(line).get("type") != "prompt":
+        continue
+    emit({"type": "agent_start"})
+    emit({"type": "tool_execution_end", "toolName": "ipython", "result": {"isError": False, "details": {"status": "ok"}}})
+    emit({"type": "agent_end"})
+    time.sleep(0.2)
+    emit({"type": "compaction_start", "reason": "threshold"})
+    time.sleep(0.1)
+    emit({"type": "compaction_end", "reason": "threshold", "result": {}, "aborted": False})
+    emit({"type": "agent_start"})
+    emit({"type": "message_end", "message": {"role": "assistant", "stopReason": "stop", "content": [{"type": "text", "text": "Completed after compaction."}]}})
+    emit({"type": "agent_end"})
+'''
+        process = subprocess.Popen([sys.executable, "-u", "-c", script], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, start_new_session=True)
+        task_id = "4" * 32
+        task = {"id": task_id, "owner": "alice", "sessionId": "existing", "status": "running", "process": process, "startedEpoch": time.time(), "_stdinLock": api.threading.Lock()}
+        api.TASKS[task_id] = task
+        process.stdin.write('{"type":"prompt","message":"check"}\n')
+        process.stdin.flush()
+        try:
+            with tempfile.TemporaryDirectory() as directory, mock.patch.object(api, "AGENT_END_SETTLE_SECONDS", 0.5), mock.patch.object(api, "TASK_LOGS", Path(directory)), mock.patch.object(api, "session_root", return_value=Path(directory)), mock.patch.object(api, "session_stems", return_value=set()), mock.patch.object(api, "append_live_log"), mock.patch.object(api, "recover_failed_task_conversation", return_value=None), mock.patch.object(api, "append_ledger"), mock.patch.object(api, "store_task_route"), mock.patch.object(api, "record_task_finished"), mock.patch.object(api.legacy, "audit"):
+                api.monitor_task(task_id, set())
+            self.assertEqual(task["status"], "completed")
+            self.assertEqual(task["liveResponse"], "Completed after compaction.")
+            self.assertFalse(task.get("autoRecoveryCount"))
+        finally:
+            if process.poll() is None:
+                process.terminate()
+                process.wait(timeout=5)
             api.TASKS.pop(task_id, None)
 
     def test_agent_that_corrects_its_own_syntax_error_is_not_restarted(self):
@@ -78,7 +137,7 @@ class DashboardV2Tests(unittest.TestCase):
             api.apply_task_event(task_id, {"type": "tool_execution_end", "toolName": "ipython", "result": {"details": {"status": "ok"}}})
             api.apply_task_event(task_id, {"type": "message_end", "message": {"role": "assistant", "content": [{"type": "text", "text": "The check now passes."}]}})
             api.apply_task_event(task_id, {"type": "agent_end"})
-            self.assertFalse(api.queue_python_parse_recovery(task_id))
+            self.assertFalse(api.queue_unanswered_recovery(task_id))
             self.assertEqual(stdin.getvalue(), "")
             self.assertIsNone(api.terminal_task_error(api.TASKS[task_id]))
         finally:

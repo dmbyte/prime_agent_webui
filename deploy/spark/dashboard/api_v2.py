@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import base64
+from collections import deque
 import hashlib
 import importlib.util
 import json
@@ -44,6 +45,9 @@ UPDATE_STATUS_DIR = legacy.HOME / ".prime/agent/update-status"
 USER_TRASH = legacy.HOME / ".prime/agent/user-trash"
 MAX_NATIVE_TASKS = 4
 MAX_TASK_SECONDS = 30 * 60
+AGENT_END_SETTLE_SECONDS = 5
+COMPACTION_RESUME_SECONDS = 30
+AUTO_RECOVERY_START_SECONDS = 30
 RECOVERABLE_PYTHON_ERRORS = {"SyntaxError", "IndentationError", "TabError"}
 TASKS = {}
 TASK_LOCK = threading.Lock()
@@ -1229,8 +1233,8 @@ def apply_task_event(task_id, event):
                 add_runtime_event(task, "error", "Command rejected", task["rpcError"])
             if request_id == task.get("autoRecoveryRequestId") and not event.get("success", False):
                 task["autoRecoveryPending"] = False
-                task["rpcError"] = "Prime rejected the automatic Python correction"
-                add_runtime_event(task, "error", "Python correction rejected")
+                task["rpcError"] = "Prime rejected the automatic continuation"
+                add_runtime_event(task, "error", "Automatic continuation rejected")
             data = event.get("data") or {}
             session_id = data.get("sessionId") if isinstance(data, dict) else None
             if valid_id(session_id):
@@ -1251,6 +1255,15 @@ def apply_task_event(task_id, event):
             task["agentEnded"] = True
             add_task_progress(task, "Finishing response")
             add_runtime_event(task, "agent", "Agent finished its turn")
+        elif event_type == "compaction_start":
+            add_task_progress(task, "Compacting conversation context")
+            add_runtime_event(task, "runtime", "Compacting conversation context")
+        elif event_type == "compaction_end":
+            if event.get("errorMessage"):
+                add_runtime_event(task, "error", "Context compaction failed", event["errorMessage"])
+            else:
+                add_task_progress(task, "Context compacted; waiting for Prime")
+                add_runtime_event(task, "runtime", "Context compacted")
         elif event_type == "turn_start":
             add_task_progress(task, "Working on the request")
             add_runtime_event(task, "turn", "Turn started")
@@ -1288,6 +1301,7 @@ def apply_task_event(task_id, event):
             tool_name = str(event.get("toolName") or event.get("tool") or "tool")
             result = event.get("result") or {}
             details = result.get("details") or {}
+            task["toolExecuted"] = True
             if result.get("isError") or details.get("status") == "error":
                 error_name = sanitize_runtime_text(details.get("errorEname") or "ToolError", 80)
                 task["lastToolFailure"] = {"tool": tool_name, "error": error_name}
@@ -1308,30 +1322,40 @@ def apply_task_event(task_id, event):
             add_runtime_event(task, "error", "Isolated task runtime failed")
 
 
-def queue_python_parse_recovery(task_id):
+def queue_unanswered_recovery(task_id):
     with TASK_LOCK:
         task = TASKS.get(task_id)
         failure = (task or {}).get("lastToolFailure") or {}
         if (not task or not task.get("agentEnded") or task.get("hasAssistantText")
-                or failure.get("tool") != "ipython"
-                or failure.get("error") not in RECOVERABLE_PYTHON_ERRORS
+                or not task.get("toolExecuted")
                 or task.get("autoRecoveryCount", 0) >= 1 or task.get("stopRequested")):
+            return False
+        if failure and (failure.get("tool") != "ipython"
+                        or failure.get("error") not in RECOVERABLE_PYTHON_ERRORS):
             return False
         process = task.get("process")
         if not process or not process.stdin:
             return False
+        parse_error = bool(failure)
         task["autoRecoveryCount"] = 1
         task["autoRecoveryPending"] = True
+        task["autoRecoveryKind"] = "python" if parse_error else "continuation"
         request_id = task["autoRecoveryRequestId"] = f"auto-recovery-{task_id}"
         write_lock = task.setdefault("_stdinLock", threading.Lock())
-        add_task_progress(task, "Correcting invalid Python cell")
-        add_runtime_event(task, "retry", "Correcting invalid Python cell")
+        label = "Correcting invalid Python cell" if parse_error else "Continuing after tool work"
+        add_task_progress(task, label)
+        add_runtime_event(task, "retry", label)
+    correction = ("The last ipython cell did not execute because its Python syntax was invalid. "
+                  "Rewrite it as a short Python-only cell, retry the intended check, then continue "
+                  "the original task and give the user a clear final result. Keep prose outside code.")
+    continuation = ("The previous turn ended after tool work without answering the user. "
+                    "Continue from the tool results already in this session. Do not repeat completed "
+                    "actions or tool calls merely to recover. Finish the original request and give "
+                    "the user a clear final result, including any remaining blockers.")
     request = {
         "id": request_id,
         "type": "prompt",
-        "message": "The last ipython cell did not execute because its Python syntax was invalid. "
-                   "Rewrite it as a short Python-only cell, retry the intended check, then continue "
-                   "the original task and give the user a clear final result. Keep prose outside code.",
+        "message": correction if parse_error else continuation,
     }
     try:
         with write_lock:
@@ -1342,7 +1366,7 @@ def queue_python_parse_recovery(task_id):
             current = TASKS.get(task_id)
             if current:
                 current["autoRecoveryPending"] = False
-                current["rpcError"] = "Prime could not queue a correction after invalid Python code"
+                current["rpcError"] = "Prime could not queue a continuation after tool work"
         return False
     return True
 
@@ -1351,7 +1375,7 @@ def terminal_task_error(task):
     if task.get("rpcError"):
         return task["rpcError"]
     if task.get("autoRecoveryPending"):
-        return "Prime exited before completing its Python correction"
+        return "Prime exited before completing its automatic continuation"
     if task.get("agentEnded") and not task.get("hasAssistantText"):
         return "Prime ended without answering after its tool work"
     return None
@@ -1367,36 +1391,91 @@ def monitor_task(task_id, before):
     stdin_closed = False
     completed_deadline = None
     recovery_deadline = None
-    while process.poll() is None:
-        if time.monotonic() >= deadline:
+    ended_settle_deadline = None
+    compaction_active = False
+    compaction_resume_deadline = None
+    pending_bytes = bytearray()
+    pending_lines = deque()
+    discarding_line = False
+    while process.poll() is None or pending_lines:
+        now = time.monotonic()
+        alive = process.poll() is None
+        if alive and now >= deadline:
             timed_out = True
             os.killpg(process.pid, signal.SIGTERM)
             break
-        if recovery_deadline and time.monotonic() >= recovery_deadline:
+        if alive and recovery_deadline and now >= recovery_deadline:
             with TASK_LOCK:
                 current = TASKS.get(task_id)
                 if current and current.get("autoRecoveryPending"):
-                    current["rpcError"] = "Prime did not resume after its Python correction was queued"
-                    add_runtime_event(current, "error", "Python correction did not start")
+                    current["rpcError"] = "Prime did not start its automatic continuation"
+                    add_runtime_event(current, "error", "Automatic continuation did not start")
             process.terminate()
             break
-        if completed_deadline and time.monotonic() >= completed_deadline:
+        if alive and completed_deadline and now >= completed_deadline:
             process.terminate()
             break
-        ready, _, _ = select.select([process.stdout], [], [], 1)
-        if not ready:
-            continue
-        line = process.stdout.readline(262145)
-        if not line:
-            continue
-        if len(line) > 262144:
-            while line and not line.endswith("\n"):
-                line = process.stdout.readline(262145)
-            with TASK_LOCK:
-                task = TASKS.get(task_id)
-                if task:
-                    add_task_progress(task, "Discarded an oversized runtime event")
-            continue
+        with TASK_LOCK:
+            current = TASKS.get(task_id, {})
+            ended = bool(current.get("agentEnded"))
+            recovery_pending = bool(current.get("autoRecoveryPending"))
+            has_answer = bool(current.get("hasAssistantText"))
+        output_ready = bool(pending_lines)
+        if alive and not output_ready:
+            output_ready = bool(select.select([process.stdout], [], [], 0)[0])
+        if alive and ended and not recovery_pending and not stdin_closed and not compaction_active and not output_ready:
+            waiting_for_compaction = compaction_resume_deadline and not has_answer and now < compaction_resume_deadline
+            if not waiting_for_compaction and (not ended_settle_deadline or now >= ended_settle_deadline):
+                if queue_unanswered_recovery(task_id):
+                    recovery_deadline = now + AUTO_RECOVERY_START_SECONDS
+                else:
+                    with current.get("_stdinLock", threading.Lock()):
+                        process.stdin.close()
+                        process.stdin = None
+                    stdin_closed = True
+                    completed_deadline = now + 5
+        if not pending_lines:
+            if not alive:
+                break
+            ready, _, _ = select.select([process.stdout], [], [], 1)
+            if not ready:
+                continue
+            chunk = os.read(process.stdout.fileno(), 65536)
+            if not chunk:
+                continue
+            cursor = 0
+            while cursor < len(chunk):
+                if discarding_line:
+                    end = chunk.find(b"\n", cursor)
+                    if end < 0:
+                        break
+                    discarding_line = False
+                    cursor = end + 1
+                    continue
+                end = chunk.find(b"\n", cursor)
+                if end < 0:
+                    pending_bytes.extend(chunk[cursor:])
+                    if len(pending_bytes) > 262144:
+                        pending_bytes.clear()
+                        discarding_line = True
+                        with TASK_LOCK:
+                            current = TASKS.get(task_id)
+                            if current:
+                                add_task_progress(current, "Discarded an oversized runtime event")
+                    break
+                pending_bytes.extend(chunk[cursor:end])
+                if len(pending_bytes) <= 262144:
+                    pending_lines.append(pending_bytes.decode("utf-8", errors="replace") + "\n")
+                else:
+                    with TASK_LOCK:
+                        current = TASKS.get(task_id)
+                        if current:
+                            add_task_progress(current, "Discarded an oversized runtime event")
+                pending_bytes.clear()
+                cursor = end + 1
+            if not pending_lines:
+                continue
+        line = pending_lines.popleft()
         with TASK_LOCK:
             current = TASKS.get(task_id)
             if current:
@@ -1404,8 +1483,22 @@ def monitor_task(task_id, before):
         try:
             event = json.loads(line)
             apply_task_event(task_id, event)
-            if event.get("type") == "agent_end":
-                queue_python_parse_recovery(task_id)
+            event_type = event.get("type")
+            if event_type == "agent_end":
+                ended_settle_deadline = time.monotonic() + AGENT_END_SETTLE_SECONDS
+                compaction_resume_deadline = None
+            elif event_type == "agent_start":
+                ended_settle_deadline = None
+                compaction_active = False
+                compaction_resume_deadline = None
+                recovery_deadline = None
+            elif event_type == "compaction_start":
+                compaction_active = True
+                compaction_resume_deadline = None
+            elif event_type == "compaction_end":
+                compaction_active = False
+                if ended_settle_deadline:
+                    compaction_resume_deadline = time.monotonic() + COMPACTION_RESUME_SECONDS
         except (json.JSONDecodeError, TypeError, ValueError):
             with TASK_LOCK:
                 current = TASKS.get(task_id)
@@ -1414,26 +1507,13 @@ def monitor_task(task_id, before):
         if len(line) <= 20000:
             log_lines.append(safe_runtime_line(line) + "\n")
             log_lines = log_lines[-200:]
-        with TASK_LOCK:
-            current = TASKS.get(task_id, {})
-            ended = bool(current.get("agentEnded"))
-            recovery_pending = bool(current.get("autoRecoveryPending"))
-        if ended and recovery_pending:
-            recovery_deadline = recovery_deadline or time.monotonic() + 30
-        elif ended and not stdin_closed and process.stdin:
-            recovery_deadline = None
-            with current.get("_stdinLock", threading.Lock()):
-                process.stdin.close()
-                process.stdin = None
-            stdin_closed = True
-            completed_deadline = time.monotonic() + 5
-        elif not recovery_pending:
-            recovery_deadline = None
     try:
         remainder, _ = process.communicate(timeout=10)
     except subprocess.TimeoutExpired:
         os.killpg(process.pid, signal.SIGKILL)
         remainder, _ = process.communicate(timeout=5)
+    if pending_bytes:
+        remainder = pending_bytes.decode("utf-8", errors="replace") + remainder
     for line in remainder.splitlines():
         with TASK_LOCK:
             current = TASKS.get(task_id)

@@ -110,3 +110,4 @@ only historical evidence: when a decision changes, mark the old record
 - [ADR-0103: Preserve the gateway's rotated OAuth credential](0103-preserve-gateway-oauth-rotation.md)
 - [ADR-0104: Bound task polling log previews](0104-bound-task-polling-payload.md)
 - [ADR-0105: Recover unanswered Python parse failures once](0105-recover-unanswered-python-parse-failures.md)
+- [ADR-0106: Preserve Prime's post-compaction continuation](0106-preserve-compaction-continuation.md)

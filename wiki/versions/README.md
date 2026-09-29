@@ -6,6 +6,7 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0178](v0178.md) | 2026-09-28 | Preserved Prime's post-compaction continuation |
 | [v0177](v0177.md) | 2026-09-28 | Bounded correction of unanswered Python parse errors |
 | [v0176](v0176.md) | 2026-09-28 | Bounded task refresh payload while retaining complete logs on demand |
 | [v0175](v0175.md) | 2026-09-24 | Preserved rotated Codex credentials and made explicit fallback authoritative |

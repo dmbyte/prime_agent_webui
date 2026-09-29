@@ -3,6 +3,20 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-09-28 — v0178 — Preserve Prime compaction continuation
+
+- Diagnosed two unanswered Nemotron tasks after successful `ipython` calls.
+  Prime's runtime stops its loop for threshold compaction and can emit
+  `compaction_start` after `agent_end`; the dashboard closed RPC input before
+  Prime resumed. One affected log captured that sequence.
+- Kept RPC open through compaction and bounded resume, added one safe
+  same-session continuation for a genuinely unanswered successful tool turn,
+  and surfaced compaction progress. Replaced buffered line reads with
+  unbuffered event framing to avoid hiding already-arrived events.
+- Added a real subprocess regression for the pause/compact/resume sequence.
+- Decision: [ADR-0106](decisions/0106-preserve-compaction-continuation.md).
+- Snapshot: [v0178](versions/v0178.md).
+
 ## 2026-09-28 — v0177 — Recover unanswered Python parse failures
 
 - Confirmed the malformed `ipython` cell contained English prose inside its
