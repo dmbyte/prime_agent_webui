@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-09-29
-Wiki version: `v0180`
+Wiki version: `v0181`
 
 ## Project summary
 
@@ -12,6 +12,11 @@ now also contains its first generated, kernel-validated 3D-print design: a vente
 case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 
 ## Repository state
+
+- The v0.5.46 follow-up shortens the memory card's visible unit to `G` (GiB)
+  so both RAM amounts fit in its narrow expanded hover view. The accessible
+  label retains full `GiB` wording. A live Chrome check verified the used and
+  free lines fit without clipping; no telemetry or model behavior changed.
 
 - The v0.5.45 dashboard keeps the compact memory graph and percentage
   uncluttered, then shows current used and free RAM amounts in GiB on hover or

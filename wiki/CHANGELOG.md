@@ -3,6 +3,14 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-09-29 — v0181 — Fit RAM amounts in expanded card
+
+- Live browser inspection caught clipped `GiB` suffixes in the narrow memory
+  card. The visible unit is now compact `G` (GiB), while the accessible label
+  retains full units. Both used and free lines now fit in the expanded card.
+- Decision: [ADR-0108](decisions/0108-show-ram-amounts-on-memory-graph.md).
+- Snapshot: [v0181](versions/v0181.md).
+
 ## 2026-09-29 — v0180 — Show RAM amounts in the memory graph
 
 - Added used and free/available RAM amounts to the expanded memory graph,

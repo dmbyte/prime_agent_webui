@@ -6,6 +6,7 @@ The highest numbered snapshot is normally current; confirm against
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0181](v0181.md) | 2026-09-29 | Fitted RAM values in narrow expanded graph card |
 | [v0180](v0180.md) | 2026-09-29 | Showed used and free RAM on expanded memory graph |
 | [v0179](v0179.md) | 2026-09-29 | Raised Nemotron context to 256K within fixed KV pool |
 | [v0178](v0178.md) | 2026-09-28 | Preserved Prime's post-compaction continuation |

@@ -16,7 +16,9 @@ Keep the compact card's percentage and graph. On hover or keyboard focus, show
 used and free RAM under the percentage. Reuse the API's existing
 `memoryUsedBytes` and `memoryTotalBytes` fields and one-second poll. Calculate
 the displayed free amount as total minus used, which equals the API's Linux
-`MemAvailable` reading. Explain that “free” includes reclaimable cache.
+`MemAvailable` reading. Explain that “free” includes reclaimable cache. In the
+narrow expanded card, abbreviate GiB to `G` while retaining full units in the
+accessible label; the original full suffix clipped in a live browser check.
 
 ## Consequences
 
