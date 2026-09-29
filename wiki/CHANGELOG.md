@@ -3,6 +3,15 @@
 Entries are newest first. Each material entry links to an immutable state
 snapshot. Use ISO dates and describe outcomes, validation, and rollback impact.
 
+## 2026-09-29 — v0180 — Show RAM amounts in the memory graph
+
+- Added used and free/available RAM amounts to the expanded memory graph,
+  visible on hover and keyboard focus without cluttering its compact view.
+- Reused one-second telemetry and existing `MemTotal`/`MemAvailable` data; no
+  extra polling or model-memory allocation was introduced.
+- Decision: [ADR-0108](decisions/0108-show-ram-amounts-on-memory-graph.md).
+- Snapshot: [v0180](versions/v0180.md).
+
 ## 2026-09-29 — v0179 — Raise Nemotron context to 256K
 
 - Set Nemotron's served and Prime-advertised context to 262,144 tokens while

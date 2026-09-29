@@ -112,3 +112,4 @@ only historical evidence: when a decision changes, mark the old record
 - [ADR-0105: Recover unanswered Python parse failures once](0105-recover-unanswered-python-parse-failures.md)
 - [ADR-0106: Preserve Prime's post-compaction continuation](0106-preserve-compaction-continuation.md)
 - [ADR-0107: Serve Nemotron at 256K within the fixed KV pool](0107-nemotron-256k-fixed-kv-pool.md)
+- [ADR-0108: Show RAM amounts on the expanded memory graph](0108-show-ram-amounts-on-memory-graph.md)

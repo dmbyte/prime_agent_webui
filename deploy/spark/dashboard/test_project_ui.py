@@ -77,6 +77,20 @@ class ProjectUiTests(unittest.TestCase):
         self.assertIn(".telemetry-card:hover", css)
         self.assertIn("transform:scale(1.9)", css)
 
+    def test_memory_graph_shows_live_used_and_free_amounts(self):
+        app = (ROOT / "app-v2.js").read_text()
+        css = (ROOT / "enhancements.css").read_text()
+        self.assertIn('data?.memoryUsedBytes', app)
+        self.assertIn('data?.memoryTotalBytes', app)
+        self.assertIn('class="ram-used"', app)
+        self.assertIn('class="ram-free"', app)
+        self.assertIn('Free means MemAvailable', app)
+        self.assertIn('card.querySelector(".ram-used").textContent=amounts.used', app)
+        self.assertIn('card.querySelector(".ram-free").textContent=amounts.free', app)
+        self.assertIn('.telemetry-card.memory-card .metric-ram-values', css)
+        self.assertIn('.telemetry-card.memory-card:hover .metric-ram-values', css)
+        self.assertIn('.telemetry-card.memory-card:focus-visible .metric-ram-values', css)
+
     def test_skills_have_user_request_admin_review_and_project_selection(self):
         index = (ROOT / "index.html").read_text()
         app = (ROOT / "app-v2.js").read_text()

@@ -1,7 +1,7 @@
 # Current State
 
 Last verified: 2026-09-29
-Wiki version: `v0179`
+Wiki version: `v0180`
 
 ## Project summary
 
@@ -12,6 +12,13 @@ now also contains its first generated, kernel-validated 3D-print design: a vente
 case for Raspberry Pi 5 with the iUniker INV001 NVMe HAT+.
 
 ## Repository state
+
+- The v0.5.45 dashboard keeps the compact memory graph and percentage
+  uncluttered, then shows current used and free RAM amounts in GiB on hover or
+  keyboard focus. They update through the existing one-second telemetry poll.
+  “Free” uses Linux `MemAvailable` (including reclaimable cache), and “Used”
+  is `MemTotal - MemAvailable`, consistent with the displayed percentage.
+  ADR-0108 records this presentation and metric definition.
 
 - The v0.5.44 profile raises Nemotron's served and Prime-advertised context
   to 262,144 tokens with its explicit 2 GiB FP8 KV pool unchanged. At the new

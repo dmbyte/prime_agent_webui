@@ -39,6 +39,8 @@ skills belong outside the repository and are excluded from version control.
   effort control, and provider/model token and spend roll-ups.
 - One-second CPU, GPU, memory, power, and temperature sparklines at the top of
   the sidebar, with large value watermarks and an expanded live hover view.
+  Hovering or keyboard-focusing the memory graph also shows used and
+  free/available RAM amounts.
 - Recoverable conversation deletion, isolated ownership metadata, uploads,
   activity logs, and administrative user lifecycle management.
 - Production OpenShell per-task execution under a dedicated service identity,
@@ -67,7 +69,7 @@ providers are used.
 Clone the release and run the installer as the account that should own Prime:
 
 ```bash
-git clone --branch v0.5.44 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
+git clone --branch v0.5.45 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
 cd prime_agent_webui
 ./install.sh --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
@@ -635,7 +637,7 @@ For a manual upgrade:
 
 ```bash
 git fetch --tags origin
-git checkout v0.5.44
+git checkout v0.5.45
 ./install.sh --skip-packages --skip-prime --skip-password \
   --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
