@@ -4,6 +4,8 @@
 .skill-check{display:flex;align-items:center;gap:8px;margin:6px 0}
 .skill-check input{width:auto}
 .skill-toolbar{display:flex;justify-content:flex-end;margin-bottom:8px}
+#projectSkillList input{flex:0 0 auto}
+#projectSkillList span{flex:1;min-width:0;overflow:visible;text-overflow:clip;white-space:normal;overflow-wrap:anywhere}
 .skill-row{display:flex;align-items:flex-start;gap:10px}
 .skill-row>div{min-width:0;flex:1}
 .skill-row strong,.skill-row small{display:block}

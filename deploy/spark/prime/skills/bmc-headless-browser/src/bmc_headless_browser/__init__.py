@@ -149,7 +149,7 @@ class BMCBrowser:
 
     def _command_blocking(self, request: dict[str, Any]) -> dict[str, Any]:
         if self._socket is None or self._reader is None or self._writer is None:
-            raise RuntimeError("Browser broker is unavailable; use the OpenShell network-operations profile")
+            raise RuntimeError("Browser session is not open or has been closed; keep browser actions inside 'async with BMCBrowser(...) as browser'")
         self._writer.write(json.dumps(request, separators=(",", ":")) + "\n")
         self._writer.flush()
         raw = self._reader.readline()

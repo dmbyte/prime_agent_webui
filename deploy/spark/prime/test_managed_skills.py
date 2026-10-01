@@ -1,7 +1,9 @@
 import importlib.util
+import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parent
@@ -19,7 +21,7 @@ class ManagedSkillTests(unittest.TestCase):
         module = load_installer()
         rows = module.validate_tree(ROOT / "skills", len(module.BUNDLED_SKILLS), module.BUNDLED_SKILLS)
         self.assertEqual({row["name"] for row in rows}, {
-            "bmc-headless-browser", "ipmi-redfish-bmc", "prime-nvidia-catalog",
+            "bmc-headless-browser", "bmc-html5-kvm", "ipmi-redfish-bmc", "prime-nvidia-catalog",
         })
 
     def test_symlink_is_rejected(self):
@@ -33,10 +35,31 @@ class ManagedSkillTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 module.validate_tree(root)
 
+    def test_inventory_publishes_installed_and_lazy_catalog_metadata(self):
+        module = load_installer()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            state = root / "state"
+            skill = state / "skills/example"
+            skill.mkdir(parents=True)
+            (skill / "SKILL.md").write_text("---\nname: example\ndescription: Installed skill\n---\n")
+            catalog = state / "catalogs/nvidia"
+            catalog.mkdir(parents=True)
+            (catalog / "manifest.json").write_text(json.dumps({"skills": [{"name": "cuda", "directory": "cuda", "description": "CUDA help"}]}))
+            with mock.patch.object(module.pwd, "getpwnam", return_value=mock.Mock(pw_dir=str(root))), mock.patch.object(module.os, "chown"):
+                module.publish_inventory("alice", state, 1000, 1000)
+            rows = json.loads((root / ".prime/agent/skill-inventory.json").read_text())
+            self.assertEqual([row["id"] for row in rows["skills"]], ["managed:example", "nvidia:cuda"])
+
     def test_power_mutations_are_confirmation_gated(self):
         source = (ROOT / "skills/ipmi-redfish-bmc/src/ipmi_redfish_bmc/__init__.py").read_text()
         self.assertIn("if not confirm:", source)
         self.assertIn("IPMI_PASSWORD", source)
+        self.assertIn("class SOLSession", source)
+        self.assertIn('"sol", "activate"', source)
+        self.assertIn('"sol", "deactivate"', source)
+        self.assertIn("pty.openpty()", source)
+        self.assertIn("pyte.Screen", source)
         browser = (ROOT / "skills/bmc-headless-browser/src/bmc_headless_browser/__init__.py").read_text()
         self.assertIn("confirmed_click", browser)
         self.assertNotIn("apt-get", browser)
@@ -58,6 +81,7 @@ class ManagedSkillTests(unittest.TestCase):
         installer = (ROOT.parent / "openshell/install.sh").read_text()
         self.assertIn("COPY --chown=root:root managed-skills /opt/prime-managed-skills", containerfile)
         self.assertIn("playwright==1.63.0", containerfile)
+        self.assertIn("pyte==0.8.2", containerfile)
         entrypoint = (ROOT.parent / "container/prime-container-entrypoint.sh").read_text()
         self.assertIn("bmc_headless_browser --daemon", entrypoint)
         self.assertIn("BMC_BROWSER_BROKER", entrypoint)

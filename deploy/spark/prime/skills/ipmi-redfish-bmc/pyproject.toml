@@ -4,10 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "prime-ipmi-redfish-bmc"
-version = "1.0.0"
-description = "Safe Redfish and ipmitool adapter for Prime/OpenShell"
+version = "1.1.0"
+description = "Safe Redfish, IPMI, and interactive Serial-over-LAN adapter for Prime/OpenShell"
 requires-python = ">=3.10"
-dependencies = ["requests>=2.31,<3"]
+dependencies = ["requests>=2.31,<3", "pyte>=0.8.2,<1"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ipmi_redfish_bmc"]

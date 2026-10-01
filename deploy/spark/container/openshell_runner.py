@@ -78,6 +78,12 @@ def task_spec(task_id, owner, authorization, provider, model, thinking,
         _volume(f"prime-{owner}-workspace", "/project", False),
         _volume(f"prime-{owner}-gateway-{network}", "/run/prime-gateway", True),
     ]
+    # The KVM broker lives in the owner's LAN gateway. Full egress includes
+    # LAN access but uses a different gateway volume, so expose this control
+    # channel explicitly for authorized network-operations tasks in both modes.
+    kvm_access = profile == "network-operations" and network in {"lan", "full"}
+    if kvm_access:
+        mounts.append(_volume(f"prime-{owner}-gateway-lan", "/run/prime-kvm", True))
     local_targets = []
     for source, target in task_common.local_mounts(authorization.get("localPaths")):
         mounts.append(_shared_path_volume(source, target))
@@ -86,6 +92,8 @@ def task_spec(task_id, owner, authorization, provider, model, thinking,
     policy_root.mkdir(mode=0o700, parents=True, exist_ok=True)
     policy_path = policy_root / f"{task_id}.yaml"
     read_only = ["/usr", "/lib", "/proc", "/etc", "/opt/prime-kernel", "/run/prime-gateway", "/home/prime/.prime/agent/project-sources", *local_targets]
+    if kvm_access:
+        read_only.append("/run/prime-kvm")
     lines = [
         "version: 1", "filesystem_policy:", "  include_workdir: true", "  read_only:",
         *[f"    - {path}" for path in read_only],
@@ -95,6 +103,10 @@ def task_spec(task_id, owner, authorization, provider, model, thinking,
         # created because a later OpenShell policy update cannot widen the
         # process' existing Landlock domain.
         "    - /dev/null", "    - /dev/urandom", "    - /dev/random", "    - /dev/shm",
+        # IPMI SOL uses a PTY. /dev/ptmx is a symlink to /dev/pts/ptmx in the
+        # sandbox image, and OpenShell rejects symlinks in writable policy.
+        # Grant the underlying devpts directory only to network-operations.
+        *(["    - /dev/pts"] if profile == "network-operations" else []),
         "landlock:", "  compatibility: hard_requirement", "network_policies: {}", "",
     ]
     temporary = policy_path.with_suffix(".tmp")
@@ -141,6 +153,8 @@ def task_spec(task_id, owner, authorization, provider, model, thinking,
         "--env", "NPM_CONFIG_PREFIX=/home/prime/.prime/tools/npm",
         "--env", "PLAYWRIGHT_BROWSERS_PATH=/home/prime/.prime/tools/playwright",
         "--env", "PRIME_AGENT_KERNEL_PYTHON=/opt/prime-kernel/bin/python",
+        "--env", f"PRIME_TASK_PROFILE={profile}", "--env", f"PRIME_NETWORK_MODE={network}",
+        *(["--env", "PRIME_KVM_SOCKET=/run/prime-kvm/kvm.sock"] if kvm_access else []),
         "--env", "IPYTHONDIR=/home/prime/.prime/ipython", "--",
         "/usr/bin/python3", "-c", relay, input_fifo, *prime,
     ]

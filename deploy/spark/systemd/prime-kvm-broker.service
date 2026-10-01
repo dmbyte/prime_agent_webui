@@ -1,0 +1,33 @@
+[Unit]
+Description=Prime long-running HTML5 KVM broker
+After=prime-model-gateway.service
+Requires=prime-model-gateway.service
+
+[Service]
+Type=simple
+User=prime-runner
+Group=prime-runner
+SupplementaryGroups=prime-local-access
+Environment=HOME=/var/lib/prime-runner
+Environment=XDG_RUNTIME_DIR=/run/user/@RUNNER_UID@
+Environment=PRIME_WEB_OWNER=@WEB_OWNER@
+ExecStart=/usr/bin/python3 /usr/local/lib/prime-runner/kvm_broker.py
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=no
+InaccessiblePaths=/root
+ReadWritePaths=/var/lib/prime-runner /home/@WEB_OWNER@/prime-agent
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

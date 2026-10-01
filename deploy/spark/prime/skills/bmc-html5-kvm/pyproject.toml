@@ -1,0 +1,13 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "prime-bmc-html5-kvm"
+version = "0.1.0"
+description = "Long-running, OpenShell-isolated HTML5 BMC console adapter for Prime"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bmc_html5_kvm"]

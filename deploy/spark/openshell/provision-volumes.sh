@@ -5,10 +5,11 @@ test "${EUID}" -ne 0 || { echo "Run as the Docker/WebUI owner, not root." >&2; e
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 
 ensure_volume() {
-  local name=$1 device=$2 legacy_device=${3:-} current
+  local name=$1 device=$2 legacy_device=${3:-} current labels
   sudo test -d "$device" || { echo "Missing Prime storage directory: $device" >&2; exit 1; }
   if docker volume inspect "$name" >/dev/null 2>&1; then
     current=$(docker volume inspect "$name" --format '{{ index .Options "device" }}')
+    labels=$(docker volume inspect "$name" --format '{{json .Labels}}')
     if [[ "$current" != "$device" ]]; then
       if [[ -n "$legacy_device" && "$current" == "$legacy_device" ]]; then
         docker volume rm "$name" >/dev/null
@@ -17,11 +18,19 @@ ensure_volume() {
         exit 1
       fi
     else
-      return 0
+      if jq -e '. == {"openshell.ai/sandbox-attachable":"true","openshell.ai/sandbox-attachable-workspace":"default"}' >/dev/null <<<"$labels"; then
+        return 0
+      fi
+      [[ "$labels" == null ]] || { echo "Volume $name has unexpected labels: review before migration." >&2; exit 1; }
+      # Docker cannot add labels in place. These are bind-backed volumes: this
+      # removes only Docker's volume definition, not the host directory/data.
+      docker volume rm "$name" >/dev/null
     fi
   fi
   if ! docker volume inspect "$name" >/dev/null 2>&1; then
-    docker volume create --driver local --opt type=none --opt o=bind --opt "device=$device" "$name" >/dev/null
+    docker volume create --driver local --opt type=none --opt o=bind --opt "device=$device" \
+      --label openshell.ai/sandbox-attachable=true \
+      --label openshell.ai/sandbox-attachable-workspace=default "$name" >/dev/null
   fi
 }
 
@@ -71,4 +80,6 @@ while IFS= read -r owner; do
   for mode in restricted internet lan full; do
     ensure_volume "prime-${owner}-gateway-${mode}" "/var/lib/prime-runner/gateway/${owner}/${mode}"
   done
+  sudo install -d -o prime-runner -g prime-runner -m 0700 "/var/lib/prime-runner/kvm/${owner}"
+  ensure_volume "prime-${owner}-kvm" "/var/lib/prime-runner/kvm/${owner}"
 done < <(sudo find /var/lib/prime-runner/users -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)

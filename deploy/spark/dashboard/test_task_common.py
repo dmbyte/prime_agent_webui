@@ -63,6 +63,18 @@ class TaskCommonTests(unittest.TestCase):
             self.assertEqual(workspace, (root / "prime-agent/tasks/alice").resolve())
             self.assertTrue(workspace.is_dir())
 
+    def test_existing_storage_preserves_acl_mask(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            agent, workspace = task_common.prepare_user_storage(root / "users", "alice", root / "tasks")
+            user_root = root / "users/alice"
+            os.chmod(user_root, 0o710)
+            os.chmod(agent, 0o710)
+            os.chmod(workspace, 0o710)
+            task_common.prepare_user_storage(root / "users", "alice", root / "tasks")
+            for path in (user_root, agent, workspace):
+                self.assertEqual(path.stat().st_mode & 0o777, 0o710)
+
     def test_workspace_owner_cannot_escape_separate_host_root(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

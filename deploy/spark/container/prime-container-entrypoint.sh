@@ -22,12 +22,12 @@ elif ! test -e "$legacy_skills"; then
   ln -s "$skill_registry" "$legacy_skills"
 fi
 
-socat TCP-LISTEN:31000,bind=127.0.0.1,reuseaddr,fork UNIX-CONNECT:/run/prime-gateway/model.sock &
+python3 /usr/local/lib/prime-gateway-relay.py model &
 bridge_pid=$!
 proxy_pid=""
 bmc_broker_pid=""
 if test -S /run/prime-gateway/network.sock; then
-  socat TCP-LISTEN:31080,bind=127.0.0.1,reuseaddr,fork UNIX-CONNECT:/run/prime-gateway/network.sock &
+  python3 /usr/local/lib/prime-gateway-relay.py network &
   proxy_pid=$!
   export HTTP_PROXY=http://127.0.0.1:31080 HTTPS_PROXY=http://127.0.0.1:31080 ALL_PROXY=http://127.0.0.1:31080
   export http_proxy="$HTTP_PROXY" https_proxy="$HTTPS_PROXY" all_proxy="$ALL_PROXY"

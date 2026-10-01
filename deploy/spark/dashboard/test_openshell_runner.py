@@ -103,6 +103,45 @@ class OpenShellRunnerTests(unittest.TestCase):
         for path in ("/dev/urandom", "/dev/random", "/dev/shm"):
             self.assertIn(f"    - {path}", policy)
 
+    def test_sol_pty_devices_are_granted_only_to_network_operations(self):
+        general = self.build()["policy"].read_text()
+        self.assertNotIn("    - /dev/ptmx", general)
+        self.assertNotIn("    - /dev/pts\n", general)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = root / "images.json"
+            manifest.write_text(json.dumps({"network-operations": {"image": "local/prime-openshell-network-operations:0.9.5-" + "b" * 12}}))
+            policy = {"profile": "network-operations", "networkMode": "lan", "executionMode": "task", "approvalMode": "manual"}
+            spec = openshell_runner.task_spec("b" * 32, "alice", policy, "spark-nemotron", "example", "low", storage_root=root / "users", image_manifest=manifest, policy_root=root / "policies", workspace_root=root / "tasks")
+            text = spec["policy"].read_text()
+            self.assertNotIn("    - /dev/ptmx", text)
+            self.assertIn("    - /dev/pts\n", text)
+
+    def test_kvm_control_channel_follows_profile_and_private_network_approval(self):
+        for profile, network, allowed in (("network-operations", "lan", True),
+                                          ("network-operations", "full", True),
+                                          ("network-operations", "restricted", False),
+                                          ("network-operations", "internet", False),
+                                          ("general", "full", False)):
+            with self.subTest(profile=profile, network=network), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                manifest = root / "images.json"
+                manifest.write_text(json.dumps({profile: {"image": f"local/prime-openshell-{profile}:0.9.5-" + "a" * 12}}))
+                spec = openshell_runner.task_spec("a" * 32, "alice",
+                    {"profile": profile, "networkMode": network}, "spark-nemotron", "test", "low",
+                    storage_root=root / "users", image_manifest=manifest,
+                    policy_root=root / "policies", workspace_root=root / "tasks")
+                config = json.loads(spec["create"][spec["create"].index("--driver-config-json") + 1])
+                mounts = config["docker"]["mounts"]
+                self.assertEqual(mounts[2]["source"], f"prime-alice-gateway-{network}")
+                control = [row for row in mounts if row["target"] == "/run/prime-kvm"]
+                self.assertEqual(bool(control), allowed)
+                if allowed:
+                    self.assertEqual(control[0]["source"], "prime-alice-gateway-lan")
+                    self.assertTrue(control[0]["read_only"])
+                self.assertEqual("/run/prime-kvm" in spec["policy"].read_text(), allowed)
+                self.assertEqual("PRIME_KVM_SOCKET=/run/prime-kvm/kvm.sock" in spec["execute"], allowed)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -23,6 +23,8 @@ required=(
   deploy/spark/container/install-user-codex-credential.sh
   deploy/spark/container/task_common.py
   deploy/spark/container/model_gateway.py
+  deploy/spark/container/gateway_relay.py
+  deploy/spark/container/kvm_broker.py
   deploy/spark/container/openshell_runner.py
   deploy/spark/container/runner_broker.py
   deploy/spark/container/runner_client.py
@@ -30,6 +32,7 @@ required=(
   deploy/spark/container/runner_recover.py
   deploy/spark/systemd/prime-model-gateway.service
   deploy/spark/systemd/prime-runner-broker.service
+  deploy/spark/systemd/prime-kvm-broker.service
   deploy/spark/openshell/gateway.toml
   deploy/spark/openshell/image-digests.json
   deploy/spark/openshell/install.sh
@@ -40,6 +43,10 @@ required=(
   deploy/spark/prime/test_managed_skills.py
   deploy/spark/prime/skills/bmc-headless-browser/SKILL.md
   deploy/spark/prime/skills/bmc-headless-browser/pyproject.toml
+  deploy/spark/prime/skills/bmc-html5-kvm/SKILL.md
+  deploy/spark/prime/skills/bmc-html5-kvm/pyproject.toml
+  deploy/spark/prime/skills/bmc-html5-kvm/src/bmc_html5_kvm/__init__.py
+  deploy/spark/prime/validate-prime-kvm-task.py
   deploy/spark/prime/skills/ipmi-redfish-bmc/SKILL.md
   deploy/spark/prime/skills/ipmi-redfish-bmc/pyproject.toml
   deploy/spark/prime/skills/prime-nvidia-catalog/SKILL.md
@@ -51,7 +58,8 @@ required=(
   deploy/spark/llama-qwen38/llama.env.template
   deploy/spark/llama-qwen38/start.sh
   deploy/spark/systemd/llama-qwen38.service
-  docs/releases/v0.5.46.md
+  docs/model-routing.md
+  docs/releases/v0.5.47.md
 )
 for path in "${required[@]}"; do
   [[ -f $path ]] || { echo "Missing release file: $path" >&2; exit 1; }
@@ -62,9 +70,9 @@ bash -n install.sh deploy/spark/update/update-prime-agent.sh deploy/spark/update
   deploy/spark/prime/install-skills.sh \
   deploy/spark/openshell/install.sh deploy/spark/openshell/provision-volumes.sh \
   deploy/spark/container/prime-container-entrypoint.sh
-python3 -m compileall -q deploy/spark/dashboard
+python3 -m compileall -q deploy/spark/dashboard deploy/spark/container deploy/spark/prime
 python3 -m unittest discover -s deploy/spark/dashboard -p 'test*.py'
-python3 -m unittest deploy/spark/prime/test_managed_skills.py
+python3 -m unittest discover -s deploy/spark/prime -p 'test_*skill*.py'
 
 if command -v node >/dev/null; then
   node --check deploy/spark/dashboard/app-v2.js
@@ -73,7 +81,7 @@ else
 fi
 
 grep -Fq 'docs/prime-webui-sample.jpg' README.md
-grep -Fq 'v0.5.46' README.md
+grep -Fq 'v0.5.47' README.md
 grep -Fq 'does **not** authenticate with PAM' README.md
 grep -Fq 'prime-web-password' README.md
 echo "Release validation passed."

@@ -17,7 +17,7 @@ from pathlib import Path
 
 NVIDIA_COMMIT = "fd9f1466ff8a39178e488981e8b5118709392949"
 NVIDIA_SKILL_COUNT = 366
-BUNDLED_SKILLS = ("bmc-headless-browser", "ipmi-redfish-bmc", "prime-nvidia-catalog")
+BUNDLED_SKILLS = ("bmc-headless-browser", "bmc-html5-kvm", "ipmi-redfish-bmc", "prime-nvidia-catalog")
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
 
@@ -26,6 +26,7 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--owner", required=True)
     parser.add_argument("--bundled", type=Path, required=True)
     parser.add_argument("--nvidia-source", type=Path)
+    parser.add_argument("--inventory-only", action="store_true")
     return parser.parse_args()
 
 
@@ -96,12 +97,51 @@ def atomic_replace(source: Path, target: Path, recovery: Path) -> None:
     os.replace(staged, target)
 
 
+def publish_inventory(owner: str, state: Path, uid: int, gid: int) -> None:
+    """Publish metadata only; the WebUI cannot traverse Prime's protected tree."""
+    rows = []
+    for directory in sorted((state / "skills").iterdir()):
+        skill_file = directory / "SKILL.md"
+        if not directory.is_dir() or directory.is_symlink() or not NAME_RE.fullmatch(directory.name) or not skill_file.is_file() or skill_file.is_symlink():
+            continue
+        try:
+            name, description = frontmatter(skill_file)
+        except (OSError, ValueError, UnicodeError):
+            continue
+        rows.append({"id": f"managed:{directory.name}", "name": name, "slug": directory.name,
+                     "description": description, "source": "Installed Prime skill"})
+    catalog = state / "catalogs/nvidia/manifest.json"
+    if catalog.is_file():
+        manifest = json.loads(catalog.read_text(encoding="utf-8"))
+        for row in manifest.get("skills", []):
+            name, directory = row.get("name", ""), row.get("directory", "")
+            if NAME_RE.fullmatch(name) and NAME_RE.fullmatch(directory):
+                rows.append({"id": f"nvidia:{name}", "name": name, "slug": directory,
+                             "description": str(row.get("description", ""))[:1000], "source": "NVIDIA catalog"})
+    target = Path(pwd.getpwnam(owner).pw_dir) / ".prime/agent/skill-inventory.json"
+    target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(prefix=".skill-inventory-", dir=target.parent)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+            json.dump({"owner": owner, "skills": rows}, output)
+        os.chmod(temporary, 0o600)
+        os.chown(temporary, uid, gid)
+        os.replace(temporary, target)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
 def main() -> None:
     args = arguments()
     if os.geteuid() != 0:
         raise SystemExit("Run this helper through sudo")
     account = pwd.getpwnam("prime-runner")
     state = Path("/var/lib/prime-runner/users") / args.owner / "prime/agent"
+    if args.inventory_only:
+        owner_account = pwd.getpwnam(args.owner)
+        publish_inventory(args.owner, state, owner_account.pw_uid, owner_account.pw_gid)
+        return
     skills_target = state / "skills"
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     recovery_root = state / "recovery/managed-skills" / timestamp
@@ -151,6 +191,8 @@ def main() -> None:
     for root in touched:
         for path in [root, *root.rglob("*")]:
             os.chown(path, account.pw_uid, account.pw_gid, follow_symlinks=False)
+    owner_account = pwd.getpwnam(args.owner)
+    publish_inventory(args.owner, state, owner_account.pw_uid, owner_account.pw_gid)
     print(f"Installed {len(bundled_rows)} managed Prime skills", end="")
     if args.nvidia_source:
         print(f" and {NVIDIA_SKILL_COUNT} pinned NVIDIA catalog skills")

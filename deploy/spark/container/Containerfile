@@ -59,17 +59,19 @@ ENV HOME=/home/prime \
 WORKDIR /workspace
 USER prime
 COPY --chown=root:root prime-container-entrypoint.sh /usr/local/bin/prime-container-entrypoint
+COPY --chown=root:root gateway_relay.py /usr/local/lib/prime-gateway-relay.py
 COPY --chown=root:root managed-skills /opt/prime-managed-skills
 USER root
 RUN uv pip install --python /opt/prime-kernel/bin/python --no-deps \
        /opt/prime-managed-skills/bmc-headless-browser \
+       /opt/prime-managed-skills/bmc-html5-kvm \
        /opt/prime-managed-skills/ipmi-redfish-bmc \
        /opt/prime-managed-skills/prime-nvidia-catalog \
     && if [ "$PROFILE" = "network-operations" ]; then \
-         uv pip install --python /opt/prime-kernel/bin/python playwright==1.63.0; \
+         uv pip install --python /opt/prime-kernel/bin/python playwright==1.63.0 pyte==0.8.2; \
        fi \
     && /opt/prime-kernel/bin/python -c \
-       'import bmc_headless_browser, ipmi_redfish_bmc, prime_nvidia_catalog' \
+       'import bmc_headless_browser, bmc_html5_kvm, ipmi_redfish_bmc, prime_nvidia_catalog' \
     && chmod 0755 /usr/local/bin/prime-container-entrypoint
 USER prime
 ENTRYPOINT ["/usr/local/bin/prime-container-entrypoint"]

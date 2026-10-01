@@ -31,8 +31,14 @@ def prepare_user_storage(root, owner, workspace_root=None):
     agent = prime / "agent"
     workspace = _safe_path(Path(workspace_root), owner) if workspace_root else user_root / "workspace"
     for path, mode in ((user_root, 0o700), (prime, 0o700), (agent, 0o700), (workspace, 0o700)):
+        created = not path.exists()
         path.mkdir(mode=mode, parents=True, exist_ok=True)
-        os.chmod(path, mode)
+        if created:
+            os.chmod(path, mode)
+        elif path.stat().st_mode & 0o007:
+            raise ValueError("Existing user storage is accessible to other users")
+        # chmod on an existing POSIX-ACL directory resets its ACL mask, which
+        # would silently revoke the WebUI owner's named traversal grant.
     return agent, workspace
 
 

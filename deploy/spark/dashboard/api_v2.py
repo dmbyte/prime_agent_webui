@@ -41,6 +41,7 @@ META = legacy.HOME / ".prime/agent/webui-metadata.json"
 ROUTING_RULES = legacy.HOME / ".prime/agent/webui-routing-rules.json"
 LEDGER = legacy.HOME / ".prime/agent/webui-usage-ledger.jsonl"
 TASK_LOGS = legacy.HOME / ".prime/agent/webui-task-logs"
+MESSAGE_CACHE_DIR = legacy.HOME / ".prime/agent/webui-message-cache"
 UPDATE_STATUS_DIR = legacy.HOME / ".prime/agent/update-status"
 USER_TRASH = legacy.HOME / ".prime/agent/user-trash"
 MAX_NATIVE_TASKS = 4
@@ -53,6 +54,10 @@ TASKS = {}
 TASK_LOCK = threading.Lock()
 SESSION_CACHE = {}
 SESSION_CACHE_LOCK = threading.Lock()
+USAGE_CACHE = {}
+USAGE_CACHE_LOCK = threading.Lock()
+MESSAGE_CACHE = {}
+MESSAGE_CACHE_LOCK = threading.Lock()
 META_LOCK = threading.Lock()
 LEDGER_LOCK = threading.Lock()
 EXECUTION_GRANTS = {}
@@ -262,11 +267,27 @@ def model_details(provider, model):
     return next((row for row in legacy.model_catalog() if row["provider"] == provider and row["model"] == model), {})
 
 
-def route_task(message, settings=None):
+def route_task(message, settings=None, profile=None, previous_route=None):
     settings = settings or legacy.settings_view()
     selected = (settings["provider"], settings["model"])
     enabled = set(settings.get("enabledModels") or [])
     value = str(message).casefold()
+    # This owner policy is deliberately above configurable specialist rules:
+    # code generation must not silently fall back to Nemotron or a frontier model.
+    coding = bool(re.search(
+        r"\b(code|coding|programming|scripts?|python|javascript|typescript|ipython|sql|bash|powershell|"
+        r"implement\w*|refactor\w*|debug\w*|automat\w*|unit tests?|test suite)\b|"
+        r"\b(fix|repair|resolve)\b.{0,60}\b(bugs?|errors?|failures?|tests?)\b|"
+        r"\b(build|create|write|develop)\b.{0,50}\b(app|application|website|function|plugin|tool|skill|installer)\b",
+        value, re.S))
+    explicit = bool(re.search(r"(?<!\w)/(nemotron|qwen|codex|chatgpt)(?!\w)|\b(use|ask|route to) (nemotron|qwen|codex|chatgpt)\b", value))
+    continuing_code = bool((previous_route or {}).get("codeGenerationRoute")) and not explicit
+    if coding or profile in {"development", "network-operations"} or continuing_code:
+        if "/".join(QWEN_ROUTE) not in enabled:
+            raise ValueError("Qwen must be enabled for code generation and automation; Nemotron is limited to orchestration and very simple scripts.")
+        return {"provider": QWEN_ROUTE[0], "model": QWEN_ROUTE[1], "routingMode": "automatic",
+                "codeGenerationRoute": True,
+                "routeReason": "Code-generation policy: Qwen handles implementation and automation in every profile; Nemotron is limited to orchestration and very simple scripts."}
     directives = (("/nemotron", NEMOTRON_ROUTE), ("/qwen", QWEN_ROUTE),
                   ("/codex", CODEX_ROUTE), ("/chatgpt", CODEX_ROUTE))
     matches = [(match.start(), directive, target)
@@ -334,6 +355,32 @@ def skill_catalog(user=None, admin=False):
         row.pop("installPath", None)
         rows.append(row)
     return sorted(rows, key=lambda row: row.get("createdAt", ""), reverse=True)
+
+
+def installed_skill_inventory(user):
+    """Owner-scoped, metadata-only index published by the managed installer."""
+    index = legacy.HOME / ".prime/agent/skill-inventory.json"
+    payload = legacy.read_json(index, {})
+    if payload.get("owner") != user:
+        return []
+    rows = []
+    for row in payload.get("skills", []):
+        if not isinstance(row, dict):
+            continue
+        skill_id, slug = str(row.get("id", "")), str(row.get("slug", ""))
+        if not re.fullmatch(r"(?:managed|nvidia):[a-z0-9][a-z0-9-]*", skill_id) or not re.fullmatch(r"[a-z0-9][a-z0-9-]*", slug):
+            continue
+        rows.append({"id": skill_id, "name": str(row.get("name", ""))[:80],
+                     "slug": slug, "description": str(row.get("description", ""))[:1000],
+                     "source": "NVIDIA catalog" if skill_id.startswith("nvidia:") else "Installed Prime skill",
+                     "status": "installed", "enabled": True, "scope": "personal"})
+    return rows
+
+
+def available_project_skills(user, project_id=None):
+    uploaded = [row for row in skill_catalog(user) if row.get("status") == "installed" and row.get("enabled")
+                and (row.get("scope") != "project" or row.get("projectId") == project_id)]
+    return uploaded + installed_skill_inventory(user)
 
 
 def tool_inventory():
@@ -510,9 +557,7 @@ def review_skill(payload, reviewer):
 
 
 def normalize_skill_ids(values, user, project_id=None, maximum=40):
-    available = {row["id"] for row in skill_catalog(user)
-                 if row.get("status") == "installed" and row.get("enabled")
-                 and (row.get("scope") != "project" or row.get("projectId") == project_id)}
+    available = {row["id"] for row in available_project_skills(user, project_id)}
     selected = []
     for value in values or []:
         value = str(value)
@@ -801,13 +846,14 @@ def project_context(project_id, user):
     if sources:
         sections.append("Project source files (shared by every chat in this project):\n" +
                         "\n".join(f"- {value}" for value in sources))
-    enabled = {row["id"]: row for row in skill_catalog(user)
-               if row.get("status") == "installed" and row.get("enabled")}
+    enabled = {row["id"]: row for row in available_project_skills(user, project_id)}
     skills = [enabled[value] for value in project.get("skillIds", []) if value in enabled
               and (enabled[value].get("scope") != "project" or enabled[value].get("projectId") == project_id)]
     if skills:
-        sections.append("Enabled project skills (use when relevant; their reviewed instructions are available in Prime's skill registry):\n" +
-                        "\n".join(f"- {row['name']}: /home/prime/.prime/agent/skills/{row['slug']}/SKILL.md" for row in skills))
+        sections.append("Project-selected skills (use when relevant; NVIDIA catalog entries load on demand):\n" +
+                        "\n".join(f"- {row['name']}: /home/prime/.prime/agent/"
+                                  f"{'catalogs/nvidia/skills' if row['id'].startswith('nvidia:') else 'skills'}/{row['slug']}/SKILL.md"
+                                  for row in skills))
     if not sections:
         return ""
     return "\n\n<prime_project_context>\n" + "\n\n".join(sections) + "\n</prime_project_context>"
@@ -864,12 +910,24 @@ def session_stems(user):
 def usage_for_user(user):
     paths = []
     root = session_root(user)
+    protected = False
     for row in cached_session_catalog(user):
         try:
             paths.append(legacy.session_path(row["id"], root))
         except ValueError:
             pass
-    return legacy.usage_summary(paths)
+        except OSError:
+            protected = True
+    if protected:
+        with USAGE_CACHE_LOCK:
+            cached = USAGE_CACHE.get(user)
+        if cached is not None:
+            return cached
+    result = legacy.usage_summary(paths)
+    if not protected:
+        with USAGE_CACHE_LOCK:
+            USAGE_CACHE[user] = result
+    return result
 
 
 def conversation_catalog(query="", include_archived=False, user=INITIAL_ADMIN):
@@ -923,46 +981,101 @@ def message_text(parts):
     return "\n".join(values)
 
 
+def message_cache_path(session_id, user):
+    if not valid_id(session_id) or not re.fullmatch(r"[A-Za-z0-9_.-]{2,32}", str(user)):
+        raise ValueError("Invalid conversation identifier")
+    return MESSAGE_CACHE_DIR / user / f"{session_id}.json"
+
+
+def cached_conversation_messages(session_id, user):
+    key = (user, session_id)
+    with MESSAGE_CACHE_LOCK:
+        cached = MESSAGE_CACHE.get(key)
+    if cached is None:
+        cached = legacy.read_json(message_cache_path(session_id, user), None)
+        if isinstance(cached, dict) and isinstance(cached.get("messages"), list):
+            with MESSAGE_CACHE_LOCK:
+                MESSAGE_CACHE[key] = cached
+    return cached if isinstance(cached, dict) and isinstance(cached.get("messages"), list) else None
+
+
+def conversation_task_logs(session_id, user=INITIAL_ADMIN):
+    if not valid_id(session_id):
+        raise ValueError("Invalid conversation identifier")
+    require_conversation_owner(session_id, user)
+    rows = []
+    for task_id, task in metadata().get("tasks", {}).items():
+        if task.get("owner") != user or task.get("sessionId") != session_id:
+            continue
+        if not re.fullmatch(r"[a-f0-9]{32}", str(task_id)) or not (TASK_LOGS / f"{task_id}.log").is_file():
+            continue
+        rows.append({"id": task_id, "status": task.get("status", "unknown"), "createdAt": task.get("createdAt"), "finishedAt": task.get("finishedAt")})
+    return sorted(rows, key=lambda row: row.get("createdAt") or "")[-20:]
+
+
 def conversation_messages(session_id, user=INITIAL_ADMIN):
     if not valid_id(session_id):
         raise ValueError("Invalid conversation identifier")
     require_conversation_owner(session_id, user)
+    cached = cached_conversation_messages(session_id, user)
     try:
         path = legacy.session_path(session_id, session_root(user))
+        source = path.stat()
+        if cached and cached.get("sourceSize") == source.st_size and cached.get("sourceMtimeNs") == source.st_mtime_ns:
+            return cached["messages"]
     except ValueError:
-        return []
+        return cached["messages"] if cached else []
+    except OSError:
+        if cached:
+            return cached["messages"]
+        raise OSError("Conversation history is temporarily unavailable") from None
     rows = []
-    if not path.is_file():
-        return rows
-    with path.open(errors="replace") as handle:
-        for line in handle:
-            try:
-                entry = json.loads(line)
-                if entry.get("type") != "message":
+    try:
+        with path.open(errors="replace") as handle:
+            for line in handle:
+                try:
+                    entry = json.loads(line)
+                    if entry.get("type") != "message":
+                        continue
+                    message = entry.get("message") or {}
+                    role = str(message.get("role") or "")
+                    if role not in {"user", "assistant", "toolResult"}:
+                        continue
+                    parts = message.get("content") or []
+                    text = message_text(parts)
+                    if role == "user":
+                        for marker in ("\n\n<prime_project_context>", "\n\n<prime_runtime_context>"):
+                            text = text.split(marker, 1)[0]
+                    tools = [str(part.get("name") or part.get("toolName")) for part in parts if isinstance(part, dict) and part.get("type") == "toolCall"]
+                    if not text and not tools and role != "toolResult":
+                        continue
+                    usage = message.get("usage") or {}
+                    rows.append({
+                        "id": str(message.get("id") or entry.get("id") or uuid.uuid4().hex),
+                        "role": "tool" if role == "toolResult" else role,
+                        "text": text or (f"Completed {message.get('toolName', 'tool')}" if role == "toolResult" else ""),
+                        "tools": tools,
+                        "timestamp": message.get("timestamp") or entry.get("timestamp"),
+                        "usage": {"input": usage.get("input", 0), "output": usage.get("output", 0), "cacheRead": usage.get("cacheRead", 0), "total": usage.get("totalTokens", 0)},
+                    })
+                except (json.JSONDecodeError, TypeError, ValueError):
                     continue
-                message = entry.get("message") or {}
-                role = str(message.get("role") or "")
-                if role not in {"user", "assistant", "toolResult"}:
-                    continue
-                parts = message.get("content") or []
-                text = message_text(parts)
-                if role == "user" and "\n\n<prime_project_context>" in text:
-                    text = text.split("\n\n<prime_project_context>", 1)[0]
-                tools = [str(part.get("name") or part.get("toolName")) for part in parts if isinstance(part, dict) and part.get("type") == "toolCall"]
-                if not text and not tools and role != "toolResult":
-                    continue
-                usage = message.get("usage") or {}
-                rows.append({
-                    "id": str(message.get("id") or entry.get("id") or uuid.uuid4().hex),
-                    "role": "tool" if role == "toolResult" else role,
-                    "text": text or (f"Completed {message.get('toolName', 'tool')}" if role == "toolResult" else ""),
-                    "tools": tools,
-                    "timestamp": message.get("timestamp") or entry.get("timestamp"),
-                    "usage": {"input": usage.get("input", 0), "output": usage.get("output", 0), "cacheRead": usage.get("cacheRead", 0), "total": usage.get("totalTokens", 0)},
-                })
-            except (json.JSONDecodeError, TypeError, ValueError):
-                continue
-    return rows[-400:]
+    except OSError:
+        if cached:
+            return cached["messages"]
+        raise OSError("Conversation history is temporarily unavailable") from None
+    rows = rows[-400:]
+    snapshot = {"sourceSize": source.st_size, "sourceMtimeNs": source.st_mtime_ns, "messages": rows}
+    with MESSAGE_CACHE_LOCK:
+        MESSAGE_CACHE[(user, session_id)] = snapshot
+    try:
+        cache = message_cache_path(session_id, user)
+        cache.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        os.chmod(cache.parent, 0o700)
+        legacy.atomic_json(cache, snapshot)
+    except OSError:
+        pass
+    return rows
 
 
 def prime_env():
@@ -1118,11 +1231,14 @@ def sanitize_runtime_text(value, limit=1000):
     value = re.sub(r"(?i)sk-(?:proj-)?[A-Za-z0-9_-]{20,}", "[REDACTED_API_KEY]", value)
     value = re.sub(r"(?i)(authorization\s*[:=]\s*bearer\s+)[^\s\"']+", r"\1[REDACTED]", value)
     value = re.sub(r"(?i)\b((?:api[_-]?key|password|secret|access[_-]?token|refresh[_-]?token)\s*[:=]\s*)([\"']?)[^\s,;\"']+\2", r"\1[REDACTED]", value)
+    value = re.sub(r"(?i)\b(?:auth|basic_auth)\s*=\s*\(\s*['\"][^'\"\r\n]{0,128}['\"]\s*,\s*['\"][^'\"\r\n]{0,256}['\"]\s*\)", "auth=([REDACTED_CREDENTIALS])", value)
     return re.sub(r"\s+", " ", value).strip()[:limit]
 
 
 def redact_runtime_value(value, key=""):
     normalized = re.sub(r"[^a-z]", "", str(key).lower())
+    if normalized in {"arguments", "partialargs"}:
+        return "[REDACTED_TOOL_INPUT]"
     if normalized in {"thinking", "reasoning", "chainofthought", "thinkingsignature"}:
         return "[PRIVATE_REASONING]"
     if any(token in normalized for token in ("authorization", "apikey", "password", "secret", "refreshtoken", "accesstoken", "cookie")):
@@ -1131,7 +1247,7 @@ def redact_runtime_value(value, key=""):
         event_type = str(value.get("type") or "").lower()
         private_part = event_type in {"thinking", "reasoning"} or event_type.startswith("thinking_") or event_type.startswith("reasoning_")
         allowed_private = {"type", "contentindex"}
-        return {str(child_key): ("[PRIVATE_REASONING]" if private_part and re.sub(r"[^a-z]", "", str(child_key).lower()) not in allowed_private else redact_runtime_value(child_value, child_key)) for child_key, child_value in value.items()}
+        return {str(child_key): ("[PRIVATE_REASONING]" if private_part and re.sub(r"[^a-z]", "", str(child_key).lower()) not in allowed_private else "[REDACTED_TOOL_INPUT]" if event_type == "toolcall_delta" and re.sub(r"[^a-z]", "", str(child_key).lower()) in {"delta", "content", "text"} else redact_runtime_value(child_value, child_key)) for child_key, child_value in value.items()}
     if isinstance(value, list):
         return [redact_runtime_value(item) for item in value]
     if isinstance(value, str):
@@ -1209,7 +1325,8 @@ def task_log_chunk(task_id, user, offset=0, limit=262144):
             rows.append(line)
             count += len(line)
         next_offset = handle.tell()
-    return {"text": b"".join(rows).decode("utf-8", errors="replace"), "nextOffset": next_offset, "size": size}
+    text = "".join(safe_runtime_line(row.decode("utf-8", errors="replace")) + "\n" for row in rows)
+    return {"text": text, "nextOffset": next_offset, "size": size}
 
 
 def apply_task_event(task_id, event):
@@ -1571,6 +1688,7 @@ def store_task_route(task):
             "routeModel": task.get("model"),
             "routingMode": task.get("routingMode"),
             "routeReason": task.get("routeReason"),
+            "codeGenerationRoute": bool(task.get("codeGenerationRoute")),
             "owner": task.get("owner", INITIAL_ADMIN),
         })
         if task.get("projectId"):
@@ -1627,6 +1745,41 @@ def persistent_confirmation_allowed(requested, session_id, project_id, user):
                (saved.get(key) or ([] if key == "localPaths" else None)) for key in keys)
 
 
+def runtime_context(authorization):
+    if not container_mode():
+        return ""
+    code_policy = (
+        "Model policy for EVERY profile: Qwen (spark-qwen/qwen3.8-flash-next) generates all nontrivial code, scripts, tests, "
+        "browser automation, and implementation changes. Nemotron only orchestrates, summarizes, and uses very simple "
+        "inspection/delegation cells; it must not write multi-step workflows or complex code, even to repair an error. "
+        "If running as Nemotron and code work emerges, actually delegate in ipython with "
+        "await rlm.spawn('<bounded implementation task and verification>', name='<unique-name>', model='spark-qwen/qwen3.8-flash-next'). "
+        "Wait for and inspect the child's real result before reporting completion. Do not claim delegation without a tool call. "
+        "If Qwen is unavailable, report that blocker rather than having Nemotron implement it. "
+        "These model assignments do not expand task permissions or authorize external actions.\n"
+    )
+    bmc = (
+        "Runtime facts for this task (not additional authorization): Read /home/prime/.prime/agent/skills/bmc-html5-kvm/SKILL.md "
+        "before KVM use; the other BMC skills are beside it under /home/prime/.prime/agent/skills/. "
+        "Use the available ipython tool, not a guessed bash tool. In IPython use top-level await and keep browser actions "
+        "inside one async with BMCBrowser(...) as browser block; never asyncio.run(), run_until_complete(), or an unawaited __aenter__. "
+        "The supported browser methods are goto, title, fill, click, evaluate, screenshot, and close; page is a property, not a function. "
+        "For KVM, list_sessions() then connect(sessionId) to reuse the correct target. Only two sessions are allowed. "
+        "Create only with KVMClient.create(url, ignore_https_errors=...); never KVMClient(url, ...). "
+        "Stay on the current page unless pages() lists another one; never assume page 1 exists. Frames are not pages. "
+        "Use a BMC web UI URL, never a /redfish API URL, for KVM. Do not close someone else's active console to free capacity. "
+        "KVM screenshot: capture('kvm-frame.png') saves under /project and supports PNG/JPEG. "
+        "Call inspect() to discover visible controls and consoleSurfaces with frameIndex/selector; use select_frame(surface['frameIndex']) for an embedded console. Never guess frame 0. "
+        "A login page is NOT a console. Authenticate only with supplied credentials, never type guessed usernames into it as console input. "
+        "After inspecting the actual console, focus_console(selector, confirm=True) is required before keys/text can be sent. "
+        "Never infer installer or boot success solely from mounted media, a consumed boot override, or an iLO management page. "
+        "The HTTP gateway does not carry IPMI/SOL UDP even in Full mode. Use Redfish or KVM; preserve supplied proxy and socket environment. "
+        "If a transport or adapter error repeats, stop that approach and report the exact blocker instead of guessing more APIs or bypassing policy. "
+        "No reset, boot override, console input, or other BMC change is authorized by these runtime facts."
+    ) if (authorization or {}).get("profile") == "network-operations" else ""
+    return "\n\n<prime_runtime_context>\n" + code_policy + bmc + "\n</prime_runtime_context>"
+
+
 def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITIAL_ADMIN, authorization=None, policy=None, project_id=None, file_ids=None):
     message = str(message).strip()
     if not message or len(message) > 100000:
@@ -1655,7 +1808,8 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITI
     thinking = str(thinking or settings["thinking"])
     if thinking not in legacy.THINKING:
         raise ValueError("Unsupported thinking level")
-    route = route_task(message, settings)
+    previous_route = metadata().get("conversations", {}).get(session_id, {}) if session_id else None
+    route = route_task(message, settings, profile=(authorization or {}).get("profile"), previous_route=previous_route)
     details = model_details(route["provider"], route["model"])
     task_id = uuid.uuid4().hex
     if container_mode():
@@ -1686,6 +1840,7 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITI
         store_task_route(task)
     try:
         prompt_message += project_context(project_id, owner)
+        prompt_message += runtime_context(authorization)
         process.stdin.write(json.dumps({"id": f"state-{task_id}", "type": "get_state"}, separators=(",", ":")) + "\n")
         process.stdin.write(json.dumps({"id": f"prompt-{task_id}", "type": "prompt", "message": prompt_message}, separators=(",", ":")) + "\n")
         process.stdin.flush()
@@ -1905,6 +2060,14 @@ def purge_user_cache(username):
         target = recovery / "skills"
         target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         os.replace(installed_skills, target)
+    message_cache = MESSAGE_CACHE_DIR / username
+    if message_cache.is_dir():
+        os.replace(message_cache, recovery / "message-cache")
+    with MESSAGE_CACHE_LOCK:
+        for key in [key for key in MESSAGE_CACHE if key[0] == username]:
+            MESSAGE_CACHE.pop(key, None)
+    with USAGE_CACHE_LOCK:
+        USAGE_CACHE.pop(username, None)
     with TASK_LOCK:
         owned_tasks = {task_id for task_id, row in TASKS.items() if row.get("owner", INITIAL_ADMIN) == username}
     owned_tasks.update(task_id for task_id, row in data.get("tasks", {}).items() if row.get("owner", INITIAL_ADMIN) == username)
@@ -1980,6 +2143,85 @@ def admin_status():
     return {"services": services, "updates": update_status(), "disk": {"total": disk.total, "used": disk.used, "free": disk.free}, "uploads": {"used": legacy.upload_storage_bytes(), "limit": legacy.MAX_UPLOAD_STORAGE_BYTES, "files": len(upload_rows()), "retentionDays": int(metadata().get("retentionDays", 30))}, "tasks": {"running": sum(1 for row in task_snapshot() if row["status"] == "running"), "limit": MAX_NATIVE_TASKS}, "certificate": {"authorityDownload": "/prime-webui-ca.crt", "trustedAfterInstall": True}, "generatedAt": now_iso()}
 
 
+def admin_sandbox_inventory():
+    try:
+        result = subprocess.run(["openshell", "--gateway", "spark-local", "sandbox", "list", "--all-workspaces", "--page-size", "200", "--output", "json"],
+                                capture_output=True, text=True, timeout=15, check=True)
+        payload = json.loads(result.stdout)
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
+        raise RuntimeError("OpenShell sandbox check failed") from None
+    source = payload if isinstance(payload, list) else payload.get("sandboxes", []) if isinstance(payload, dict) else None
+    if not isinstance(source, list):
+        raise RuntimeError("OpenShell returned an invalid sandbox list")
+    saved_tasks = metadata().get("tasks", {})
+    with TASK_LOCK:
+        active_ids = {task_id for task_id, task in TASKS.items() if task.get("status") == "running"}
+    rows = []
+    for item in source[:200]:
+        if not isinstance(item, dict):
+            continue
+        labels = item.get("labels") or item.get("metadata", {}).get("labels") or {}
+        if not isinstance(labels, dict):
+            labels = {}
+        name = str(item.get("name") or item.get("metadata", {}).get("name") or "")
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,100}", name):
+            continue
+        task_id = str(labels.get("prime.task") or "")
+        task = saved_tasks.get(task_id, {}) if re.fullmatch(r"[a-f0-9]{32}", task_id) else {}
+        status = item.get("status") or {}
+        phase = status.get("phase") if isinstance(status, dict) else status if isinstance(status, str) else item.get("phase")
+        rows.append({"name": name, "id": str(item.get("id") or item.get("metadata", {}).get("id") or ""),
+                     "workspace": str(item.get("workspace") or item.get("workspaceName") or "default")[:80],
+                     "phase": str(phase or "unknown")[:40],
+                     "createdAt": str(item.get("createdAt") or item.get("created_at") or item.get("metadata", {}).get("creationTimestamp") or "")[:80],
+                     "owner": str(labels.get("prime.owner") or "")[:40], "profile": str(labels.get("prime.profile") or "")[:60],
+                     "taskId": task_id if re.fullmatch(r"[a-f0-9]{32}", task_id) else "",
+                     "taskTopic": str(task.get("topic") or "")[:160], "savedTaskStatus": str(task.get("status") or "")[:40],
+                     "activeTask": task_id in active_ids,
+                     "reviewCandidate": bool(labels.get("prime.owner") and task_id and task_id not in active_ids)})
+    return {"sandboxes": rows, "truncated": len(source) >= 200 or bool(payload.get("next_page_token")) if isinstance(payload, dict) else len(source) >= 200,
+            "checkedAt": now_iso()}
+
+
+def cleanup_admin_sandbox(name, confirmation):
+    if confirmation != f"delete-sandbox-{name}" or not re.fullmatch(r"pt-[a-f0-9]{16}", str(name)):
+        raise ValueError("Explicit sandbox confirmation is required")
+    row = next((row for row in admin_sandbox_inventory()["sandboxes"] if row["name"] == name), None)
+    if not row or not row["reviewCandidate"] or not row["taskId"]:
+        raise RuntimeError("Only an inactive Prime task sandbox may be cleaned up")
+    workspace = row["workspace"]
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,80}", workspace):
+        raise RuntimeError("Sandbox workspace could not be verified")
+    base = ["openshell", "--gateway", "spark-local", "--workspace", workspace, "sandbox"]
+    try:
+        if row["phase"].casefold() not in {"stopped", "suspended"}:
+            process_check = subprocess.run([*base, "exec", "-n", name, "--no-tty", "--timeout", "10", "--", "ps", "-eo", "comm="],
+                                           capture_output=True, text=True, timeout=15, check=True)
+            processes = {line.strip() for line in process_check.stdout.splitlines() if line.strip()}
+            if not processes or not processes.issubset({"openshell-sandb", "openshell-sandbox", "sleep", "ps"}):
+                raise RuntimeError("Sandbox still has active processes; inspect it before cleanup")
+            subprocess.run([*base, "stop", name], capture_output=True, text=True, timeout=60, check=True)
+        subprocess.run([*base, "delete", name], capture_output=True, text=True, timeout=60, check=True)
+    except RuntimeError:
+        raise
+    except (OSError, subprocess.SubprocessError):
+        raise RuntimeError("OpenShell could not stop or delete that sandbox; check its state and retry") from None
+    mark_orphaned_task_failed(row["taskId"])
+    legacy.audit("orphan_sandbox_deleted", sandbox=name, task=row["taskId"], owner=row["owner"])
+    return {"deleted": True, "name": name}
+
+
+def mark_orphaned_task_failed(task_id):
+    if not re.fullmatch(r"[a-f0-9]{32}", str(task_id)):
+        raise ValueError("Invalid task identifier")
+    with META_LOCK:
+        data = metadata()
+        task = data.get("tasks", {}).get(task_id)
+        if isinstance(task, dict) and task.get("status") == "running":
+            task.update(status="failed", finishedAt=now_iso(), error="Orphaned OpenShell sandbox was cleaned up by an administrator")
+            legacy.atomic_json(META, data)
+
+
 def update_status():
     rows = {}
     for kind, unit in (("agent", "prime-update-agent.service"), ("webui", "prime-update-webui.service"), ("openshell", "prime-update-openshell.service")):
@@ -1995,6 +2237,7 @@ def update_status():
             "state": values.get("SubState") or values.get("ActiveState") or "unknown",
             "result": persisted.get("result") or "unknown",
             "exitCode": int(persisted.get("exitCode") or 0),
+            "reason": str(persisted.get("reason") or "")[:300],
             "updatedAt": persisted.get("updatedAt"),
         }
     return rows
@@ -2053,6 +2296,11 @@ def start_update(kind, confirmation):
     status = update_status().get(kind, {})
     if status.get("active"):
         raise RuntimeError("That update is already running")
+    if kind == "openshell":
+        sandboxes = subprocess.run(["openshell", "--gateway", "spark-local", "sandbox", "list", "--all-workspaces", "--ids"],
+                                   capture_output=True, text=True, timeout=10, check=True).stdout.splitlines()
+        if sandboxes:
+            raise RuntimeError("OpenShell update blocked: a sandbox still exists. Finish its work and delete it after preserving needed data, then retry.")
     subprocess.run(["systemctl", "--user", "reset-failed", unit], capture_output=True, timeout=5, check=False)
     result = subprocess.run(["systemctl", "--user", "start", "--no-block", unit], capture_output=True, timeout=5)
     if result.returncode:
@@ -2182,7 +2430,9 @@ class Handler(legacy.Handler):
                 role = self.headers.get("X-Prime-Role", "user")
                 self.send_json(200, {"settings": legacy.settings_view(), "models": legacy.model_catalog(), "usage": usage_for_user(user), "requestLedger": {"nativeRequests": 0, "recent": []}, "sessions": conversation_catalog(query.get("q", [""])[0], query.get("archived", ["0"])[0] == "1", user), "projects": project_catalog(user), "telemetry": legacy.telemetry(), "nativeTasks": task_snapshot(user), "identity": {"user": user, "role": role}, "taskCapabilities": task_capabilities(role)})
             elif path == "/api/conversations/messages":
-                self.send_json(200, {"messages": conversation_messages(query.get("id", [""])[0], self.request_user())})
+                session_id = query.get("id", [""])[0]
+                user = self.request_user()
+                self.send_json(200, {"messages": conversation_messages(session_id, user), "taskLogs": conversation_task_logs(session_id, user)})
             elif path == "/api/conversations/export":
                 session_id = query.get("id", [""])[0]
                 rows = conversation_messages(session_id, self.request_user())
@@ -2196,7 +2446,9 @@ class Handler(legacy.Handler):
                 task_log_chunk(task_id, self.request_user())
                 if not log.is_file():
                     raise ValueError("Task log not found")
-                self.send_bytes(200, log.read_bytes(), "text/plain; charset=utf-8", f"task-{task_id}.log")
+                with log.open(encoding="utf-8", errors="replace") as handle:
+                    redacted = "".join(safe_runtime_line(line) + "\n" for line in handle).encode()
+                self.send_bytes(200, redacted, "text/plain; charset=utf-8", f"task-{task_id}.log")
             elif path == "/api/tasks/log/chunk":
                 raw_offset = query.get("offset", ["0"])[0]
                 if not re.fullmatch(r"\d{1,12}", raw_offset):
@@ -2206,7 +2458,8 @@ class Handler(legacy.Handler):
                 rows = upload_rows(self.request_user())
                 self.send_json(200, {"files": rows, "usedBytes": sum(row["sizeBytes"] for row in rows), "limitBytes": legacy.MAX_UPLOAD_STORAGE_BYTES})
             elif path == "/api/skills":
-                self.send_json(200, {"skills": skill_catalog(self.request_user()), "toolProfiles": tool_inventory()})
+                user = self.request_user()
+                self.send_json(200, {"skills": skill_catalog(user), "available": available_project_skills(user), "toolProfiles": tool_inventory()})
             elif path == "/api/files/content":
                 file = upload_path(query.get("id", [""])[0], self.request_user())
                 if file.stat().st_size > 10 * 1024 * 1024:
@@ -2218,6 +2471,9 @@ class Handler(legacy.Handler):
             elif path == "/api/admin":
                 self.require_admin()
                 self.send_json(200, admin_status())
+            elif path == "/api/admin/sandboxes":
+                self.require_admin()
+                self.send_json(200, admin_sandbox_inventory())
             elif path == "/api/providers/catalog":
                 self.require_admin()
                 self.send_json(200, {"providers": provider_catalog()})
@@ -2248,7 +2504,7 @@ class Handler(legacy.Handler):
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
-        v2 = {"/api/settings", "/api/skills", "/api/tasks/start", "/api/tasks/stop", "/api/tasks/message", "/api/tasks/authorization", "/api/conversations/update", "/api/conversations/delete", "/api/conversations/duplicate", "/api/conversations/promote", "/api/projects/create", "/api/projects/update", "/api/projects/delete", "/api/files/delete", "/api/admin/restart", "/api/admin/retention", "/api/admin/update", "/api/admin/user-cache", "/api/admin/routing-rules", "/api/admin/skills", "/api/providers/configure", "/api/files/upload"}
+        v2 = {"/api/settings", "/api/skills", "/api/tasks/start", "/api/tasks/stop", "/api/tasks/message", "/api/tasks/authorization", "/api/conversations/update", "/api/conversations/delete", "/api/conversations/duplicate", "/api/conversations/promote", "/api/projects/create", "/api/projects/update", "/api/projects/delete", "/api/files/delete", "/api/admin/restart", "/api/admin/retention", "/api/admin/update", "/api/admin/sandboxes", "/api/admin/user-cache", "/api/admin/routing-rules", "/api/admin/skills", "/api/providers/configure", "/api/files/upload"}
         if path not in v2:
             if not csrf_ok(self.headers):
                 self.send_json(403, {"error": "CSRF validation failed"})
@@ -2319,7 +2575,14 @@ class Handler(legacy.Handler):
                 require_conversation_owner(session_id, user)
                 with TASK_LOCK:
                     active_ids = {value for task in TASKS.values() if task.get("owner") == user and task.get("status") == "running" for value in (task.get("sessionId"), task.get("agentSessionId")) if value}
-                self.send_json(200, legacy.delete_conversation(session_id, session_root(user), session_trash(user), active_ids))
+                result = legacy.delete_conversation(session_id, session_root(user), session_trash(user), active_ids)
+                with MESSAGE_CACHE_LOCK:
+                    MESSAGE_CACHE.pop((user, session_id), None)
+                try:
+                    message_cache_path(session_id, user).unlink(missing_ok=True)
+                except OSError:
+                    pass
+                self.send_json(200, result)
             elif path == "/api/conversations/duplicate":
                 authorization = task_policy.authorize_task({"executionMode": "deny"}, role)
                 session_id = str(payload.get("id", ""))
@@ -2358,6 +2621,9 @@ class Handler(legacy.Handler):
             elif path == "/api/admin/update":
                 self.require_admin()
                 self.send_json(202, start_update(str(payload.get("kind", "")), payload.get("confirm")))
+            elif path == "/api/admin/sandboxes":
+                self.require_admin()
+                self.send_json(200, cleanup_admin_sandbox(str(payload.get("name", "")), payload.get("confirm")))
             elif path == "/api/admin/user-cache":
                 self.require_admin()
                 if payload.get("confirm") != f"delete-cache-{payload.get('username', '')}":
@@ -2367,6 +2633,10 @@ class Handler(legacy.Handler):
             self.send_json(400, {"error": str(error)})
         except RuntimeError as error:
             self.send_json(409, {"error": str(error)})
+        except OSError as error:
+            legacy.audit("request_failed", path=path, reason=type(error).__name__, client=self.client_address[0])
+            message = "Conversation storage is unavailable; retry or ask an administrator to check access" if path == "/api/conversations/delete" else "Request could not be completed"
+            self.send_json(503, {"error": message})
 
 
 if __name__ == "__main__":

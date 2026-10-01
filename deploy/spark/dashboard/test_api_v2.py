@@ -18,6 +18,20 @@ SPEC.loader.exec_module(api)
 
 
 class DashboardV2Tests(unittest.TestCase):
+    def test_bmc_runtime_guidance_is_scoped_and_does_not_grant_actions(self):
+        with mock.patch.object(api, "container_mode", return_value=True):
+            text = api.runtime_context({"profile": "network-operations"})
+            for fragment in ("top-level await", "list_sessions()", "does not carry IPMI/SOL UDP", "No reset"):
+                self.assertIn(fragment, text)
+            general = api.runtime_context({"profile": "general"})
+            self.assertIn("Qwen", general)
+            self.assertIn("all nontrivial code", general)
+            self.assertNotIn("KVM screenshot", general)
+            for profile in ("general", "development", "cad", "finance", "review", "network-operations"):
+                self.assertIn("model='spark-qwen/qwen3.8-flash-next'", api.runtime_context({"profile": profile}))
+        with mock.patch.object(api, "container_mode", return_value=False):
+            self.assertEqual(api.runtime_context({"profile": "network-operations"}), "")
+
     def test_invalid_python_cell_queues_one_correction_and_requires_an_answer(self):
         task_id = "9" * 32
         stdin = io.StringIO()
@@ -193,6 +207,20 @@ for line in sys.stdin:
         value = api.sanitize_runtime_text("Authorization: Bearer secret-token sk-proj-" + "x" * 30)
         self.assertNotIn("secret-token", value)
         self.assertNotIn("sk-proj-", value)
+        pair = api.sanitize_runtime_text('requests.get("https://bmc.example", auth=("operator", "synthetic-private-value"))')
+        self.assertNotIn("synthetic-private-value", pair)
+        self.assertIn("[REDACTED_CREDENTIALS]", pair)
+
+    def test_streamed_tool_arguments_are_not_retained_in_work_log(self):
+        code = 'requests.post("https://bmc.example", auth=("operator", "synthetic-private-value"))'
+        event = {"type": "message_update", "message": {"role": "assistant", "content": [{"type": "toolCall", "name": "ipython", "arguments": {"code": code}, "partialArgs": code}]}, "assistantMessageEvent": {"type": "toolcall_delta", "delta": code}}
+        logged = api.safe_runtime_line(json.dumps(event))
+        self.assertNotIn("synthetic-private-value", logged)
+        self.assertNotIn("operator", logged)
+        self.assertIn("[REDACTED_TOOL_INPUT]", logged)
+        complete = api.safe_runtime_line(json.dumps({"type": "message_end", "message": {"role": "assistant", "content": [{"type": "toolCall", "name": "ipython", "arguments": {"code": code}}]}}))
+        self.assertNotIn("synthetic-private-value", complete)
+        self.assertIn("ipython", complete)
 
     def test_full_live_log_redacts_private_reasoning_and_secrets(self):
         task = {}
@@ -228,6 +256,21 @@ for line in sys.stdin:
                 finally:
                     api.TASKS.pop(task_id, None)
 
+    def test_legacy_tool_arguments_are_redacted_when_log_is_read(self):
+        task_id = "f" * 32
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.object(api, "TASK_LOGS", Path(directory)):
+                api.TASKS[task_id] = {"id": task_id, "owner": "alice", "status": "completed"}
+                try:
+                    legacy = {"type": "message_end", "message": {"role": "assistant", "content": [{"type": "toolCall", "name": "ipython", "arguments": {"code": 'requests.get("https://bmc.example", auth=("operator", "synthetic-private-value"))'}}]}}
+                    (Path(directory) / f"{task_id}.log").write_text(json.dumps(legacy) + "\n")
+                    result = api.task_log_chunk(task_id, "alice")
+                    self.assertIn("ipython", result["text"])
+                    self.assertNotIn("synthetic-private-value", result["text"])
+                    self.assertEqual(result["nextOffset"], result["size"])
+                finally:
+                    api.TASKS.pop(task_id, None)
+
     def test_runtime_stage_is_visible_in_progress(self):
         task_id = "e" * 32
         api.TASKS[task_id] = {"id": task_id, "owner": "alice", "status": "running", "progressEvents": [], "runtimeEvents": []}
@@ -241,6 +284,37 @@ for line in sys.stdin:
         with tempfile.TemporaryDirectory() as directory:
             with mock.patch.object(api, "require_conversation_owner"), mock.patch.object(api, "session_root", return_value=Path(directory)):
                 self.assertEqual(api.conversation_messages("missing-session-1234", "alice"), [])
+
+    def test_conversation_history_survives_temporary_protection_and_api_restart(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            session_id = "session-alice-1234"
+            transcript = root / f"{session_id}.jsonl"
+            transcript.write_text(json.dumps({"type": "message", "message": {"id": "m1", "role": "user", "content": [{"type": "text", "text": "Keep this visible"}]}}) + "\n")
+            metadata = {"conversations": {session_id: {"owner": "alice"}}}
+            with mock.patch.object(api, "MESSAGE_CACHE_DIR", root / "cache"), mock.patch.object(api, "session_root", return_value=root), mock.patch.object(api, "metadata", return_value=metadata):
+                api.MESSAGE_CACHE.clear()
+                self.assertEqual(api.conversation_messages(session_id, "alice")[0]["text"], "Keep this visible")
+                cache = api.message_cache_path(session_id, "alice")
+                self.assertTrue(cache.is_file())
+                self.assertEqual(cache.stat().st_mode & 0o777, 0o600)
+                api.MESSAGE_CACHE.clear()
+                with mock.patch.object(api.legacy, "session_path", side_effect=PermissionError("task protected transcript")):
+                    self.assertEqual(api.conversation_messages(session_id, "alice")[0]["text"], "Keep this visible")
+                with self.assertRaisesRegex(ValueError, "not found"):
+                    api.conversation_messages(session_id, "bob")
+                api.MESSAGE_CACHE.clear()
+
+    def test_conversation_work_logs_are_owner_scoped_and_persisted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            good = "a" * 32
+            other = "b" * 32
+            (root / f"{good}.log").write_text("safe output\n")
+            (root / f"{other}.log").write_text("other output\n")
+            data = {"conversations": {"session-alice": {"owner": "alice"}}, "tasks": {good: {"owner": "alice", "sessionId": "session-alice", "status": "completed", "createdAt": "2026-09-29T00:00:00Z"}, other: {"owner": "bob", "sessionId": "session-alice", "status": "completed"}}}
+            with mock.patch.object(api, "TASK_LOGS", root), mock.patch.object(api, "metadata", return_value=data):
+                self.assertEqual([row["id"] for row in api.conversation_task_logs("session-alice", "alice")], [good])
 
     def test_steering_is_owner_scoped_and_uses_rpc_channel(self):
         task_id = "b" * 32
@@ -287,6 +361,48 @@ for line in sys.stdin:
             result = api.start_update("openshell", "update-openshell")
         self.assertEqual(result["unit"], "prime-update-openshell.service")
         self.assertIn(["systemctl", "--user", "start", "--no-block", "prime-update-openshell.service"], calls)
+
+    def test_openshell_update_reports_existing_sandbox(self):
+        with mock.patch.object(api, "update_status", return_value={"openshell": {"active": False}}), mock.patch.object(api.subprocess, "run", return_value=mock.Mock(returncode=0, stdout="sandbox-1\n")):
+            with self.assertRaisesRegex(RuntimeError, "sandbox still exists"):
+                api.start_update("openshell", "update-openshell")
+
+    def test_admin_sandbox_check_distinguishes_saved_from_active_task(self):
+        task_id = "a" * 32
+        payload = [{"id": "sandbox-id", "name": "pt-aaaaaaaaaaaaaaaa", "workspace": "default",
+                    "status": {"phase": "Ready"}, "createdAt": "2026-09-23T20:44:00Z",
+                    "labels": {"prime.owner": "alice", "prime.task": task_id, "prime.profile": "network-operations"}}]
+        saved = {"tasks": {task_id: {"status": "running", "topic": "Old browser task"}}}
+        with mock.patch.object(api.subprocess, "run", return_value=mock.Mock(stdout=json.dumps({"sandboxes": payload, "next_page_token": ""}))) as cli, mock.patch.object(api, "metadata", return_value=saved):
+            rows = api.admin_sandbox_inventory()["sandboxes"]
+            self.assertIn("--page-size", cli.call_args.args[0])
+            self.assertEqual(rows[0]["taskTopic"], "Old browser task")
+            self.assertTrue(rows[0]["reviewCandidate"])
+            api.TASKS[task_id] = {"status": "running"}
+            try:
+                self.assertFalse(api.admin_sandbox_inventory()["sandboxes"][0]["reviewCandidate"])
+            finally:
+                api.TASKS.pop(task_id, None)
+
+    def test_admin_sandbox_cleanup_requires_exact_confirm_and_inactive_task(self):
+        name = "pt-aaaaaaaaaaaaaaaa"
+        with self.assertRaisesRegex(ValueError, "confirmation"):
+            api.cleanup_admin_sandbox(name, "yes")
+        with mock.patch.object(api, "admin_sandbox_inventory", return_value={"sandboxes": [{"name": name, "reviewCandidate": False, "taskId": "a" * 32}]}):
+            with self.assertRaisesRegex(RuntimeError, "inactive"):
+                api.cleanup_admin_sandbox(name, f"delete-sandbox-{name}")
+
+    def test_orphan_cleanup_marks_saved_task_failed_without_losing_log_reference(self):
+        task_id = "b" * 32
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "metadata.json"
+            path.write_text(json.dumps({"tasks": {task_id: {"owner": "alice", "sessionId": "session-1", "status": "running"}}}))
+            with mock.patch.object(api, "META", path):
+                api.mark_orphaned_task_failed(task_id)
+            row = json.loads(path.read_text())["tasks"][task_id]
+            self.assertEqual(row["status"], "failed")
+            self.assertEqual(row["sessionId"], "session-1")
+            self.assertTrue(row["finishedAt"])
 
     def test_conversation_catalog_is_filtered_by_owner(self):
         rows = [
@@ -434,7 +550,7 @@ for line in sys.stdin:
             root = Path(directory)
             session = root / "session-alice.jsonl"
             session.write_text(json.dumps({"type": "message", "message": {"id": "m1", "role": "user", "content": [{"type": "text", "text": "Visible request\n\n<prime_project_context>\nSecret instructions\n</prime_project_context>"}]}}) + "\n")
-            with mock.patch.object(api, "metadata", return_value={"conversations": {"session-alice": {"owner": "alice"}}}), mock.patch.object(api, "session_root", return_value=root):
+            with mock.patch.object(api, "metadata", return_value={"conversations": {"session-alice": {"owner": "alice"}}}), mock.patch.object(api, "session_root", return_value=root), mock.patch.object(api, "MESSAGE_CACHE_DIR", root / "cache"):
                 rows = api.conversation_messages("session-alice", "alice")
             self.assertEqual(rows[0]["text"], "Visible request")
 
@@ -444,10 +560,12 @@ for line in sys.stdin:
             meta_path.write_text('{"conversations":{}}')
             task = {"sessionId": "session-new-1234", "thinking": "high", "provider": "p", "model": "m", "routingMode": "default", "routeReason": "default", "owner": "alice", "fileIds": ["upload-a"], "persistPolicyOnSessionCreate": True, "policyPreference": {"profile": "cad", "executionMode": "prompt", "networkMode": "restricted"}}
             with mock.patch.object(api, "META", meta_path):
+                task["codeGenerationRoute"] = True
                 api.store_task_route(task)
             saved = json.loads(meta_path.read_text())["conversations"]["session-new-1234"]
             self.assertEqual(saved["taskPolicy"], task["policyPreference"])
             self.assertEqual(saved["fileIds"], ["upload-a"])
+            self.assertTrue(saved["codeGenerationRoute"])
 
     def test_conversation_catalog_uses_cache_during_temporary_permission_change(self):
         rows = [{"id": "session-alice", "topic": "Alice", "modified": "2026-01-01T00:00:00Z", "provider": "p", "model": "m"}]
@@ -481,6 +599,18 @@ for line in sys.stdin:
                 self.assertEqual([row["id"] for row in api.conversation_catalog(user="alice")], ["session-alice"])
         finally:
             api.SESSION_CACHE.pop("alice", None)
+
+    def test_usage_keeps_last_good_summary_when_task_protects_session_tree(self):
+        summary = {"windows": {"today": {"model": {"tokens": 42}}}}
+        rows = [{"id": "session-alice"}]
+        api.USAGE_CACHE.pop("alice", None)
+        try:
+            with mock.patch.object(api, "session_root", return_value=Path("/tmp/sessions")), mock.patch.object(api, "cached_session_catalog", return_value=rows), mock.patch.object(api.legacy, "session_path", side_effect=[Path("/tmp/sessions/session-alice.jsonl"), PermissionError("protected")]), mock.patch.object(api.legacy, "usage_summary", return_value=summary) as usage:
+                self.assertEqual(api.usage_for_user("alice"), summary)
+                self.assertEqual(api.usage_for_user("alice"), summary)
+                usage.assert_called_once()
+        finally:
+            api.USAGE_CACHE.pop("alice", None)
 
     def test_known_conversation_update_does_not_stat_protected_session(self):
         meta = {"conversations": {"session-alice": {"owner": "alice"}}}
@@ -522,7 +652,7 @@ for line in sys.stdin:
                 "policyPreference": {"profile": "development", "executionMode": "deny", "networkMode": "restricted"},
                 "persistPolicyOnSessionCreate": True,
             }
-            with mock.patch.object(api, "META", meta_path), mock.patch.object(api, "session_root", return_value=root / "sessions"):
+            with mock.patch.object(api, "META", meta_path), mock.patch.object(api, "session_root", return_value=root / "sessions"), mock.patch.object(api, "MESSAGE_CACHE_DIR", root / "cache"):
                 session_id = api.recover_failed_task_conversation(task, "failed")
                 messages = api.conversation_messages(session_id, "alice")
             self.assertEqual(messages[0]["role"], "user")
@@ -572,8 +702,10 @@ for line in sys.stdin:
     def test_user_cache_purge_includes_persisted_logs_and_usage(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            sessions = root / "sessions"; uploads = root / "uploads"; logs = root / "logs"
+            sessions = root / "sessions"; uploads = root / "uploads"; logs = root / "logs"; cache = root / "message-cache"
             sessions.mkdir(); uploads.mkdir(); logs.mkdir()
+            (cache / "alice").mkdir(parents=True)
+            (cache / "alice/session-alice.json").write_text("cached private chat")
             (sessions / "session-alice.jsonl").write_text("{}\n")
             (uploads / "alice" ).mkdir()
             (uploads / "alice/file.txt").write_text("private")
@@ -582,10 +714,11 @@ for line in sys.stdin:
             meta_path.write_text(json.dumps({"conversations": {"session-alice": {"owner": "alice"}}, "files": {"alice/file.txt": {"owner": "alice"}}, "tasks": {"task-alice": {"owner": "alice"}}}))
             ledger = root / "ledger.jsonl"
             ledger.write_text(json.dumps({"owner": "alice", "taskId": "task-alice"}) + "\n" + json.dumps({"owner": "bob", "taskId": "task-bob"}) + "\n")
-            with mock.patch.object(api, "META", meta_path), mock.patch.object(api, "LEDGER", ledger), mock.patch.object(api, "TASK_LOGS", logs), mock.patch.object(api, "USER_TRASH", root / "trash"), mock.patch.object(api.legacy, "SESSIONS", sessions), mock.patch.object(api.legacy, "UPLOADS", uploads), mock.patch.object(api.legacy, "audit"):
+            with mock.patch.object(api, "META", meta_path), mock.patch.object(api, "LEDGER", ledger), mock.patch.object(api, "TASK_LOGS", logs), mock.patch.object(api, "MESSAGE_CACHE_DIR", cache), mock.patch.object(api, "USER_TRASH", root / "trash"), mock.patch.object(api.legacy, "SESSIONS", sessions), mock.patch.object(api.legacy, "UPLOADS", uploads), mock.patch.object(api.legacy, "audit"):
                 result = api.purge_user_cache("alice")
             self.assertEqual((result["sessions"], result["files"], result["logs"], result["usageRecords"]), (1, 1, 1, 1))
             self.assertFalse((logs / "task-alice.log").exists())
+            self.assertFalse((cache / "alice").exists())
             self.assertNotIn("alice", ledger.read_text())
             self.assertIn("bob", ledger.read_text())
 
@@ -627,6 +760,40 @@ for line in sys.stdin:
         route = api.route_task("Review this STL for printability and clearances", self.settings())
         self.assertEqual((route["provider"], route["model"]), api.QWEN_ROUTE)
         self.assertEqual(route["routingMode"], "automatic")
+
+    def test_code_generation_routes_to_qwen_in_every_profile(self):
+        for profile in ("general", "development", "cad", "finance", "review", "network-operations"):
+            with self.subTest(profile=profile):
+                route = api.route_task("Write a Python script for this", self.settings(), profile=profile)
+                self.assertEqual((route["provider"], route["model"]), api.QWEN_ROUTE)
+                self.assertTrue(route["codeGenerationRoute"])
+
+    def test_code_policy_overrides_directives_and_custom_rules(self):
+        with mock.patch.object(api, "routing_rules", return_value=[{"enabled": True, "scope": "always", "triggers": ["write"], "provider": "spark-nemotron", "model": "nemotron-3.5-lightning", "name": "custom"}]):
+            for directive in ("/nemotron", "Use Nemotron", "/codex", ""):
+                route = api.route_task(directive + " write a script", self.settings(codex=True))
+                self.assertEqual((route["provider"], route["model"]), api.QWEN_ROUTE)
+
+    def test_automation_profiles_do_not_need_coding_keywords(self):
+        for profile in ("network-operations", "development"):
+            route = api.route_task("continue", self.settings(), profile=profile)
+            self.assertEqual(route["model"], api.QWEN_ROUTE[1])
+
+    def test_code_followup_retains_qwen_but_noncode_can_select_nemotron(self):
+        previous = {"codeGenerationRoute": True}
+        route = api.route_task("do it", self.settings(), profile="general", previous_route=previous)
+        self.assertEqual(route["model"], api.QWEN_ROUTE[1])
+        route = api.route_task("/nemotron summarize the findings", self.settings(), profile="general", previous_route=previous)
+        self.assertEqual(route["model"], api.NEMOTRON_ROUTE[1])
+        self.assertFalse(route.get("codeGenerationRoute", False))
+
+    def test_code_never_falls_back_to_nemotron_when_qwen_disabled(self):
+        with self.assertRaisesRegex(ValueError, "Qwen must be enabled"):
+            api.route_task("write a script", self.settings(qwen=False))
+
+    def test_noncode_conversation_stays_with_nemotron(self):
+        route = api.route_task("Summarize the meeting notes", self.settings(), profile="general")
+        self.assertEqual(route["model"], api.NEMOTRON_ROUTE[1])
 
     def test_explicit_model_route_overrides_specialist_match(self):
         route = api.route_task("Use Nemotron to review this portfolio", self.settings())
@@ -751,6 +918,22 @@ for line in sys.stdin:
             self.assertEqual(fields["skillIds"], [skill_id])
             with self.assertRaisesRegex(ValueError, "unavailable"):
                 api.normalize_project_fields({"name": "Work", "skillIds": [skill_id]}, "bob")
+
+    def test_installed_skill_inventory_is_owner_scoped_and_project_selectable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            index = home / ".prime/agent/skill-inventory.json"
+            index.parent.mkdir(parents=True)
+            index.write_text(json.dumps({"owner": "alice", "skills": [
+                {"id": "managed:bmc-html5-kvm", "slug": "bmc-html5-kvm", "name": "bmc-html5-kvm", "description": "BMC console"},
+                {"id": "nvidia:cuda", "slug": "cuda", "name": "cuda", "description": "CUDA help"},
+                {"id": "nvidia:../unsafe", "slug": "../unsafe", "name": "unsafe"}]}))
+            with mock.patch.object(api.legacy, "HOME", home), mock.patch.object(api, "metadata", return_value={"skills": {}}):
+                self.assertEqual(len(api.installed_skill_inventory("alice")), 2)
+                self.assertEqual(api.installed_skill_inventory("bob"), [])
+                self.assertEqual(api.normalize_skill_ids(["nvidia:cuda"], "alice"), ["nvidia:cuda"])
+                with self.assertRaisesRegex(ValueError, "unavailable"):
+                    api.normalize_skill_ids(["nvidia:cuda"], "bob")
 
 
 if __name__ == "__main__":

@@ -69,7 +69,7 @@ providers are used.
 Clone the release and run the installer as the account that should own Prime:
 
 ```bash
-git clone --branch v0.5.46 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
+git clone --branch v0.5.47 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
 cd prime_agent_webui
 ./install.sh --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
@@ -342,12 +342,16 @@ Source files:
 `deploy/spark/openshell/provision-volumes.sh`,
 `deploy/spark/container/openshell_runner.py`,
 `deploy/spark/container/runner_launch.py`, and
-`deploy/spark/systemd/prime-runner-broker.service`.
+`deploy/spark/systemd/prime-runner-broker.service`. Long-running HTML5 KVM
+also uses `deploy/spark/container/kvm_broker.py` and
+`deploy/spark/systemd/prime-kvm-broker.service`.
 
 | Setting | Deployed value |
 |---|---|
-| OpenShell package | `0.0.116` ARM64 `.deb` with pinned SHA256 |
+| OpenShell package | `0.1.2-1` ARM64 `.deb`, SHA256 `14838b811b54148060da99fd2aabe78f05c777002c0a8fc39b106e0de0ddd796` |
 | Gateway name | `spark-local` |
+| Gateway | schema v2, Docker driver, loopback `127.0.0.1:17670`, mTLS, telemetry off |
+| Docker attachment policy | `allow_driver_config=true`, resource admission enabled, approved Prime volumes labeled attachable for workspace `default` |
 | Task service identity | `prime-runner:prime-runner` |
 | Supplementary groups | `prime-web`, `prime-local-access` |
 | Dashboard runtime env | `PRIME_TASK_RUNTIME=openshell` |
@@ -511,8 +515,9 @@ read-only and tasks do not receive sudo. System binaries must be added to a
 reviewed image profile. The `network-operations` profile includes Chromium and
 ipmitool for browser-assisted BMC and IPMI work.
 
-The supported Spark bundle includes Prime-native `bmc-headless-browser` and
-`ipmi-redfish-bmc` packages. The browser adapter runs Playwright and the
+The supported Spark bundle includes Prime-native `bmc-headless-browser`,
+`bmc-html5-kvm`, and `ipmi-redfish-bmc` packages. The bounded page-action
+browser adapter runs Playwright and the
 profile's existing Chromium in a clean, per-browser subprocess so Prime's
 persistent IPython event loop cannot retain Playwright connection state. The
 private pipe bridge uses worker threads instead of IPython's asyncio subprocess
@@ -522,6 +527,77 @@ power-changing action. Credentials are supplied only at runtime. Prime sees the
 short skill metadata for routing, but imports these adapters only after a task
 selects them. Playwright is present only in the `network-operations` image and
 starts only when the BMC browser is opened.
+
+The separate `bmc-html5-kvm` skill keeps an HTML5 console in a dedicated,
+owner-scoped OpenShell sandbox across Prime tasks. It requires the
+`network-operations` profile with **LAN/VPN or Full network** mode. The launcher
+mounts the owner's KVM control channel at `/run/prime-kvm` and sets
+`PRIME_KVM_SOCKET=/run/prime-kvm/kvm.sock` for those combinations. The KVM worker
+itself retains LAN egress. Two sessions are allowed per owner. List existing
+sessions first and connect by session ID. Repeated creation at the same BMC
+origin and TLS setting reuses that session without reloading it; Redfish API URLs
+are rejected as non-console targets. Inspect
+on-demand PNG/JPEG frames before sending confirmed keyboard, mouse, or form input.
+`capture('console.png')` saves below `/project`. `inspect()` lists visible controls,
+login-page presence, and frame indexes without exposing form values.
+`inspect()['consoleSurfaces']` gives each visible canvas/video's `frameIndex` and
+`selector`. Embedded consoles use `select_frame(surface['frameIndex'])`; do not
+guess frame 0 or assume a second browser tab exists.
+Normal query-string routes and initial same-host HTTP-to-HTTPS redirects are
+supported. Console keys/text require a focused, visible canvas/video surface;
+use `focus_console(selector, confirm=True)` after inspecting the console. A login
+page, mounted media, or consumed boot override is not evidence that an installer
+booted. Cross-origin frames and redirects remain blocked.
+Sessions expire after 45 minutes idle or eight hours total, and do not survive
+a broker restart, host reboot, or BMC idle timeout. The initial target
+is HPE iLO 5; a live iLO console remains to be validated. The BMC account
+needs Remote Console privilege, the feature enabled, and a supporting license.
+The skill does not automate virtual media or guarantee an uninterrupted install;
+keep the iLO session and media lifecycle under operator review.
+
+The package also contains an interactive IPMI Serial-over-LAN adapter, but
+**direct IPMI/SOL is not available through the deployed OpenShell HTTP(S)
+gateway**, including Full mode. It now fails fast with that explanation;
+use Redfish or HTML5 KVM instead. In a separately authorized environment with
+direct IPMI transport, the adapter uses `lanplus`, a private pseudo-terminal,
+and a bounded ANSI/VT100 screen renderer for BIOS and boot text. Inspect
+`sol_info()` first; then use `with bmc.sol_session() as sol:` to read the screen.
+Sending a key or text requires authorization for the exact target and action
+and `confirm=True`. HPE firmware must have its Virtual Serial Port and BIOS
+serial-console redirection configured, and the booting installer or OS must
+output to serial. SOL does not display graphical KVM. The browser skill
+does not provide a persistent HTML5 KVM controller; use the separate KVM
+skill for a longer session, subject to the bounds above.
+See the bundled skills' `SKILL.md` files for the bounded API and safety rules.
+
+Task model and HTTP proxy connections use the bounded loopback relay packaged
+at `/usr/local/lib/prime-gateway-relay.py`, on ports 31000 and 31080 respectively.
+A rejected or cancelled connection does not terminate its listener. Egress
+still passes through the selected owner gateway Unix socket; this does not
+enable direct networking. Network-operations tasks also receive short runtime
+instructions on correct IPython/browser use, session reuse, and transport limits.
+The managed KVM instructions are at
+`/home/prime/.prime/agent/skills/bmc-html5-kvm/SKILL.md` inside tasks. Run
+`deploy/spark/prime/validate-prime-kvm-task.py` as the WebUI owner for a full
+local-model/runner/IPython/KVM fixture test; it makes a synthetic test conversation
+and fails on unexpected tool errors, absent final reports, or missing fixture
+evidence. It uses the production routing decision and does not contact a real BMC.
+
+Code generation belongs to Qwen in **all six profiles**. The WebUI routes
+recognized coding/automation requests and Development/Network operations tasks
+to `spark-qwen/qwen3.8-flash-next`, retains that route on coding follow-ups, and
+shows the selected model and reason in the conversation controls. This policy
+takes precedence over model directives/custom keyword rules for code work;
+if Qwen is disabled, the task reports a blocker instead of using Nemotron.
+Ordinary non-code conversations can still use Nemotron. The managed workspace
+policy and per-task instructions limit Nemotron to orchestration and very simple
+inspection/delegation cells; any nontrivial implementation discovered later must
+be delegated with `rlm.spawn(..., model="spark-qwen/qwen3.8-flash-next")`.
+Intent routing is deterministic for the covered requests; delegation of newly
+discovered subtasks is an agent instruction, not a Python-level execution lock.
+No model choice expands permissions or authorizes BMC actions.
+See [model routing rules](docs/model-routing.md) for precedence, default trigger
+phrases, continuation behavior, and administrator configuration.
 
 `deploy/spark/prime/install-skills.sh` also validates and stores all 366 upstream
 NVIDIA skills unchanged in protected global Prime state. Prime advertises one
@@ -534,6 +610,22 @@ recoverable. To use an already-reviewed checkout without another clone:
 ```bash
 deploy/spark/prime/install-skills.sh --nvidia-source /path/to/NVIDIA-skills
 ```
+
+The installer publishes a metadata-only, owner-scoped skill inventory for the
+WebUI. In a project, open **Project settings → Project skills** and search the
+installed Prime and NVIDIA entries. Selecting a catalog skill gives Prime its
+on-demand path without loading the entire catalog into every prompt. New skill
+archives still require administrator review. An older install can refresh just
+the inventory with `install-managed-skills.py --inventory-only` for its owner.
+
+OpenShell updates require zero existing sandboxes, including idle ones. The
+WebUI reports this blocker. Review and finish a sandbox's work before removing
+it; an update never deletes sandboxes automatically. A newer upstream release
+must also match Prime's reviewed installer pin before the update is applied,
+so a later WebUI reinstall cannot silently downgrade the package. OpenShell
+0.0.x to 0.1.x is a breaking migration, not a one-click update; the backup,
+gateway schema conversion, client re-registration, and Docker volume-label
+procedure is in the [OpenShell operations guide](deploy/spark/openshell/README.md).
 
 ## Firewall examples
 
@@ -583,7 +675,7 @@ For a DGX Spark, use the tracked Nemotron and Qwen configurations under
 systemctl --user status prime-auth prime-dashboard-api
 systemctl --user restart prime-auth prime-dashboard-api
 journalctl --user -u prime-dashboard-api -f
-systemctl status prime-model-gateway prime-runner-broker
+systemctl status prime-model-gateway prime-runner-broker prime-kvm-broker
 prime-web-password
 ```
 
@@ -631,16 +723,53 @@ OpenShell appears in the same section and updates only from NVIDIA's latest
 stable ARM64 release with the published checksum file, while refusing to run if
 OpenShell sandboxes still exist. In-app release checks require an authenticated
 [GitHub CLI](https://cli.github.com/) installation because this repository is
-private; core chat operation does not require `gh`.
+public, but the current updater uses authenticated GitHub CLI requests to avoid
+anonymous API limits; core chat operation does not require `gh`.
+
+Selecting **Admin** replaces the chat pane with a wider administration
+workspace. **OpenShell sandboxes** checks every workspace and displays the
+associated Prime task, saved status, and whether a WebUI task is actually
+active. An administrator may stop and delete a reviewed, inactive Prime task
+sandbox only after typing its exact name. The server checks again for active
+tasks and non-idle sandbox processes; it never cleans sandboxes automatically.
+Task logs, conversations, and the host task workspace are retained. Deleting
+a sandbox can still discard sandbox-local state, so inspect it first.
 
 For a manual upgrade:
 
 ```bash
 git fetch --tags origin
-git checkout v0.5.46
+git checkout v0.5.47
 ./install.sh --skip-packages --skip-prime --skip-password \
   --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
+
+For an existing OpenShell deployment, also apply the runtime update (with no
+active Prime tasks or KVM consoles), then refresh managed skills:
+
+```bash
+deploy/spark/openshell/install.sh
+deploy/spark/prime/install-skills.sh --bundled-only
+```
+
+This rebuilds/verifies all six immutable images, refreshes the privileged
+helpers and managed workspace policy, and activates the OpenShell task runtime.
+Do not treat a static WebUI copy alone as a completed runtime upgrade. The
+in-app WebUI updater performs this OpenShell step automatically. Existing custom
+workspace policies are preserved; per-task model routing guidance still applies.
+
+Validate the installed runtime as the WebUI owner:
+
+```bash
+bash scripts/validate-release.sh
+python3 deploy/spark/prime/validate-prime-kvm-task.py
+```
+
+The model-driven check needs the local Qwen service and the installed owner KVM
+broker. It runs only against a synthetic local BMC, retains a diagnostic test
+conversation, and closes its fixture session. Set `PRIME_KVM_TEST_HOST` to the
+Spark's private IP if it is not the recipe default. It does not verify a real
+BMC login, console license, or server boot.
 
 ## Security and limitations
 

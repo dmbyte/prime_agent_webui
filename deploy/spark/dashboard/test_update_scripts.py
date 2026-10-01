@@ -7,6 +7,11 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 class UpdateScriptTests(unittest.TestCase):
+    def test_prime_agent_updater_captures_cli_version_from_stderr(self):
+        script = (ROOT / "deploy/spark/update/update-prime-agent.sh").read_text()
+        self.assertIn('before=$(prime-agent --version 2>&1)', script)
+        self.assertIn('after=$(prime-agent --version 2>&1)', script)
+
     def test_webui_update_installs_shared_task_helper(self):
         script = (ROOT / "deploy/spark/update/update-webui.sh").read_text()
         self.assertIn('deploy/spark/container/task_common.py', script)
@@ -53,6 +58,25 @@ class UpdateScriptTests(unittest.TestCase):
         self.assertIn('pre-prime-managed-', script)
         self.assertIn("source_expiry > target_expiry", script)
         self.assertIn("Retained the gateway Codex credential", script)
+
+    def test_openshell_012_install_and_volume_admission_are_pinned(self):
+        installer = (ROOT / "deploy/spark/openshell/install.sh").read_text()
+        config = (ROOT / "deploy/spark/openshell/gateway.toml").read_text()
+        volumes = (ROOT / "deploy/spark/openshell/provision-volumes.sh").read_text()
+        self.assertIn("version=0.1.2", installer)
+        self.assertIn("openshell-gateway config preflight", installer)
+        self.assertIn("version = 2", config)
+        self.assertIn('compute_driver = "docker"', config)
+        self.assertIn("allow_driver_config = true", config)
+        self.assertIn("resource_admission", config)
+        self.assertNotIn("grpc_endpoint =", config)
+        self.assertIn("openshell.ai/sandbox-attachable-workspace=default", volumes)
+        self.assertIn("openshell.ai/sandbox-attachable=true", volumes)
+
+    def test_openshell_updater_reports_effective_version_after_manual_migration(self):
+        script = (ROOT / "deploy/spark/update/update-openshell.sh").read_text()
+        self.assertIn('set_dashboard_version "$installed"', script)
+        self.assertIn("zz-openshell-version.conf", script)
 
     def test_volume_provisioning_refreshes_only_managed_agent_policy(self):
         script = (ROOT / "deploy/spark/openshell/provision-volumes.sh").read_text()

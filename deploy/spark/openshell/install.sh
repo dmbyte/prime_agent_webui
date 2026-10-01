@@ -3,8 +3,13 @@ set -euo pipefail
 
 test "${EUID}" -ne 0 || { echo "Run as the Docker/WebUI owner, not root." >&2; exit 2; }
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
-version=0.0.116
-deb_sha256=d39e93477e8a160012fc199ae1d08ddea15a2e76ba700dcf7c485593a9bd6e1b
+version=0.1.2
+deb_sha256=14838b811b54148060da99fd2aabe78f05c777002c0a8fc39b106e0de0ddd796
+installed_openshell=$(openshell --version 2>/dev/null | awk 'NR == 1 {print $2}' || true)
+if [[ -n "$installed_openshell" ]] && dpkg --compare-versions "$installed_openshell" lt 0.1.0; then
+  echo "OpenShell ${installed_openshell} requires the reviewed 0.0.x-to-0.1.x migration before running this installer; do not upgrade it in place." >&2
+  exit 75
+fi
 asset="openshell_${version}-1_arm64.deb"
 asset_url="https://github.com/NVIDIA/OpenShell/releases/download/v${version}/${asset}"
 staging=$(mktemp -d)
@@ -14,6 +19,18 @@ trap 'rm -rf "$staging" "$build_context"' EXIT
 for command in docker jq setfacl rsync curl; do
   command -v "$command" >/dev/null || { echo "Missing OpenShell prerequisite: $command" >&2; exit 1; }
 done
+kvm_socket="/var/lib/prime-runner/gateway/${USER}/lan/kvm.sock"
+if sudo test -S "$kvm_socket"; then
+  command -v socat >/dev/null || { echo "socat is required to check active KVM sessions." >&2; exit 1; }
+  kvm_state=$(printf '{"action":"list"}\n' | sudo -u prime-runner socat -T 5 - "UNIX-CONNECT:$kvm_socket") || {
+    echo "KVM broker did not answer; defer OpenShell update until its sessions are checked." >&2
+    exit 1
+  }
+  if ! jq -e '.ok == true and (.result.sessions | length) == 0' >/dev/null <<<"$kvm_state"; then
+    echo "Active KVM session: close it before updating OpenShell or its model gateway." >&2
+    exit 1
+  fi
+fi
 test "$(dpkg --print-architecture)" = arm64 || { echo "This pinned OpenShell package is for ARM64." >&2; exit 1; }
 docker_major=$(docker version --format '{{.Server.Version}}' | cut -d. -f1)
 test "$docker_major" -ge 28 || { echo "OpenShell requires Docker 28 or newer." >&2; exit 1; }
@@ -28,7 +45,8 @@ runner_gid=$(id -g prime-runner)
 sudo loginctl enable-linger prime-runner
 sudo systemctl restart "user@${runner_uid}.service"
 
-sudo install -d -o prime-runner -g prime-runner -m 0700 /var/lib/prime-runner/credentials/global /var/lib/prime-runner/credentials/users /var/lib/prime-runner/users /var/lib/prime-runner/gateway /var/lib/prime-runner/openshell-policies
+sudo install -d -o prime-runner -g prime-runner -m 0700 /var/lib/prime-runner/credentials/global /var/lib/prime-runner/credentials/users /var/lib/prime-runner/users /var/lib/prime-runner/gateway /var/lib/prime-runner/kvm /var/lib/prime-runner/openshell-policies
+sudo install -d -o prime-runner -g prime-runner -m 0700 "/var/lib/prime-runner/kvm/${USER}"
 for mode in restricted internet lan full; do
   sudo install -d -o prime-runner -g prime-runner -m 0700 "/var/lib/prime-runner/gateway/${USER}/${mode}"
 done
@@ -82,7 +100,7 @@ sudo find "$owner_agent/sessions" "$owner_agent/trash" "$owner_agent/project-sou
 "$repo/deploy/spark/prime/install-skills.sh" --bundled-only
 
 sudo install -d -o root -g root -m 0755 /usr/local/lib/prime-runner /usr/local/libexec
-sudo install -o root -g root -m 0644 "$repo/deploy/spark/container/task_common.py" "$repo/deploy/spark/container/model_gateway.py" "$repo/deploy/spark/container/openshell_runner.py" /usr/local/lib/prime-runner/
+sudo install -o root -g root -m 0644 "$repo/deploy/spark/container/task_common.py" "$repo/deploy/spark/container/model_gateway.py" "$repo/deploy/spark/container/openshell_runner.py" "$repo/deploy/spark/container/kvm_broker.py" /usr/local/lib/prime-runner/
 install -m 0644 "$repo/deploy/spark/container/task_common.py" "${HOME}/prime-dgx-dashboard/task_common.py"
 sudo install -o root -g root -m 0755 "$repo/deploy/spark/container/runner_launch.py" /usr/local/libexec/prime-runner-launch
 sudo install -o root -g root -m 0755 "$repo/deploy/spark/container/runner_client.py" /usr/local/libexec/prime-runner-client
@@ -93,6 +111,10 @@ broker_unit=$(mktemp)
 sed -e "s/@RUNNER_UID@/${runner_uid}/g" -e "s/@WEB_OWNER@/${USER}/g" "$repo/deploy/spark/systemd/prime-runner-broker.service" >"$broker_unit"
 sudo install -o root -g root -m 0644 "$broker_unit" /etc/systemd/system/prime-runner-broker.service
 rm -f "$broker_unit"
+kvm_unit=$(mktemp)
+sed -e "s/@RUNNER_UID@/${runner_uid}/g" -e "s/@WEB_OWNER@/${USER}/g" "$repo/deploy/spark/systemd/prime-kvm-broker.service" >"$kvm_unit"
+sudo install -o root -g root -m 0644 "$kvm_unit" /etc/systemd/system/prime-kvm-broker.service
+rm -f "$kvm_unit"
 credential_source="$HOME/.prime/agent/auth.json"
 credential_target="/var/lib/prime-runner/credentials/global/auth.json"
 if [[ -f $credential_source ]]; then
@@ -138,7 +160,6 @@ Environment=PRIME_RUNNER_WORKSPACE_ROOT=${workspace_root}
 ReadWritePaths=/var/lib/prime-runner/users ${HOME}/prime-agent
 EOF
 
-installed_openshell=$(openshell --version 2>/dev/null | awk 'NR == 1 {print $2}' || true)
 if [[ "$installed_openshell" != "$version" ]]; then
   curl -fL "$asset_url" -o "$staging/$asset"
   echo "$deb_sha256  $staging/$asset" | sha256sum --check --strict
@@ -146,7 +167,10 @@ if [[ "$installed_openshell" != "$version" ]]; then
 fi
 
 install -d -m 0700 "$HOME/.config/openshell" "$HOME/.config/systemd/user/openshell-gateway.service.d"
+gateway_was_active=false
+if systemctl --user is-active --quiet openshell-gateway.service; then gateway_was_active=true; fi
 install -m 0600 "$repo/deploy/spark/openshell/gateway.toml" "$HOME/.config/openshell/gateway.toml"
+openshell-gateway config preflight --path "$HOME/.config/openshell/gateway.toml"
 install -m 0600 /dev/stdin "$HOME/.config/systemd/user/openshell-gateway.service.d/10-spark.conf" <<'EOF'
 [Service]
 Environment=OPENSHELL_GATEWAY_CONFIG=%h/.config/openshell/gateway.toml
@@ -154,16 +178,26 @@ Environment=OPENSHELL_TELEMETRY_ENABLED=false
 EOF
 systemctl --user daemon-reload
 systemctl --user enable --now openshell-gateway.service
+if "$gateway_was_active"; then systemctl --user restart openshell-gateway.service; fi
+
+for attempt in {1..30}; do
+  if [[ -f "$HOME/.local/state/openshell/tls/client/tls.crt" ]] && systemctl --user is-active --quiet openshell-gateway.service; then break; fi
+  sleep 1
+done
 
 if ! openshell gateway list | grep -q 'spark-local'; then
   openshell gateway add https://127.0.0.1:17670 --local --name spark-local
 fi
+for attempt in {1..30}; do
+  if openshell --gateway spark-local status >/dev/null 2>&1; then break; fi
+  sleep 1
+done
 openshell --gateway spark-local status
 openshell --gateway spark-local settings set --global --key agent_policy_proposals_enabled --value true --yes
 
 cp -a "$repo/deploy/spark/container/." "$build_context/"
 install -d -m 0755 "$build_context/managed-skills"
-for skill in bmc-headless-browser ipmi-redfish-bmc prime-nvidia-catalog; do
+for skill in bmc-headless-browser bmc-html5-kvm ipmi-redfish-bmc prime-nvidia-catalog; do
   cp -a "$repo/deploy/spark/prime/skills/$skill" "$build_context/managed-skills/"
 done
 # Test and import runs may leave generated bytecode in the checkout. It is not
@@ -198,3 +232,4 @@ sudo find /var/lib/prime-runner/.config/openshell -type f -exec chmod 0600 {} +
 "$repo/deploy/spark/openshell/provision-volumes.sh"
 sudo install -o prime-runner -g prime-runner -m 0400 "$repo/deploy/spark/openshell/image-digests.json" /var/lib/prime-runner/openshell-image-digests.json
 sudo -u prime-runner env HOME=/var/lib/prime-runner openshell --gateway spark-local status
+sudo systemctl enable --now prime-kvm-broker.service

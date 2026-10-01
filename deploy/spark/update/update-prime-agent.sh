@@ -24,7 +24,7 @@ test -x "$runtime/bin/node"
 test -x "$runtime/bin/npm"
 export PATH="$runtime/bin:/usr/local/bin:/usr/bin:/bin"
 
-before=$(prime-agent --version)
+before=$(prime-agent --version 2>&1)
 release_tag=$(gh api repos/PrimeIntellect-ai/prime-agent/releases/latest --jq .tag_name)
 [[ $release_tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+([+-][A-Za-z0-9.-]+)?$ ]]
 release_version=${release_tag#v}
@@ -44,6 +44,6 @@ checksum=$(grep -E "^[a-f0-9]{64}  ${artifact}$" "$download_dir/SHA256SUMS" || t
 [[ -n $checksum ]]
 printf '%s\n' "$checksum" | (cd "$download_dir" && sha256sum --check --strict -)
 npm install --global --prefix "$runtime" "$download_dir/$artifact"
-after=$(prime-agent --version)
+after=$(prime-agent --version 2>&1)
 [[ $after == "$release_version" ]]
 echo "Prime Agent update complete: ${before} -> ${after}"
