@@ -53,10 +53,12 @@ fi
 install -d -m 0755 "$live"
 install -m 0644 "$source_dir"/*.py "$source_dir"/*.js "$source_dir"/*.css "$source_dir"/*.html "$live"/
 install -m 0644 "$repo/deploy/spark/container/task_common.py" "$live/task_common.py"
+install -m 0644 "$repo/deploy/spark/container/console_feed.py" "$live/console_feed.py"
 install -m 0755 "$source_dir/install-static.sh" "$live/install-static.sh"
 sudo install -d -o root -g root -m 0755 /usr/local/lib/prime-runner /usr/local/libexec
 sudo install -o root -g root -m 0644 \
   "$repo/deploy/spark/container/task_common.py" \
+  "$repo/deploy/spark/container/hosting_auth.py" \
   "$repo/deploy/spark/container/openshell_runner.py" \
   "$repo/deploy/spark/container/model_gateway.py" \
   "$repo/deploy/spark/container/runner_broker.py" \

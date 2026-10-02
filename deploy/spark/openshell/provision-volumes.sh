@@ -82,4 +82,6 @@ while IFS= read -r owner; do
   done
   sudo install -d -o prime-runner -g prime-runner -m 0700 "/var/lib/prime-runner/kvm/${owner}"
   ensure_volume "prime-${owner}-kvm" "/var/lib/prime-runner/kvm/${owner}"
+  sudo install -d -o prime-runner -g prime-runner -m 0700 "/var/lib/prime-runner/hosting-access/${owner}"
+  ensure_volume "prime-${owner}-hosting" "/var/lib/prime-runner/hosting-access/${owner}"
 done < <(sudo find /var/lib/prime-runner/users -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)

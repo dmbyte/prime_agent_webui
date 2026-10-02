@@ -2,16 +2,20 @@
 """End-to-end broker fixture through LAN OpenShell; no BMC is contacted."""
 
 import http.server
+import json
 import os
 import sys
 import tempfile
 import threading
 import time
+import urllib.request
 from pathlib import Path
 
 
 sys.path.insert(0, str(Path(__file__).parent / "skills/bmc-html5-kvm/src"))
+sys.path.insert(0, str(Path(__file__).parent.parent / 'container'))
 from bmc_html5_kvm import KVMClient
+from console_feed import snapshots, watch
 
 
 PAGE = b"""<!doctype html><title>Fixture login</title>
@@ -45,6 +49,25 @@ def main() -> None:
     try:
         kvm = KVMClient.create(f"http://{host}:{server.server_port}/")
         session_id = kvm.session_id
+        feed_root = Path(os.environ.get('PRIME_RUNNER_WORKSPACE_ROOT','/home/dbyte/prime-agent/tasks'))/'dbyte'/'.prime-console'
+        for _ in range(20):
+            watch(feed_root)
+            frames = snapshots(feed_root, session_id)
+            if frames and frames[0].get('image'):
+                break
+            time.sleep(.5)
+        assert frames and frames[0].get('image'), 'Broker did not publish a viewer frame'
+        # The dashboard runs as a different identity from this broker test.
+        # Exercise its real ACL access, heartbeat, and owner-filtered endpoints.
+        def api(path, owner='dbyte'):
+            request = urllib.request.Request('http://127.0.0.1:8765' + path,
+                                            headers={'X-Prime-User': owner})
+            with urllib.request.urlopen(request, timeout=5) as response:
+                assert 'no-store' in response.headers.get('Cache-Control', '')
+                return json.load(response)
+        assert any(row['id'] == session_id for row in api('/api/consoles?watch=1')['sessions'])
+        assert api('/api/consoles/frame?id=' + session_id)['session']['image']
+        assert not api('/api/consoles', 'viewer-test-other')['sessions']
         assert kvm.inspect()["loginFormPresent"]
         try:
             kvm.key("F9",confirm=True)
@@ -89,6 +112,8 @@ def main() -> None:
     finally:
         if kvm is not None:
             kvm.close()
+            closed = snapshots(feed_root, session_id)
+            assert closed and closed[0]['state']=='closed' and not closed[0].get('image')
         server.shutdown()
 
 

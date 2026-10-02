@@ -197,6 +197,12 @@ class IPMIClient:
         return self._run("chassis", "power", action)
 
 
+try:
+    from console_feed import ConsoleFeed
+except ImportError:
+    ConsoleFeed = None
+
+
 class SOLSession:
     """Bounded interactive IPMI SOL console with a rendered VT100 screen."""
 
@@ -227,6 +233,7 @@ class SOLSession:
         self._line_start = True
         self._active_payload = False
         self._activation_tail = ""
+        self._feed = None
 
     def __enter__(self) -> "SOLSession":
         if self._process is not None:
@@ -240,6 +247,8 @@ class SOLSession:
                                              env=self.client._environment(), start_new_session=True,
                                              close_fds=True)
             self._master = master
+            if ConsoleFeed is not None:
+                self._feed = ConsoleFeed('serial', 'Serial-over-LAN')
         except BaseException:
             os.close(master)
             raise
@@ -280,6 +289,8 @@ class SOLSession:
                 self._active_payload = True
             self._activation_tail = output[-64:]
         screen = "\n".join(line.rstrip() for line in self._screen.display).rstrip()
+        if self._feed is not None:
+            self._feed.update(text=screen)
         return {"output": output, "screen": screen, "active": self._process.poll() is None,
                 "exitCode": self._process.returncode}
 
@@ -310,6 +321,8 @@ class SOLSession:
         self._send(value.encode("ascii"), confirm=confirm)
 
     def close(self) -> None:
+        if self._feed is not None:
+            self._feed.close()
         process, master = self._process, self._master
         self._process, self._master = None, None
         if process is None or master is None:

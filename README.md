@@ -6,6 +6,12 @@ conversations, live progress and steering, file uploads, model/provider controls
 usage and spend summaries, Spark telemetry, administrative user management, and
 release-aware updates.
 
+This is the **`only-qwen38flash` branch**: Qwen 3.8 Flash-Next handles both
+routine orchestration and implementation using different reasoning-effort
+settings on one resident model. Nemotron is disabled, not deleted, on migrated
+systems. This branch includes changes after `v0.5.47`; it is not a new release
+tag and does not change `main`.
+
 ![Prime Agent WebUI sample](docs/prime-webui-sample.jpg)
 
 > The screenshot contains synthetic sample data. No user conversations or
@@ -18,7 +24,68 @@ and update Prime Agent WebUI and its service helpers. Production conversations,
 system history, private operating notes, CAD projects, and locally refined agent
 skills belong outside the repository and are excluded from version control.
 
-## What this release includes
+## Why one Qwen model instead of two local models?
+
+The previous deployment split routine orchestration onto Nemotron 3.5 Lightning
+and implementation/visual work onto Qwen. Both engines competed for the Spark's
+shared memory. This branch uses the **same Qwen weights** for both roles:
+WebUI **Auto** chooses low effort for routine requests and high effort for
+detected coding or complex work. High effort maps to the server's `xhigh`;
+it is not a second model instance. See the [exact routing rules](docs/model-routing.md).
+
+| Area | Previous dual-model configuration | This Qwen-only configuration |
+|---|---|---|
+| Resident local inference engines | Nemotron and Qwen | Qwen only; Nemotron artifacts retained for rollback |
+| Qwen context budget | 98,304 tokens in one slot | 262,144 tokens in one slot: about 2.67× the budget |
+| Qwen K/V cache | Q4 | Q8; model weights remain IQ4_XS |
+| Routine vs complex work | Model selection and inter-model handoff | Low vs high effort on the same engine |
+| Nontrivial code | Must route away from Nemotron to Qwen | Qwen is already the default and remains mandatory for code |
+| Local concurrency | Separate engines can execute different work concurrently | One model slot; requests share/queue for that slot |
+
+The practical advantages are:
+
+- **More memory for Qwen and tools.** Removing the second resident engine makes
+  room for the larger context and Q8 cache while retaining a tested system-memory
+  reserve. This is one engine's cache, not a cache shared between models.
+- **More conversation and source material before compaction.** The larger Qwen
+  budget helps longer coding, browser and console workflows. The total includes
+  prompt **and** output; Prime still reserves 8,192 output tokens and compacts
+  long histories. It is not unlimited task memory.
+- **Less cache quantization.** Q8 stores K/V at higher precision than Q4. It uses
+  more memory; we have not established a general accuracy improvement or
+  tokens-per-second increase from that change alone.
+- **Fewer inter-model handoffs and running inference services.** Routine and
+  coding tasks use the same local provider and model behavior. Explicit cloud
+  routes and bounded high-effort child tasks remain available, but a second local
+  engine no longer needs to be kept running for orchestration.
+- **Effort matched to the task.** Low effort can reduce time spent generating
+  reasoning on simple requests; high effort is selected for demanding work.
+  Effort is not a hard time/token cap or a guarantee of correctness.
+
+### What the tests establish—and what they do not
+
+On the reference Spark, a **249,943-token** chat recovered an early marker
+correctly, with **36.12 GiB minimum available RAM** during that test. Short
+synthetic arithmetic measured about **40–41 decode tokens/s**; near the context
+limit it measured **12.38 tokens/s**, with approximately **871 seconds total**
+including prompt processing. A later prompt-switch check reached a minimum of
+**35.62 GiB available (29.28%)**, still above the configured 15% reserve.
+
+These are recorded single-slot results, **not a controlled speed or accuracy
+comparison against the dual-model setup**. Larger context costs latency;
+disabling Nemotron does not itself make every Qwen token faster. One engine
+also removes the independent second inference slot and makes Qwen a single
+local-model dependency. Keep the dual-model configuration as a deliberate
+rollback option if independent local concurrency matters more than Qwen's larger
+context. Do not re-enable both at the enlarged settings without revalidating RAM.
+
+## What this branch includes
+
+- Qwen-only defaults, automatic low/high effort, 256K context and Q8 K/V cache.
+- A read-only console viewer for browser/KVM/SOL observations, and renewable
+  task deadlines with an explicit **Extend 30 minutes** prompt.
+- Managed LAN ISO/file and application hosting with external-to-container URLs,
+  task/project discovery, expiry and restart recovery.
 
 - Dedicated WebUI passwords with `admin`, `power_user`, and `user` roles; Linux
   passwords and PAM are not used.
@@ -66,16 +133,21 @@ providers are used.
 
 ## Quick installation
 
-Clone the release and run the installer as the account that should own Prime:
+Clone this branch and run the installer as the account that should own Prime:
 
 ```bash
-git clone --branch v0.5.47 --depth 1 https://github.com/dmbyte/prime_agent_webui.git
+git clone --branch only-qwen38flash --single-branch https://github.com/dmbyte/prime_agent_webui.git
 cd prime_agent_webui
 ./install.sh --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
 
 For a private repository, authenticate Git or GitHub CLI before cloning. A
 source archive can be used instead; preserve the repository directory layout.
+
+This installs the base WebUI, not the local model weights or GPU runtime.
+Continue with [the Spark setup](#dgx-spark-openshell-and-local-models) for local
+Qwen and OpenShell. Do not use the release-only WebUI update button to track
+this branch; see [branch updates](#updating).
 
 Do **not** run `install.sh` as root. It asks for sudo only for OS packages,
 private TLS, Nginx, and persistent user-service login. It then prompts for the
@@ -130,8 +202,8 @@ sudo apt-get update
 sudo apt-get install -y nginx openssl python3 curl git
 ```
 
-DGX Spark local Nemotron/Qwen hosting additionally requires NVIDIA's supported
-Ubuntu image, driver/container stack, Docker, and the NVFP4 model artifacts. See
+DGX Spark local Qwen hosting additionally requires NVIDIA's supported
+Ubuntu image, driver/container stack, Docker, and the IQ4_XS GGUF artifacts. See
 [the Spark deployment guide](deploy/spark/README.md); do not apply those GPU
 steps to ordinary Ubuntu/Debian hosts.
 
@@ -156,38 +228,39 @@ sudo zypper --non-interactive install nginx openssl python3 curl git
 
 On SLES, enable the Server Applications and Containers modules appropriate to
 your service pack. If a package uses a service-pack-specific name, install its
-equivalent and use `--skip-packages`. DGX Spark's local NVFP4 recipes are not
+equivalent and use `--skip-packages`. DGX Spark's local GPU recipes are not
 supported on SLES; use cloud or a remote OpenAI-compatible inference endpoint.
 
 ### DGX Spark OpenShell and local models
 
-The production Spark release runs Prime tasks inside NVIDIA OpenShell while
-serving Nemotron 3.5 Lightning and Qwen 3.8 Flash-Next from loopback-only local
-endpoints. Install the base WebUI first, then apply the Spark-specific model and
+Use `only-qwen38flash` for this profile; the `v0.5.47` tag still has the earlier
+dual-model defaults. No published release tag has been moved. New installations
+do not need Nemotron; existing installations retain its files for rollback.
+
+The current Spark recipe runs Prime tasks inside NVIDIA OpenShell with
+Qwen 3.8 Flash-Next as the default local model on a loopback-only endpoint.
+Nemotron 3.5 Lightning is retained but disabled to free memory for Qwen's
+256K context and Q8 cache. Install the base WebUI first, then apply the model and
 OpenShell pieces. On Ubuntu 24.04 DGX Spark systems, the extra host
 prerequisites are Docker 28 or newer, `jq`, `acl`, and `rsync`.
 
-Install Nemotron 3.5 Lightning on port 30000:
+Before building Qwen, stage all three IQ4_XS GGUF shards, the vision projector
+and the shared-Q8 MTP head on NVMe. The build script also requires a clean,
+pre-existing reviewed llama.cpp checkout at its pinned revision; it does not
+clone that checkout or download weights. These external artifacts are not
+distributed by this repository. See the [Qwen build prerequisites](deploy/spark/llama-qwen38/README.md#build-and-install)
+before running the commands. Ordinary disk swap is not a substitute for the
+model-specific NVMe PLE loading path.
 
-```bash
-install -d ~/vllm-nemotron35
-cp deploy/spark/vllm-nemotron35/vllm.env.template ~/vllm-nemotron35/vllm.env
-cp deploy/spark/vllm-nemotron35/start.sh ~/vllm-nemotron35/start.sh
-install -m 0644 deploy/spark/systemd/vllm-nemotron35.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now vllm-nemotron35.service
-curl -fsS http://127.0.0.1:30000/v1/models
-```
-
-If the model artifacts require Hugging Face access, add the token to
-`~/vllm-nemotron35/vllm.env` before starting the service.
-
-Install Qwen 3.8 Flash-Next on port 30001:
+Fresh installations: install Qwen 3.8 Flash-Next on port 30001. Existing
+dual-model installations must use the migration below instead of starting
+the enlarged Qwen configuration with Nemotron still running:
 
 ```bash
 deploy/spark/llama-qwen38/build-image.sh
 install -d ~/llama-qwen38
 cp deploy/spark/llama-qwen38/llama.env.template ~/llama-qwen38/llama.env
+# Set MODEL_DIR in llama.env to your staged model directory before continuing.
 cp deploy/spark/llama-qwen38/start.sh ~/llama-qwen38/start.sh
 install -m 0644 deploy/spark/systemd/llama-qwen38.service ~/.config/systemd/user/
 systemctl --user daemon-reload
@@ -197,13 +270,42 @@ curl -fsS http://127.0.0.1:30001/v1/models
 
 Edit `~/llama-qwen38/llama.env` if the Qwen GGUF, multimodal projector, or MTP
 draft files live outside the default model directory. Qwen 3.8 is the supported
-Qwen runtime for this release.
+Qwen runtime for this branch.
 
-Install the local model catalog and OpenShell integration:
+For an existing dual-model installation, stop and disable Nemotron **without
+deleting it**, and disable Docker's independent restart policy before restarting
+Qwen with the updated environment. Back up `~/llama-qwen38/llama.env` and `start.sh` first;
+preserve custom model paths when changing `CONTEXT_SIZE=262144`, both cache types
+to `q8_0`, and `REASONING_EFFORT=low`. Install the updated `start.sh` as well.
+
+```bash
+systemctl --user disable --now vllm-nemotron35.service
+docker update --restart=no vllm-nemotron35
+systemctl --user restart llama-qwen38.service
+python3 deploy/spark/prime/configure-qwen-only.py
+```
+
+The migration backs up existing model/settings files and preserves unrelated
+providers and existing manual chat effort choices. Do not overwrite an existing
+installation's settings with the fresh-install copies below. Refresh OpenShell's
+protected runner and dashboard using the installer/update workflow. No model
+weights, stopped containers, or conversations are deleted. To roll back, first
+restore the saved Qwen environment/start script and restart Qwen; then restore
+Prime settings, enable Nemotron and its Docker restart policy. Do not simply
+start both engines at the enlarged context without checking the 15% RAM reserve.
+
+For a **fresh installation only**, install the local model catalog/defaults:
 
 ```bash
 install -m 0600 deploy/spark/prime/models.json ~/.prime/agent/models.json
 install -m 0600 deploy/spark/prime/settings.json ~/.prime/agent/settings.json
+```
+
+For an existing installation use `configure-qwen-only.py` above instead, to
+preserve unrelated providers and settings. Then, for either installation path,
+install OpenShell and skills while tasks/KVM/hosting services are stopped:
+
+```bash
 deploy/spark/openshell/install.sh
 deploy/spark/prime/install-skills.sh
 systemctl --user restart prime-dashboard-api.service
@@ -214,7 +316,7 @@ The OpenShell installer uses the pinned ARM64 package, validates the published
 checksum, provisions `prime-runner`, installs the model gateway and task broker,
 copies existing owner state into protected runner storage, builds the approved
 Docker runtime images, provisions per-user volumes, and restarts the local
-gateway. It installs the reviewed BMC adapters; the following skill installer
+gateway. It installs the reviewed BMC and hosting skills; the following skill installer
 pins the official NVIDIA catalog at commit
 `fd9f1466ff8a39178e488981e8b5118709392949`. See the component guides for details:
 [Nemotron](deploy/spark/vllm-nemotron35/README.md),
@@ -227,7 +329,11 @@ The tracked Spark recipe is intentionally explicit. A default deployment uses
 these concrete parameters unless you edit the copied files under your home
 directory before starting the services.
 
-#### Nemotron 3.5 Lightning service
+<details>
+<summary>Retained Nemotron configuration — rollback reference, not active</summary>
+
+This records the older co-resident configuration, not a recommendation to start
+Nemotron alongside the current enlarged Qwen profile.
 
 Source files:
 `deploy/spark/vllm-nemotron35/vllm.env.template`,
@@ -248,13 +354,14 @@ Source files:
 | Speculation | `SPEC_TOKENS=3`, `--spec-method dspark` |
 | Container memory | `--memory=68g`, `--memory-swap=80g`, `--shm-size=24g` |
 
-At this 256K setting, vLLM reports 505,783 cache tokens from the fixed 2 GiB
+In the previous validation, vLLM reported 505,783 cache tokens from the fixed 2 GiB
 FP8 KV pool. One 262,144-token request leaves 243,639 cache tokens for other
 work, but two full-length requests (524,288 tokens) still cannot run
 concurrently. The two-sequence scheduler can serve a second shorter request.
 The context limit includes prompt and generated tokens. A 30% GPU
-startup target is required when Qwen is co-resident; the old 35% target fails
-vLLM's startup free-memory check on the current Spark.
+startup target was required in that earlier co-resident configuration; its
+35% target failed the then-current startup free-memory check. This is historical
+evidence, not a validation against today's enlarged Qwen cache.
 
 The vLLM command line includes:
 
@@ -277,6 +384,8 @@ The vLLM command line includes:
 --served-model-name nemotron-3.5-lightning
 ```
 
+</details>
+
 #### Qwen 3.8 Flash-Next service
 
 Source files:
@@ -293,10 +402,11 @@ Source files:
 | MTP draft head | `MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf` |
 | Served name | `qwen3.8-flash-next` |
 | Listener | `127.0.0.1:30001` |
-| Context slot | `CONTEXT_SIZE=98304` |
+| Context slot | `CONTEXT_SIZE=262144` |
 | Parallel slots | `PARALLEL=1` |
 | GPU layers | `GPU_LAYERS=999` and `SPEC_DRAFT_GPU_LAYERS=999` |
-| KV cache | `CACHE_TYPE_K=q4_0`, `CACHE_TYPE_V=q4_0` |
+| KV cache | `CACHE_TYPE_K=q8_0`, `CACHE_TYPE_V=q8_0` |
+| Default effort | `REASONING_EFFORT=low`; per-request high maps to `xhigh` |
 | Batching | `BATCH_SIZE=2048`, `UBATCH_SIZE=512` |
 | PLE loading | `--load-mode mmap`, `LAZY_MODE=on-direct` |
 | Speculation | `SPEC_DRAFT_MAX_TOKENS=2`, `SPEC_DRAFT_P_MIN=0.0` |
@@ -313,27 +423,38 @@ The llama.cpp server command line includes:
 --spec-draft-n-max 2
 --spec-draft-p-min 0.0
 --alias qwen3.8-flash-next
---ctx-size 98304
+--ctx-size 262144
 --parallel 1
 --gpu-layers 999
 --flash-attn on
---cache-type-k q4_0
---cache-type-v q4_0
+--cache-type-k q8_0
+--cache-type-v q8_0
 --batch-size 2048
 --ubatch-size 512
 --load-mode mmap
 --lazy-mode on-direct
 --reasoning auto
+--reasoning-effort low
 --reasoning-format deepseek
 --metrics
 ```
 
-This profile was validated with both engines resident: a 78,000-token Qwen
-prompt completed, a separate 77,034-token long-range recall check returned the
-exact hidden value, and the stressed system retained 15.44% available memory.
-Long-context decode measured 29.56 token/s; a warm 600-token short-context run
-measured 44.76 model-eval token/s. Keep `PARALLEL=1` and Prime compaction enabled
-because the near-limit memory margin is intentionally narrow.
+Q8 applies to the K/V cache, not the model weights: IQ4_XS weights and shared-Q8
+MTP are unchanged. Keep `PARALLEL=1` and Prime compaction enabled. Context is a
+total input/output budget, not 262,144 input tokens plus an output allowance.
+After deployment run `validate-qwen-context.py --long` from `deploy/spark/prime`
+on the Spark with no active tasks; it checks both effort modes, near-limit recall
+and the 15% available-RAM reserve. Long prompts take longer to prefill and decode;
+do not transfer short-context throughput numbers to full-context work.
+
+Reference validation of this Qwen-only profile: a 249,943-token chat recovered
+an early marker correctly, with minimum available RAM 36.12 GiB (29.69%). It
+took 871 seconds overall and decoded at 12.38 token/s; short arithmetic checks
+measured roughly 40–41 token/s. This is a synthetic single-slot result, not an
+accuracy or capacity guarantee for arbitrary workloads. Both real OpenShell
+low-effort response and high-effort Python/assertion tests returned final reports.
+After switching back to short requests, retained prompt cache left 36.28 GiB
+available (35.62 GiB transient minimum, 29.28%); the 15% reserve still passed.
 
 #### OpenShell task runtime
 
@@ -370,7 +491,19 @@ The activity panel shows a short recent preview; **Complete output…** loads th
 full log separately. The output view refreshes every three seconds. Private
 reasoning and recognized credentials are hidden; events above the 262 KiB
 runtime safety limit are not retained. A silent tool call may still require
-waiting for the 30-minute task limit or explicitly stopping that task.
+waiting for the task deadline or explicitly stopping that task. Tasks start with
+a 30-minute deadline by default. Five minutes before expiry, the WebUI shows a
+nonmodal warning with **Extend 30 minutes** and **Keep deadline**. Each confirmed
+extension adds 30 minutes to the existing deadline without restarting the task;
+the warning returns five minutes before the new deadline. Without a response
+(including a closed browser), the task stops on time and the chat explains why.
+Saved conversation/workspace/logs remain available; a follow-up starts a new task,
+not a resurrection of the expired process. Extensions are owner-only, protected
+by the normal login/CSRF checks, and duplicate requests add time only once.
+Existing role ceilings remain: standard users 30 minutes (no extension), power
+users 120 minutes total, administrators 240 minutes total. The sandbox retains an
+independent role-ceiling cutoff; the API enforces the shorter approved deadline.
+Install the WebUI and protected OpenShell runner together while tasks are idle.
 
 Each OpenShell sandbox is created with these important switches:
 
@@ -555,6 +688,25 @@ needs Remote Console privilege, the feature enabled, and a supporting license.
 The skill does not automate virtual media or guarantee an uninterrupted install;
 keep the iLO session and media lifecycle under operator review.
 
+Use **Console viewer ↗** beside the conversation title to open a separate,
+read-only window showing the agent's browser or HTML5 KVM page. Select a source,
+pause/resume the view, or switch between fit-to-window and actual size. A visible
+viewer requests frames about once per second; hidden/closed viewers stop requesting
+new frames. Closing the viewer never closes the agent's browser or KVM session,
+and viewing does not extend KVM's idle timeout. Frame age and stale/busy/closed
+states distinguish live output from an old image. New console sources appear
+automatically in an already-open viewer; browsers require a user click to open
+the popout initially.
+
+SOL feeds show the agent's last rendered `read()` result when the adapter is used
+with a supported direct-IPMI transport; the viewer does **not** enable SOL in the
+current OpenShell HTTP-only deployment. Console feeds are isolated by authenticated
+owner, contain only the latest bounded image/text (not a video recording), and
+never accept keyboard/mouse input. Closed feeds clear their pixels/text; abrupt
+task exits show stale output, which stops being served after one hour. Runtime
+snapshots live in `/project/.prime-console` (the owner's host task workspace),
+not in chat logs or Git. Treat visible console contents as sensitive.
+
 The package also contains an interactive IPMI Serial-over-LAN adapter, but
 **direct IPMI/SOL is not available through the deployed OpenShell HTTP(S)
 gateway**, including Full mode. It now fails fast with that explanation;
@@ -589,10 +741,11 @@ to `spark-qwen/qwen3.8-flash-next`, retains that route on coding follow-ups, and
 shows the selected model and reason in the conversation controls. This policy
 takes precedence over model directives/custom keyword rules for code work;
 if Qwen is disabled, the task reports a blocker instead of using Nemotron.
-Ordinary non-code conversations can still use Nemotron. The managed workspace
-policy and per-task instructions limit Nemotron to orchestration and very simple
-inspection/delegation cells; any nontrivial implementation discovered later must
-be delegated with `rlm.spawn(..., model="spark-qwen/qwen3.8-flash-next")`.
+Ordinary non-code conversations now use Qwen at low effort in Auto mode;
+coding and complex operations use high effort. Nemotron is disabled, not removed.
+The managed workspace policy and per-task instructions require nontrivial work
+discovered during low-effort execution to be delegated with
+`rlm.spawn(..., model="spark-qwen/qwen3.8-flash-next", thinking="high")`.
 Intent routing is deterministic for the covered requests; delegation of newly
 discovered subtasks is an agent instruction, not a Python-level execution lock.
 No model choice expands permissions or authorizes BMC actions.
@@ -666,8 +819,8 @@ The supplied Nginx configuration independently allows loopback, RFC1918, and
 5. Administrators can add users and assign `user`, `power_user`, or `admin` from
    the Admin panel.
 
-For a DGX Spark, use the tracked Nemotron and Qwen configurations under
-`deploy/spark/`; both local endpoints must remain loopback-only.
+For a DGX Spark on this branch, select Qwen and Auto effort. Qwen's endpoint
+must remain loopback-only; retained Nemotron remains disabled.
 
 ## Operations
 
@@ -675,7 +828,7 @@ For a DGX Spark, use the tracked Nemotron and Qwen configurations under
 systemctl --user status prime-auth prime-dashboard-api
 systemctl --user restart prime-auth prime-dashboard-api
 journalctl --user -u prime-dashboard-api -f
-systemctl status prime-model-gateway prime-runner-broker prime-kvm-broker
+systemctl status prime-model-gateway prime-runner-broker prime-kvm-broker prime-hosting-broker
 prime-web-password
 ```
 
@@ -698,14 +851,22 @@ Configuration and data live under:
 - `~/.config/prime-agent/web-sessions.json` — mode-0600 durable WebUI sessions
 - `/var/lib/prime-runner/users/USER/` — isolated Prime state
 - `/var/lib/prime-runner/credentials/` — protected global/per-user gateway credentials
-- `/var/lib/prime-runner/image-digests.json` — approved immutable profile images
+- `/var/lib/prime-runner/openshell-image-digests.json` — approved immutable profile images
 - `/var/www/prime-agent/` — static browser assets
 - `/etc/nginx/prime-agent-{ca,tls}/` — private CA and server certificate
 
-Back up the three user directories and the Nginx TLS/configuration before an
+Back up the configuration/state directories above, including the host task
+workspace and protected runner state, plus Nginx TLS/configuration before an
 upgrade. Never commit credentials, provider settings, sessions, or TLS keys.
 
 ## Updating
+
+**Stay on this branch deliberately.** The Settings WebUI updater follows the
+latest GitHub **release tag**, not `only-qwen38flash`. Using it on this branch
+can select the older release and lose the branch's installed behavior. Use the
+manual branch workflow below until a release explicitly includes these changes.
+The UI version remains the base `0.5.47`; use the branch and Git commit to
+identify this build, not that version alone. No new release is implied.
 
 Administrators can check and install published releases from Settings. Prime
 Agent updates use the official versioned artifact and verify its published
@@ -735,17 +896,19 @@ tasks and non-idle sandbox processes; it never cleans sandboxes automatically.
 Task logs, conversations, and the host task workspace are retained. Deleting
 a sandbox can still discard sandbox-local state, so inspect it first.
 
-For a manual upgrade:
+For a manual upgrade of a clean, branch-tracking checkout (back up configuration
+and data first; preserve any local edits instead of resetting them):
 
 ```bash
-git fetch --tags origin
-git checkout v0.5.47
+git fetch origin only-qwen38flash
+git switch only-qwen38flash
+git merge --ff-only origin/only-qwen38flash
 ./install.sh --skip-packages --skip-prime --skip-password \
   --bind-address 192.168.1.50 --server-name prime.example.lan
 ```
 
 For an existing OpenShell deployment, also apply the runtime update (with no
-active Prime tasks or KVM consoles), then refresh managed skills:
+active Prime tasks, KVM consoles or managed hosting services), then refresh managed skills:
 
 ```bash
 deploy/spark/openshell/install.sh
@@ -772,6 +935,24 @@ Spark's private IP if it is not the recipe default. It does not verify a real
 BMC login, console license, or server boot.
 
 ## Security and limitations
+
+### Managed LAN web hosting
+
+Prime's installed `lan-web-host` skill publishes selected ISO/files or a web app
+from a dedicated OpenShell container and returns the **Spark's LAN IP and port**,
+not a container address. Use LAN/Full network access with tools enabled. Related
+tasks can discover project-scoped services; hosting survives task completion,
+defaults to 24 hours, and supports renew/stop controls. Static hosting supports
+HTTP byte ranges for BMC virtual media. Only deliberately staged content under
+`/project/hosted/` is published. URLs are unauthenticated HTTP on the LAN, not
+automatic Internet exposure. Four services maximum, 2 CPUs/1 GiB each, host ports
+18080–18111. No model services need to be restarted.
+
+See the [LAN hosting guide](docs/lan-web-hosting.md) for exact container parameters,
+Python/Node app configuration, shared-service discovery, address selection,
+firewall requirements, administrator controls and reproducible network tests.
+
+### Runtime boundaries
 
 Read the [security hardening guide](deploy/spark/security/README.md),
 [OpenShell runtime-image guide](deploy/spark/container/README.md), and

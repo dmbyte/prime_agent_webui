@@ -5,6 +5,12 @@ description: Maintain a bounded, reconnectable HTML5 BMC KVM session across Prim
 
 # Long-running HTML5 BMC KVM
 
+The WebUI's **Console viewer ↗** opens a read-only popout of the selected KVM
+page. It samples about once per second while the viewer is visible, without
+sending input or extending the session's idle lifetime. Closing the viewer does
+not close KVM. A stale frame is not proof of current server state. The viewer
+does not grant control, new permissions, or authorization for boot/power actions.
+
 Use with the `network-operations` profile and **LAN/VPN or Full network** mode. The
 owner-scoped KVM broker creates a separate OpenShell sandbox, so the browser
 can remain open after the current Prime task ends. A session lasts at most

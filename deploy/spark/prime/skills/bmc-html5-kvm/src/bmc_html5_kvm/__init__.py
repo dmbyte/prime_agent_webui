@@ -353,7 +353,7 @@ def worker_main() -> int:
                             if kind not in {"jpeg", "png"}:
                                 raise ValueError("KVM screenshots support PNG or JPEG")
                             data = page.screenshot(type=kind, **({"quality":70} if kind == "jpeg" else {}), scale="css", animations="disabled",
-                                                   timeout=20_000)
+                                                   timeout=1500 if request.get('viewer') else 20_000)
                             if len(data) > MAX_FRAME:
                                 raise ValueError("KVM frame exceeds 2 MB")
                             result = {kind: base64.b64encode(data).decode()}

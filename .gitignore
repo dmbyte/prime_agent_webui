@@ -18,7 +18,8 @@ __pycache__/
 /deploy/spark/prime/AGENTS.md
 /deploy/spark/prime/EVALS.md
 /deploy/spark/prime/skills/*
-# These four reviewed, distribution-managed adapters are part of the installer.
+!/deploy/spark/prime/skills/lan-web-host/
+# These reviewed, distribution-managed adapters are part of the installer.
 !/deploy/spark/prime/skills/bmc-headless-browser/
 !/deploy/spark/prime/skills/bmc-headless-browser/**
 !/deploy/spark/prime/skills/bmc-html5-kvm/

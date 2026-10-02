@@ -1,0 +1,6 @@
+#taskTimerPrompts{position:fixed;right:24px;bottom:24px;z-index:1500;width:min(420px,calc(100vw - 32px));max-height:65vh;overflow:auto;display:grid;gap:12px}
+#taskTimerPrompts[hidden]{display:none}
+.task-timer-prompt{background:#172432;color:#f3f6fa;border:1px solid #d9a441;border-radius:12px;padding:18px;box-shadow:0 8px 35px #0008}
+.task-timer-prompt strong{font-size:16px}.task-timer-prompt p{font-size:13px;line-height:1.5;overflow-wrap:anywhere}
+.task-timer-prompt div{display:flex;flex-wrap:wrap;gap:8px}.task-timer-prompt button{padding:9px 12px;border:1px solid #8091a8;border-radius:7px;background:#273b50;color:#fff;cursor:pointer}
+.task-timer-prompt button:first-child{background:#2c698b}.task-timer-prompt button:disabled{opacity:.6;cursor:default}.task-timer-prompt p:empty{display:none}

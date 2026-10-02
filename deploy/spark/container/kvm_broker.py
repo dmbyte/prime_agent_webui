@@ -9,6 +9,7 @@ host process holds no BMC credentials.
 from __future__ import annotations
 
 import json
+import base64
 import os
 import re
 import signal
@@ -23,6 +24,7 @@ from urllib.parse import urlparse, unquote
 
 import openshell_runner
 import task_common
+from console_feed import ConsoleFeed
 
 
 ROOT = Path("/var/lib/prime-runner")
@@ -133,6 +135,8 @@ class Session:
     created: float = field(default_factory=time.monotonic)
     last_used: float = field(default_factory=time.monotonic)
     lock: threading.Lock = field(default_factory=threading.Lock)
+    feed: object = None
+    closed: bool = False
 
     def call(self, action: str, **values) -> dict:
         with self.lock:
@@ -142,6 +146,9 @@ class Session:
 
     def close(self) -> None:
         with self.lock:
+            self.closed = True
+            if self.feed is not None:
+                self.feed.close()
             try:
                 _worker_call(self.spec["workerSocket"], "close", timeout=5)
             except (OSError, RuntimeError, TimeoutError):
@@ -191,6 +198,9 @@ class KVMBroker:
                 session = Session(session_id, url, spec, bool(ignore_https_errors))
                 opened = session.call("open", url=url, ignoreHttpsErrors=bool(ignore_https_errors))
                 session.target = str(opened.get("url") or url)
+                workspace = Path(os.environ.get('PRIME_RUNNER_WORKSPACE_ROOT', f'/home/{self.owner}/prime-agent/tasks')) / self.owner
+                session.feed = ConsoleFeed('kvm', 'HTML5 KVM · ' + str(urlparse(url).hostname),
+                                           root=workspace / '.prime-console', session_id=session_id)
                 self.sessions[session_id] = session
             except BaseException:
                 subprocess.run(spec["delete"], stdin=subprocess.DEVNULL,
@@ -236,6 +246,31 @@ class KVMBroker:
             sessions = [self.sessions.pop(key) for key in expired]
         for session in sessions:
             session.close()
+
+    def observe(self) -> None:
+        """Read-only sampling never extends agent idle time or sends input."""
+        while not self.stopping.wait(1):
+            with self.lock:
+                sessions = list(self.sessions.values())
+            for session in sessions:
+                feed = session.feed
+                if feed is None:
+                    continue
+                if not feed.watched():
+                    feed.update()
+                    continue
+                if not session.lock.acquire(blocking=False):
+                    feed.update(state='busy')
+                    continue
+                try:
+                    if session.closed:
+                        continue
+                    frame = _worker_call(session.spec['workerSocket'], 'capture', timeout=3, format='jpeg', viewer=True)
+                    feed.update(image=base64.b64decode(frame['jpeg'], validate=True))
+                except (OSError, ValueError, KeyError, RuntimeError, TimeoutError):
+                    feed.update(state='busy')
+                finally:
+                    session.lock.release()
 
     def _client(self, connection: socket.socket) -> None:
         try:
@@ -314,6 +349,8 @@ class KVMBroker:
 
         signal.signal(signal.SIGTERM, stop)
         signal.signal(signal.SIGINT, stop)
+        observer = threading.Thread(target=self.observe, daemon=True)
+        observer.start()
         try:
             while not self.stopping.is_set():
                 self.expire()
@@ -323,6 +360,8 @@ class KVMBroker:
                     continue
                 threading.Thread(target=self._client, args=(connection,), daemon=True).start()
         finally:
+            self.stopping.set()
+            observer.join(timeout=4)
             server.close()
             with self.lock:
                 sessions = list(self.sessions.values())

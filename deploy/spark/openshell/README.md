@@ -19,8 +19,22 @@ Run on Ubuntu 24.04 ARM64 DGX Spark as the non-root WebUI/Docker owner.
 
 - Docker 28 or newer with GPU support.
 - `jq`, `acl`, `rsync`, `curl`, `sudo`, and user systemd services.
-- Healthy local model services on `127.0.0.1:30000` and `127.0.0.1:30001`.
+- Healthy Qwen service on `127.0.0.1:30001`; Nemotron may remain disabled.
 - No active OpenShell sandboxes during install or update.
+- Stop managed hosting services explicitly before upgrading; the installer
+  refuses to interrupt existing ISO/app hosting.
+
+## Managed LAN hosting
+
+The full installer also installs `prime-hosting-broker.service`, an owner-scoped
+control volume, launcher-issued task/project capabilities and the `lan-web-host`
+skill. Dedicated `ph-` containers use the pinned development image with 2 CPUs,
+1 GiB RAM, a read-only selected `/project/hosted/` subdirectory at `/site`, and
+no outbound network policy or credentials. Loopback port 8000 is forwarded via
+OpenShell to the Spark's assigned LAN IPv4 and a port in 18080–18111. The broker
+persists lifecycle state independently of tasks, defaults to a 24-hour lifetime,
+and restores unexpired services on restart. See the [complete hosting guide](../../../docs/lan-web-hosting.md)
+for public-content boundaries, application environment, administration and tests.
 
 ## Install
 
@@ -79,14 +93,42 @@ force a comparison without changing application routing. This creates a syntheti
 conversation; it never targets a real BMC. Unit/browser-only tests do not replace
 this model-driven test.
 
+Task timers now have a renewable API deadline and an independent sandbox hard
+ceiling. Install `openshell_runner.py` with the matching API/UI: leaving an old
+runner in place would still stop a task at the original 30-minute cutoff after
+the WebUI accepted an extension. New launches retain role ceilings of 30/120/240
+minutes for user/power-user/admin. The authenticated owner can add 30 minutes
+before expiry, within the ceiling, from the five-minute warning. No response
+means stop at the approved deadline. Broker disconnection still cleans up the
+sandbox. No filesystem or network permission is changed by extending time.
+
+The Console viewer popout uses bounded owner-workspace snapshots from the
+`console_feed.py` helper installed in every task image, the dashboard, and the
+KVM broker. Browser/KVM capture is demand-driven at roughly one second; the KVM
+observer does not update agent idle activity. SOL publishes only when its agent
+reads the terminal, and remains unavailable over the deployed HTTP-only gateway.
+No control socket is exposed to the browser/API. The static installer deploys
+`console-viewer.html` plus its JS/CSS; all upgrades must copy `console_feed.py`
+alongside `api_v2.py`. The KVM broker receives the configured
+`PRIME_RUNNER_WORKSPACE_ROOT` so custom workspace locations stay consistent.
+Run `validate-console-viewer.py` in the network-operations image against the
+dashboard source for the offline live-frame, rendering, and authentication test;
+the KVM broker validator also checks that viewer frames arrive and clear on close.
+
 The installed `AGENTS.managed.md` and per-task runtime context assign all
 nontrivial code generation to Qwen across all profiles. The WebUI additionally
 routes recognized coding requests and Development/Network operations tasks
 directly to Qwen, retaining coding routes on follow-ups. Qwen must be enabled;
 there is no silent Nemotron implementation fallback. Existing managed workspace
 policies are backed up and refreshed by installation/provisioning; custom
-workspace policies are not overwritten. Unexpected code subtasks in a Nemotron
-conversation rely on the agent following the explicit Qwen delegation policy,
+workspace policies are not overwritten. The Qwen-only recipe disables Nemotron
+without deleting its artifacts. Auto effort selects low for routine requests
+and high for code/complex operations, while preserving manual chat overrides.
+The host catalog and protected runner both enable reasoning-effort forwarding
+and advertise 262,144 context. Refresh the protected launcher when updating;
+changing only the WebUI does not update isolated model metadata.
+Unexpected code subtasks in a low-effort conversation rely on the agent following
+the explicit high-effort Qwen delegation policy (`thinking="high"`),
 not on an executable-code enforcement hook.
 
 Inside a task sandbox, `/project` maps to `~/prime-agent/tasks/OWNER/` on the

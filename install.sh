@@ -117,6 +117,7 @@ install -d -m 0700 "$dashboard" "$workspace" "$workspace/uploads" "${HOME}/.prim
 install -d -m 0755 "$unit_dir" "$update_dir" "${HOME}/.local/bin"
 install -m 0644 "$repo_dir"/deploy/spark/dashboard/*.py "$repo_dir"/deploy/spark/dashboard/*.js "$repo_dir"/deploy/spark/dashboard/*.css "$repo_dir"/deploy/spark/dashboard/*.html "$dashboard"/
 install -m 0644 "$repo_dir/deploy/spark/container/task_common.py" "$dashboard/task_common.py"
+install -m 0644 "$repo_dir/deploy/spark/container/console_feed.py" "$dashboard/console_feed.py"
 install -m 0755 "$repo_dir/deploy/spark/dashboard/install-static.sh" "$dashboard/install-static.sh"
 install -m 0755 "$repo_dir/deploy/spark/update/"*.sh "$update_dir"/
 install -m 0755 "$repo_dir/deploy/spark/dashboard/set_web_password.py" "${HOME}/.local/bin/prime-web-password"

@@ -5,16 +5,23 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import select
 import shutil
 import socket
 import subprocess
 import sys
 import tempfile
 import threading
+import time
 from collections import deque
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
+
+try:
+    from console_feed import ConsoleFeed
+except ImportError:  # Standalone package use without the managed WebUI runtime.
+    ConsoleFeed = None
 
 
 def _broker_log(message: str) -> None:
@@ -213,8 +220,21 @@ class BMCBrowser:
 def _worker_main() -> int:
     from playwright.sync_api import sync_playwright
 
-    playwright = browser = context = page = runtime_dir = None
-    for raw in sys.stdin:
+    playwright = browser = context = page = runtime_dir = feed = None
+    last_sample = 0.0
+    while True:
+        if feed is not None and time.monotonic() - last_sample >= 1:
+            last_sample = time.monotonic()
+            try:
+                frame = page.screenshot(type='jpeg', quality=65, timeout=1500) if feed.watched() else None
+                feed.update(image=frame)
+            except Exception:
+                feed.update(state='busy')
+        if not select.select([sys.stdin], [], [], 1)[0]:
+            continue
+        raw = sys.stdin.readline()
+        if not raw:
+            break
         request: dict[str, Any] = {}
         close_after = False
         try:
@@ -238,6 +258,8 @@ def _worker_main() -> int:
                                               viewport={"width": 1920, "height": 1080})
                 page = context.new_page()
                 page.set_default_timeout(request["timeoutMs"])
+                if ConsoleFeed is not None:
+                    feed = ConsoleFeed('browser', 'Browser · ' + str(urlparse(request['baseUrl']).hostname or 'BMC'))
                 result = {"ready": True}
             elif page is None:
                 raise RuntimeError("Browser worker has not started")
@@ -251,7 +273,10 @@ def _worker_main() -> int:
             elif action == "screenshot":
                 page.screenshot(path=request["path"], full_page=True)
                 result = request["path"]
-            elif action == "close": result, close_after = None, True
+            elif action == "close":
+                if feed is not None:
+                    feed.close()
+                result, close_after = None, True
             else: raise ValueError("Unsupported browser action")
             response = {"id": request.get("id"), "ok": True, "result": result}
         except BaseException as error:
@@ -260,6 +285,8 @@ def _worker_main() -> int:
         print(json.dumps(response, separators=(",", ":"), default=str), flush=True)
         if close_after:
             break
+    if feed is not None:
+        feed.close()
     for resource in (context, browser, playwright):
         if resource is not None:
             try: resource.close() if resource is not playwright else resource.stop()

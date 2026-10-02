@@ -1,0 +1,33 @@
+[Unit]
+Description=Prime persistent LAN web hosting broker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=prime-runner
+Group=prime-runner
+Environment=HOME=/var/lib/prime-runner
+Environment=XDG_RUNTIME_DIR=/run/user/@RUNNER_UID@
+Environment=PRIME_WEB_OWNER=@WEB_OWNER@
+ExecStart=/usr/bin/python3 /usr/local/lib/prime-runner/hosting_broker.py
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=240
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=no
+InaccessiblePaths=/root
+ReadWritePaths=/var/lib/prime-runner /home/@WEB_OWNER@/prime-agent
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

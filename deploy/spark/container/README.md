@@ -35,13 +35,17 @@ mounted into the sandbox. Image references are validated against
 - **Full** is available only to power users and administrators after explicit
   task confirmation.
 
-Local Nemotron and Qwen endpoints and ChatGPT/Codex are reached through the
+The local Qwen endpoint and optional cloud providers are reached through the
 credential/model gateway. OAuth material remains mode 0600 outside sandboxes. A
 per-user credential file at
 `/var/lib/prime-runner/credentials/users/USER/auth.json` overrides the global
 fallback; otherwise the global credential is used. The gateway validates file
 ownership, type, mode, and size, refuses symlinks, serializes refreshes, and
 refreshes once on an upstream 401.
+
+The `only-qwen38flash` branch disables the retained Nemotron provider by default;
+it does not require two resident local inference services. See the root README
+and model-routing guide for low/high effort on the single Qwen engine.
 
 An administrator can provision a user's own Prime OAuth record without exposing
 it in shell arguments:

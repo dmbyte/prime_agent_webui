@@ -5,6 +5,13 @@ description: Inspect and operate JavaScript-based BMC web interfaces through the
 
 # BMC Headless Browser
 
+The WebUI's **Console viewer ↗** opens a read-only view of this browser's current
+viewport. Frames refresh about once per second while the viewer is visible,
+including while the agent waits between operations. Long blocking browser calls
+can temporarily leave a stale frame. Closing the popout does not stop the agent.
+Do not reveal passwords or tokens on screen; the viewer is owner-authenticated,
+but console pixels may contain sensitive information.
+
 Use this skill only in the `network-operations` OpenShell profile with LAN access.
 It controls the Chromium already present in that immutable image; it never installs
 OS packages or downloads a second browser at task time.

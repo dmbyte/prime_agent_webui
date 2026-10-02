@@ -2,7 +2,9 @@
 set -euo pipefail
 
 fail=0
-for endpoint in 30000 30001; do
+endpoints=(30001)
+if systemctl --user is-active --quiet vllm-nemotron35.service; then endpoints+=(30000); fi
+for endpoint in "${endpoints[@]}"; do
   if ! curl --fail --silent --max-time 10 "http://127.0.0.1:${endpoint}/v1/models" >/dev/null; then
     echo "FAIL: model endpoint ${endpoint}" >&2
     fail=1
@@ -71,4 +73,4 @@ if (( available_kib < minimum_available_kib )); then
 fi
 
 if (( fail != 0 )); then exit 1; fi
-echo "PASS: both local models healthy, private, and memory headroom >= ${minimum_available_percent}%"
+echo "PASS: active local models healthy, private, and memory headroom >= ${minimum_available_percent}%"

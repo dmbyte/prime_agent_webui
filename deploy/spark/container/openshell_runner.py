@@ -67,6 +67,11 @@ def task_spec(task_id, owner, authorization, provider, model, thinking,
     memory = int(limits["memoryGiB"])
     cpus = int(limits["cpus"])
     runtime = int(limits["runtimeMinutes"])
+    # The WebUI enforces the renewable soft deadline. Keep an independent,
+    # immutable role ceiling here so extensions cannot run indefinitely.
+    runtime_ceiling = {"user": 30, "power_user": 120, "admin": 240}.get(authorization.get("role"), runtime)
+    if not 1 <= runtime <= runtime_ceiling <= 240:
+        raise ValueError("Invalid task runtime limit")
     image = image_for_profile(profile, image_manifest)
     sandbox = f"pt-{task_id[:16]}"
     input_fifo = f"/tmp/prime-rpc-{task_id[:16]}.fifo"
@@ -84,6 +89,9 @@ def task_spec(task_id, owner, authorization, provider, model, thinking,
     kvm_access = profile == "network-operations" and network in {"lan", "full"}
     if kvm_access:
         mounts.append(_volume(f"prime-{owner}-gateway-lan", "/run/prime-kvm", True))
+    hosting_access = network in {'lan', 'full'} and authorization.get('executionMode') != 'deny'
+    if hosting_access:
+        mounts.append(_volume(f"prime-{owner}-hosting", "/run/prime-hosting", True))
     local_targets = []
     for source, target in task_common.local_mounts(authorization.get("localPaths")):
         mounts.append(_shared_path_volume(source, target))
@@ -94,6 +102,8 @@ def task_spec(task_id, owner, authorization, provider, model, thinking,
     read_only = ["/usr", "/lib", "/proc", "/etc", "/opt/prime-kernel", "/run/prime-gateway", "/home/prime/.prime/agent/project-sources", *local_targets]
     if kvm_access:
         read_only.append("/run/prime-kvm")
+    if hosting_access:
+        read_only.append('/run/prime-hosting')
     lines = [
         "version: 1", "filesystem_policy:", "  include_workdir: true", "  read_only:",
         *[f"    - {path}" for path in read_only],
@@ -141,7 +151,7 @@ def task_spec(task_id, owner, authorization, provider, model, thinking,
         "raise SystemExit(subprocess.Popen(sys.argv[2:],stdin=os.fdopen(r,'rb',buffering=0)).wait())"
     )
     execute = [
-        "/usr/bin/timeout", "--signal=TERM", "--kill-after=15s", f"{runtime}m",
+        "/usr/bin/timeout", "--signal=TERM", "--kill-after=15s", f"{runtime_ceiling}m",
         *common, "sandbox", "exec", "--name", sandbox, "--workdir", "/project", "--no-tty",
         "--env", "HOME=/home/prime", "--env", "NO_PROXY=127.0.0.1,localhost,::1",
         "--env", "no_proxy=127.0.0.1,localhost,::1", "--env", "TINI_SUBREAPER=1",
@@ -154,6 +164,8 @@ def task_spec(task_id, owner, authorization, provider, model, thinking,
         "--env", "PLAYWRIGHT_BROWSERS_PATH=/home/prime/.prime/tools/playwright",
         "--env", "PRIME_AGENT_KERNEL_PYTHON=/opt/prime-kernel/bin/python",
         "--env", f"PRIME_TASK_PROFILE={profile}", "--env", f"PRIME_NETWORK_MODE={network}",
+        "--env", f"PRIME_TASK_ID={task_id}",
+        *(['--env', 'PRIME_HOSTING_SOCKET=/run/prime-hosting/hosting.sock'] if hosting_access else []),
         *(["--env", "PRIME_KVM_SOCKET=/run/prime-kvm/kvm.sock"] if kvm_access else []),
         "--env", "IPYTHONDIR=/home/prime/.prime/ipython", "--",
         "/usr/bin/python3", "-c", relay, input_fifo, *prime,

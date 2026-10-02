@@ -12,7 +12,7 @@ import openshell_runner
 
 
 class OpenShellRunnerTests(unittest.TestCase):
-    def build(self, local_paths=None):
+    def build(self, local_paths=None, role=None):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name)
@@ -22,7 +22,14 @@ class OpenShellRunnerTests(unittest.TestCase):
         manifest = root / "images.json"
         manifest.write_text(json.dumps({"general": {"image": "local/prime-openshell-general:0.9.5-" + "a" * 12}}))
         policy = {"profile": "general", "networkMode": "restricted", "executionMode": "task", "approvalMode": "manual", "localPaths": local_paths or [], "limits": {"memoryGiB": 8, "cpus": 4, "runtimeMinutes": 30, "pids": 256, "openFiles": 1024, "temporaryGiB": 4}}
+        if role is not None:
+            policy['role'] = role
         return openshell_runner.task_spec("a" * 32, "alice", policy, "spark-nemotron", "example", "low", storage_root=storage, image_manifest=manifest, policy_root=root / "policies", workspace_root=root / "prime-agent/tasks")
+
+    def test_renewable_web_timer_retains_independent_role_ceiling(self):
+        for role, ceiling in [('admin', '240m'), ('power_user', '120m'), ('user', '30m')]:
+            self.assertEqual(self.build(role=role)['execute'][:4],
+                             ['/usr/bin/timeout', '--signal=TERM', '--kill-after=15s', ceiling])
 
     def test_openshell_task_is_bounded_and_default_deny(self):
         spec = self.build()

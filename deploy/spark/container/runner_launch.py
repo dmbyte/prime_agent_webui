@@ -6,6 +6,7 @@ from pathlib import Path
 sys.path.insert(0, "/usr/local/lib/prime-runner")
 import openshell_runner
 import task_common
+import hosting_auth
 
 ROOT=Path("/var/lib/prime-runner")
 OPENSHELL_COMMON = ["/usr/bin/openshell", "--gateway", "spark-local"]
@@ -43,7 +44,7 @@ def configure(owner):
             subprocess.run(["/usr/bin/setfacl", "-m", f"u:{web_owner}:--x,m::--x", str(path)], check=True)
     models={"providers":{
       "spark-nemotron":{"baseUrl":"http://127.0.0.1:31000/spark-nemotron/v1","api":"openai-completions","apiKey":"gateway","compat":{"supportsDeveloperRole":False,"supportsReasoningEffort":False},"models":[{"id":"nemotron-3.5-lightning","name":"Nemotron 3.5 Lightning + DSpark","reasoning":True,"contextWindow":262144,"maxTokens":8192}]},
-      "spark-qwen":{"baseUrl":"http://127.0.0.1:31000/spark-qwen/v1","api":"openai-completions","apiKey":"gateway","compat":{"supportsDeveloperRole":False,"supportsReasoningEffort":False},"models":[{"id":"qwen3.8-flash-next","name":"Qwen 3.8 Flash Next UD-IQ4_XS","reasoning":True,"input":["text","image"],"contextWindow":98304,"maxTokens":8192}]},
+      "spark-qwen":{"baseUrl":"http://127.0.0.1:31000/spark-qwen/v1","api":"openai-completions","apiKey":"gateway","compat":{"supportsDeveloperRole":False,"supportsReasoningEffort":True,"thinkingFormat":"openai"},"models":[{"id":"qwen3.8-flash-next","name":"Qwen 3.8 Flash Next UD-IQ4_XS","reasoning":True,"input":["text","image"],"contextWindow":262144,"maxTokens":8192,"thinkingLevelMap":{"off":"none","minimal":"low","low":"low","medium":"medium","high":"xhigh","xhigh":"xhigh","max":"xhigh"}}]},
       "openai-codex":{"baseUrl":"http://127.0.0.1:31000/openai-codex","apiKey":"gateway"}}}
     for name,value in (("models.json",models),("auth.json",{"openai-codex":{"type":"oauth","access":fake_jwt(),"refresh":"gateway","expires":4102444800000,"accountId":"gateway"}})):
         path=agent/name; temporary=agent/(name+".tmp"); temporary.write_text(json.dumps(value)); os.chmod(temporary,0o600); os.replace(temporary,path)
@@ -70,12 +71,13 @@ def main():
     if len(sys.argv)!=2 or len(sys.argv[1])>32768: raise SystemExit(2)
     request=json.loads(base64.urlsafe_b64decode(sys.argv[1]+"=="))
     allowed={"taskId","owner","authorization","provider","model","thinking","sessionId","fork"}
-    if set(request)!=allowed: raise SystemExit(2)
+    if set(request) not in (allowed, allowed | {'projectId'}): raise SystemExit(2)
     stage("Preparing task storage")
     configure(request["owner"])
     child = None
     sandbox = None
     policy_path = None
+    hosting_token = None
     stop_requested = False
     def stop_child(_signum, _frame):
         nonlocal stop_requested
@@ -99,6 +101,11 @@ def main():
         # cannot leave the WebUI unable to traverse its conversation storage.
         stage("Preparing OpenShell policy")
         spec=openshell_runner.task_spec(request["taskId"],request["owner"],request["authorization"],request["provider"],request["model"],request["thinking"],request["sessionId"],request["fork"],ROOT/"users",ROOT/"openshell-image-digests.json",ROOT/"openshell-policies",Path(os.environ.get("PRIME_RUNNER_WORKSPACE_ROOT", f"/home/{os.environ.get('PRIME_WEB_OWNER', 'dbyte')}/prime-agent/tasks")))
+        hosting_token = hosting_auth.issue(request['owner'], request['taskId'], request.get('projectId'), request['authorization'], ROOT)
+        if hosting_token:
+            marker = spec['execute'].index('--', spec['execute'].index('exec'))
+            spec['execute'][marker:marker] = ['--env', 'PRIME_HOSTING_TOKEN=' + hosting_token,
+                                             '--env', 'PRIME_PROJECT_ID=' + (request.get('projectId') or '')]
         sandbox, policy_path = spec["name"], spec["policy"]
         stage("Creating OpenShell sandbox")
         child = subprocess.Popen(spec["create"], stdin=subprocess.DEVNULL, start_new_session=True)
@@ -112,6 +119,8 @@ def main():
             os.killpg(child.pid, signal.SIGTERM)
         returncode = child.wait()
     finally:
+        if hosting_token:
+            hosting_auth.revoke(request['taskId'], ROOT)
         if sandbox:
             subprocess.run(["/usr/bin/openshell", "--gateway", "spark-local", "sandbox", "delete", sandbox], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30, check=False)
         if policy_path:

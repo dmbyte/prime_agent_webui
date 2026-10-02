@@ -5,8 +5,33 @@
 Qwen 3.8 Flash-Next (`spark-qwen/qwen3.8-flash-next`) generates nontrivial code
 in **all six profiles**: General, Development, CAD/3D, Finance, Network operations,
 and Read-only review. Selecting a profile controls the sandbox, not code ownership.
-Nemotron 3.5 Lightning is the orchestrator for conversation, planning, research
-synthesis, and very simple inspection/delegation scripts.
+Qwen is also the default orchestrator. Nemotron 3.5 Lightning is stopped and
+disabled, not deleted: its provider definition, service, image and model files
+remain available for deliberate rollback. It is removed from enabled models.
+
+## Automatic effort
+
+The WebUI defaults to **Auto**: low for routine conversation/summarization;
+high for detected code work, coding follow-ups, Development/Network operations,
+CAD/Finance profiles, and architecture/design/analysis/diagnosis/security/review,
+BMC/BIOS/firmware/install/migration/deployment requests. This is deterministic
+phrase/profile routing, not a guarantee of semantic classification. Explicit
+effort choices override Auto and persist in that conversation. Existing saved
+manual effort choices are preserved; select Auto in a chat header to adopt it.
+
+Auto is resolved before Prime starts, and the route tooltip records the effective
+choice. Auto itself persists across conversation turns; native Prime never
+receives an unsupported `--thinking auto`. Native CLI defaults to low.
+The Qwen provider enables `supportsReasoningEffort` with `thinkingFormat=openai`:
+low/minimal → `low`, medium → `medium`, high/xhigh/max → `xhigh`, off → `none`.
+These are request fields, not separate model copies. Off disables reasoning;
+low still reasons. The server fallback is `--reasoning-effort low`.
+Effort is a model instruction, not a hard reasoning-token or time limit; the
+WebUI task timer remains a separate control.
+All modes share one 262,144-token slot and the same IQ4_XS weights/Q8 K/V cache.
+Higher effort can increase time spent reasoning; it does not guarantee accuracy
+or increase decode throughput. The context includes input and output; Prime
+keeps an 8,192-token response/compaction reserve.
 
 Routing order is:
 
@@ -34,20 +59,22 @@ coding route. A new conversation starts without another chat's coding-route flag
 Project instructions and policy are inherited normally; coding ownership is
 global and does not have to be set separately for each project.
 
-If a non-code task already running on Nemotron discovers implementation work,
-the managed policy and per-task instructions require a real Qwen delegation:
+If a low-effort task discovers complex implementation work, the managed policy
+and per-task instructions require a real high-effort Qwen delegation. A task
+already at high effort may implement directly:
 
 ```python
 await rlm.spawn(
     "Implement the bounded task and run its checks; report evidence and blockers.",
     name="implementation",
     model="spark-qwen/qwen3.8-flash-next",
+    thinking="high",
 )
 ```
 
 This is an IPython call, not a separate model tool name. Use a unique child name,
-wait for the actual result, and verify it before reporting success. Nemotron must
-not write the complex code first and merely ask Qwen to review it. Emerging-task
+wait for the actual result, and verify it before reporting success. Do not write
+the complex code first and merely ask the child to review it. Emerging-task
 delegation is an agent instruction, **not a Python execution lock**.
 
 ## Default phrase rules
@@ -72,8 +99,12 @@ The source of truth is `route_task()` / `default_routing_rules()` in
 ## Installation and administration
 
 Install `deploy/spark/prime/models.json` and `settings.json` as described in the
-[Spark recipe](../README.md#dgx-spark-openshell-and-local-models). Both local models
-must be configured and Qwen enabled. Apply `deploy/spark/openshell/install.sh` to
+[Spark recipe](../README.md#dgx-spark-openshell-and-local-models). Qwen must be
+enabled and healthy; Nemotron is optional and disabled in this profile.
+`configure-qwen-only.py` backs up host model/settings files, preserves unrelated
+providers and chat/project overrides, and opts existing installations into these
+defaults. The protected runner generates the same Qwen context and effort map
+for isolated accounts at launch. Apply `deploy/spark/openshell/install.sh` to
 refresh managed workspace instructions and immutable runtime images. It backs
 up older managed policies; it does not overwrite unrelated custom policies.
 

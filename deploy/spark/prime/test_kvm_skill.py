@@ -28,6 +28,23 @@ def load_broker():
 
 
 class KVMTests(unittest.TestCase):
+    def test_viewer_sampling_never_extends_idle_timeout_or_sends_input(self):
+        broker = load_broker()
+        with tempfile.TemporaryDirectory() as directory:
+            service = broker.KVMBroker('alice', Path(directory))
+            session = broker.Session('a'*32, 'https://bmc.example/', {'workerSocket':Path(directory)/'worker.sock'})
+            session.feed = mock.Mock()
+            session.feed.watched.return_value = True
+            service.sessions[session.session_id] = session
+            before = session.last_used
+            service.stopping = mock.Mock()
+            service.stopping.wait.side_effect = [False, True]
+            with mock.patch.object(broker, '_worker_call', return_value={'jpeg':base64.b64encode(b'\xff\xd8frame').decode()}) as call:
+                service.observe()
+            self.assertEqual(session.last_used, before)
+            self.assertEqual(call.call_args.args[1], 'capture')
+            self.assertEqual(call.call_args.kwargs, {'timeout':3,'format':'jpeg','viewer':True})
+
     def test_page_routes_and_safe_https_upgrade(self):
         self.assertEqual(client._page_origin("https://bmc.example:443/page?view=console#screen"), client._page_origin("https://bmc.example/"))
         self.assertTrue(client._allowed_initial_redirect("http://bmc.example/", "https://bmc.example/login?next=console"))

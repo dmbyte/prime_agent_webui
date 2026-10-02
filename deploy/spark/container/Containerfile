@@ -60,8 +60,10 @@ WORKDIR /workspace
 USER prime
 COPY --chown=root:root prime-container-entrypoint.sh /usr/local/bin/prime-container-entrypoint
 COPY --chown=root:root gateway_relay.py /usr/local/lib/prime-gateway-relay.py
+COPY --chown=root:root console_feed.py /usr/local/lib/prime-console-feed.py
 COPY --chown=root:root managed-skills /opt/prime-managed-skills
 USER root
+RUN /opt/prime-kernel/bin/python -c 'import shutil,sysconfig; shutil.copyfile("/usr/local/lib/prime-console-feed.py",sysconfig.get_path("purelib")+"/console_feed.py")'
 RUN uv pip install --python /opt/prime-kernel/bin/python --no-deps \
        /opt/prime-managed-skills/bmc-headless-browser \
        /opt/prime-managed-skills/bmc-html5-kvm \

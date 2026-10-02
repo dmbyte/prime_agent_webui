@@ -1,51 +1,55 @@
 # DGX Spark deployment
 
-This tree is the reviewable source for the Spark's Prime Agent and two local
-inference services. Secrets are intentionally absent. Nemotron uses vLLM;
-Qwen uses a pinned llama.cpp direct-read build.
+This tree is the reviewable source for the `only-qwen38flash` Spark profile.
+Secrets are intentionally absent. Qwen is both orchestrator and implementation
+model; Nemotron service/model artifacts are retained but disabled on migrated
+systems. A new installation needs only Qwen, not both engines.
 
-The local APIs bind only to loopback: Nemotron on port 30000 and Qwen on 30001.
-Prime's default model is `spark-nemotron/nemotron-3.5-lightning`; the
-`spark-qwen/qwen3.8-flash-next` UD-IQ4_XS service is the explicit
-multimodal/deep specialist. Qwen's PLE table is read directly from NVMe on
-demand. A shared-Q8 MTP head drafts two tokens at a time for faster
-single-stream decode. Its confidence cutoff remains disabled after thresholds
-through 0.3 failed to improve representative throughput. The co-resident
-profile gives Nemotron a 262,144-token limit and gives Qwen one 98,304-token
-slot with Q4 K/V cache.
+The active model API binds only to `127.0.0.1:30001`. Prime defaults to
+`spark-qwen/qwen3.8-flash-next` UD-IQ4_XS with automatic low/high effort in the
+WebUI. One Qwen slot has 262,144 total context tokens and Q8 K/V cache. The PLE
+table is read directly from NVMe on demand; shared-Q8 MTP drafts two tokens at
+a time. Its confidence cutoff remains disabled. See the
+[root comparison and exact recipe](../../README.md#why-one-qwen-model-instead-of-two-local-models)
+for measured memory/throughput, benefits and concurrency tradeoffs.
 
 ## Production install sequence
 
-Start from a clean checkout of the tagged release on the DGX Spark owner
-account.
+Start from a clean checkout of `only-qwen38flash` on the DGX Spark owner
+account. The `v0.5.47` release tag has older dual-model defaults; it is not this
+branch. Source/model artifacts for the pinned Qwen runtime must be staged first.
 
 1. Run the repository-root installer to install the WebUI, private TLS, Nginx,
    local authentication, and user services.
-2. Install Nemotron 3.5 Lightning from
-   `deploy/spark/vllm-nemotron35/README.md` and confirm
-   `http://127.0.0.1:30000/v1/models` responds.
+2. On an existing dual-model installation, back up Qwen config/start script,
+   stop and disable Nemotron, and set its Docker restart policy to `no`.
+   Retain its artifacts. Skip Nemotron entirely on fresh installations.
 3. Install Qwen 3.8 Flash-Next from `deploy/spark/llama-qwen38/README.md` and
    confirm `http://127.0.0.1:30001/v1/models` responds. Qwen 3.8 is the only
    shipped Qwen local runtime for this release.
 4. Copy `deploy/spark/prime/models.json` and
    `deploy/spark/prime/settings.json` into `~/.prime/agent/` so the WebUI and
-   Prime default to Nemotron while exposing Qwen 3.8 as the specialist route.
+   Prime default to Qwen/Auto on a fresh installation. On an existing install,
+   run `configure-qwen-only.py` instead to preserve unrelated settings/providers.
 5. Install OpenShell with `deploy/spark/openshell/install.sh`. The installer
    validates the pinned upstream package, provisions `prime-runner`, installs
    the model gateway and task broker, builds the six approved Docker images,
-   provisions per-user volumes, installs the reviewed BMC skills, and verifies
+   provisions per-user volumes, installs the reviewed BMC/hosting skills, and verifies
    `prime-runner` gateway access.
 6. Run `deploy/spark/prime/install-skills.sh` to install the pinned 366-skill
    NVIDIA catalog for global, lazy-routed use. The command also refreshes the
-   two BMC packages and retains replaced content in recovery storage.
+   five managed skills and retains replaced content in recovery storage.
 7. Restart `prime-dashboard-api.service` and run `deploy/spark/prime/validate.sh`.
 
 The expected steady state is:
 
 - `prime-dashboard-api`, `prime-web`, `prime-model-gateway`,
   `prime-runner-broker`, and `openshell-gateway` active.
-- `vllm-nemotron35` active on `127.0.0.1:30000`.
+- `vllm-nemotron35` stopped/disabled (or absent on a new install).
 - `llama-qwen38` active on `127.0.0.1:30001`.
+- `prime-kvm-broker` and `prime-hosting-broker` active; their dedicated service
+  sandboxes are created only on demand. Hosting exposes only explicitly staged
+  public content over LAN HTTP; see [hosting controls](../../docs/lan-web-hosting.md).
 - Browser access only through authenticated HTTPS on the private LAN/VPN
   address.
 
@@ -53,7 +57,7 @@ Launch the configured workspace with `prime-dgx`. Prime is pinned at the
 installed version until an update is deliberately reviewed and validated.
 
 WebUI tasks run as ephemeral NVIDIA OpenShell sandboxes through the local Docker
-driver. The deployment pins OpenShell `0.0.116`, applies hard Landlock
+driver. The deployment pins OpenShell `0.1.2`, applies hard Landlock
 enforcement, starts with an empty direct-network policy, and carries the chosen
 egress through the existing per-user Unix-socket broker. Prime state, workspace,
 and gateway directories are exposed through pre-provisioned local-driver Docker
@@ -95,7 +99,7 @@ the host credential into the isolated gateway. It never replaces a newer
 gateway credential with an older host copy, because OAuth refresh tokens rotate
 and replaying an already-used copy requires a fresh `/login`. A credential
 failure is reported in task activity as a sign-in problem instead of an opaque
-model-gateway 502; local Nemotron and Qwen routes remain available.
+model-gateway 502; the local Qwen route remains available.
 Nginx exposes it at `https://172.16.253.231:8443` with session authentication
 and allows only private LAN/VPN source ranges. The session broker validates a
 dedicated WebUI password against a mode-0600 salted scrypt record; it does not

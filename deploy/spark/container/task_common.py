@@ -64,9 +64,11 @@ def local_mounts(paths):
     return mounts
 
 
-def broker_command(task_id, owner, authorization, provider, model, thinking, session_id=None, fork=False):
+def broker_command(task_id, owner, authorization, provider, model, thinking, session_id=None, fork=False, project_id=None):
     request = {"taskId": task_id, "owner": owner, "authorization": authorization,
                "provider": provider, "model": model, "thinking": thinking,
                "sessionId": session_id, "fork": bool(fork)}
+    if project_id:
+        request['projectId'] = project_id
     encoded = base64.urlsafe_b64encode(json.dumps(request, separators=(",", ":")).encode()).decode()
     return ["/usr/local/libexec/prime-runner-client", encoded]

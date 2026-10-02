@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import unittest
+import ast
+import json
 from pathlib import Path
 
 
@@ -53,24 +55,28 @@ class RunnerLaunchRegressionTests(unittest.TestCase):
         self.assertIn('GPU_MEMORY_UTILIZATION:-0.30', start)
         self.assertIn('KV_CACHE_MEMORY_BYTES:-2G', start)
 
-    def test_qwen_long_context_uses_q4_cache(self):
+    def test_qwen_long_context_uses_q8_cache(self):
         root = Path(__file__).parents[3]
         template = (root / "deploy/spark/llama-qwen38/llama.env.template").read_text()
         start = (root / "deploy/spark/llama-qwen38/start.sh").read_text()
-        self.assertIn("CONTEXT_SIZE=98304", template)
-        self.assertIn("CACHE_TYPE_K=q4_0", template)
-        self.assertIn("CACHE_TYPE_V=q4_0", template)
-        self.assertIn('CONTEXT_SIZE:-98304', start)
-        self.assertIn('CACHE_TYPE_K:-q4_0', start)
-        self.assertIn('CACHE_TYPE_V:-q4_0', start)
+        self.assertIn("CONTEXT_SIZE=262144", template)
+        self.assertIn("CACHE_TYPE_K=q8_0", template)
+        self.assertIn("CACHE_TYPE_V=q8_0", template)
+        self.assertIn('CONTEXT_SIZE:-262144', start)
+        self.assertIn('CACHE_TYPE_K:-q8_0', start)
+        self.assertIn('CACHE_TYPE_V:-q8_0', start)
 
     def test_prime_model_metadata_matches_live_context_limits(self):
         root = Path(__file__).parents[3]
-        models = (root / "deploy/spark/prime/models.json").read_text()
+        models = json.loads((root / "deploy/spark/prime/models.json").read_text())
         launcher = (root / "deploy/spark/container/runner_launch.py").read_text()
-        for source in (models, launcher):
-            self.assertIn('"contextWindow":262144', source.replace(" ", ""))
-            self.assertIn('"contextWindow":98304', source.replace(" ", ""))
+        assignment = next(node for node in ast.walk(ast.parse(launcher)) if isinstance(node, ast.Assign)
+                          and any(isinstance(target, ast.Name) and target.id == 'models' for target in node.targets))
+        isolated = ast.literal_eval(assignment.value)
+        for config in (models, isolated):
+            self.assertEqual(config['providers']['spark-qwen']['models'][0]['contextWindow'], 262144)
+        self.assertEqual(models['providers']['spark-qwen']['models'], isolated['providers']['spark-qwen']['models'])
+        self.assertEqual(models['providers']['spark-qwen']['compat'], isolated['providers']['spark-qwen']['compat'])
 
 
 if __name__ == "__main__":

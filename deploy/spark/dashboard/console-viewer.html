@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prime · Console viewer</title><link rel="stylesheet" href="/assets/console-viewer.css"></head>
+<body><header><div><h1>Agent console</h1><p>Read-only · closing this window does not stop the agent</p></div>
+<div class="controls"><label>Source <select id="source" aria-label="Console source"><option value="">Waiting for a console</option></select></label>
+<button id="pause" type="button">Pause view</button><button id="fit" type="button">Actual size</button></div></header>
+<div id="status" role="status" aria-live="polite">Connecting…</div>
+<main id="screen"><img id="frame" hidden alt="Current agent browser or BMC console view"><pre id="terminal" hidden></pre>
+<div id="empty">Open a browser or console with a supported skill to see it here.</div></main>
+<footer><span id="freshness">No frame yet</span><span>Updates about once per second while visible. Console contents may be sensitive.</span>
+<span id="transport">Direct serial-over-LAN transport is currently unavailable in OpenShell; this viewer does not enable it.</span>
+<a href="/" target="_blank" rel="noopener">Open Prime WebUI</a></footer>
+<script src="/assets/console-viewer.js"></script></body></html>

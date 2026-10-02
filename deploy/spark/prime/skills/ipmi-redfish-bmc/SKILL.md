@@ -5,6 +5,11 @@ description: Read BMC health and inventory through Redfish/IPMI, and interact wi
 
 # IPMI and Redfish BMC
 
+When used in a supported direct-IPMI environment with the managed console feed,
+each SOL `read()` publishes the rendered screen to the WebUI's **Console viewer ↗**.
+It is the agent's last read, not a second SOL connection or a new transport.
+The viewer is read-only and cannot authorize input or power/boot operations.
+
 Use this skill in the `network-operations` OpenShell profile with LAN access.
 The deployed OpenShell task gateway supports HTTP(S), not IPMI's UDP/RMCP+
 transport. Therefore direct `IPMIClient` and SOL are unavailable in these tasks,

@@ -42,7 +42,7 @@ MODELS = {
     "spark-qwen": {"qwen3.8-flash-next"},
     "openai": {"gpt-5.4"},
 }
-THINKING = {"off", "minimal", "low", "medium", "high", "xhigh", "max"}
+THINKING = {"auto", "off", "minimal", "low", "medium", "high", "xhigh", "max"}
 CPU_LOCK = threading.Lock()
 CPU_SAMPLE = None
 MODEL_LOCK = threading.Lock()
@@ -94,9 +94,9 @@ def settings_view():
     compaction = data.get("compaction", {})
     enabled_models = [str(value) for value in data.get("enabledModels", []) if isinstance(value, str)]
     return {
-        "provider": data.get("defaultProvider", "spark-nemotron"),
-        "model": data.get("defaultModel", "nemotron-3.5-lightning"),
-        "thinking": data.get("defaultThinkingLevel", "low"),
+        "provider": data.get("defaultProvider", "spark-qwen"),
+        "model": data.get("defaultModel", "qwen3.8-flash-next"),
+        "thinking": data.get("webuiThinkingMode", data.get("defaultThinkingLevel", "auto")),
         "reserveTokens": compaction.get("reserveTokens", 8192),
         "keepRecentTokens": compaction.get("keepRecentTokens", 12000),
         "enabledProviders": sorted({value.split("/", 1)[0] for value in enabled_models if "/" in value}),
@@ -216,7 +216,8 @@ def save_settings(payload):
     data = read_json(SETTINGS, {})
     data["defaultProvider"] = provider
     data["defaultModel"] = model
-    data["defaultThinkingLevel"] = thinking
+    data["webuiThinkingMode"] = thinking
+    data["defaultThinkingLevel"] = "low" if thinking == "auto" else thinking
     data["enabledModels"] = sorted(
         f"{row['provider']}/{row['model']}" for row in catalog
         if row["provider"] in enabled_providers

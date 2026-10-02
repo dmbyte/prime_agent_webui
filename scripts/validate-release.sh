@@ -11,6 +11,8 @@ required=(
   deploy/spark/dashboard/api.py
   deploy/spark/dashboard/api_v2.py
   deploy/spark/dashboard/app-v2.js
+  deploy/spark/dashboard/task-timer.js
+  deploy/spark/dashboard/task-timer.css
   deploy/spark/dashboard/auth.py
   deploy/spark/dashboard/index.html
   deploy/spark/dashboard/skill-governance.css
@@ -24,7 +26,17 @@ required=(
   deploy/spark/container/task_common.py
   deploy/spark/container/model_gateway.py
   deploy/spark/container/gateway_relay.py
+  deploy/spark/container/console_feed.py
+  deploy/spark/dashboard/console-viewer.html
+  deploy/spark/dashboard/console-viewer.js
+  deploy/spark/dashboard/console-viewer.css
   deploy/spark/container/kvm_broker.py
+  deploy/spark/container/hosting_broker.py
+  deploy/spark/container/hosting_auth.py
+  deploy/spark/container/hosting_server.py
+  deploy/spark/systemd/prime-hosting-broker.service
+  deploy/spark/openshell/install-hosting.sh
+  deploy/spark/prime/skills/lan-web-host/SKILL.md
   deploy/spark/container/openshell_runner.py
   deploy/spark/container/runner_broker.py
   deploy/spark/container/runner_client.py
@@ -52,6 +64,10 @@ required=(
   deploy/spark/prime/skills/prime-nvidia-catalog/SKILL.md
   deploy/spark/prime/skills/prime-nvidia-catalog/pyproject.toml
   deploy/spark/prime/AGENTS.managed.md
+  deploy/spark/prime/configure-qwen-only.py
+  deploy/spark/prime/validate-qwen-context.py
+  deploy/spark/prime/validate-qwen-effort.mjs
+  deploy/spark/prime/validate-qwen-task.py
   deploy/spark/vllm-nemotron35/README.md
   deploy/spark/llama-qwen38/README.md
   deploy/spark/llama-qwen38/build-image.sh
@@ -68,7 +84,7 @@ done
 bash -n install.sh deploy/spark/update/update-prime-agent.sh deploy/spark/update/update-webui.sh deploy/spark/update/update-openshell.sh \
   deploy/spark/container/install-user-codex-credential.sh \
   deploy/spark/prime/install-skills.sh \
-  deploy/spark/openshell/install.sh deploy/spark/openshell/provision-volumes.sh \
+  deploy/spark/openshell/install.sh deploy/spark/openshell/install-hosting.sh deploy/spark/openshell/provision-volumes.sh \
   deploy/spark/container/prime-container-entrypoint.sh
 python3 -m compileall -q deploy/spark/dashboard deploy/spark/container deploy/spark/prime
 python3 -m unittest discover -s deploy/spark/dashboard -p 'test*.py'
@@ -76,6 +92,8 @@ python3 -m unittest discover -s deploy/spark/prime -p 'test_*skill*.py'
 
 if command -v node >/dev/null; then
   node --check deploy/spark/dashboard/app-v2.js
+  node --check deploy/spark/dashboard/console-viewer.js
+  node --check deploy/spark/dashboard/task-timer.js
 else
   echo "Note: Node.js unavailable; JavaScript syntax check skipped." >&2
 fi

@@ -37,6 +37,13 @@ RUNNER_SPEC = importlib.util.spec_from_file_location("prime_task_common", TASK_C
 task_common = importlib.util.module_from_spec(RUNNER_SPEC)
 RUNNER_SPEC.loader.exec_module(task_common)
 
+FEED_PATH = Path(__file__).with_name('console_feed.py')
+if not FEED_PATH.exists():
+    FEED_PATH = Path(__file__).parents[1] / 'container' / 'console_feed.py'
+FEED_SPEC = importlib.util.spec_from_file_location('prime_console_feed', FEED_PATH)
+console_feed = importlib.util.module_from_spec(FEED_SPEC)
+FEED_SPEC.loader.exec_module(console_feed)
+
 META = legacy.HOME / ".prime/agent/webui-metadata.json"
 ROUTING_RULES = legacy.HOME / ".prime/agent/webui-routing-rules.json"
 LEDGER = legacy.HOME / ".prime/agent/webui-usage-ledger.jsonl"
@@ -311,6 +318,21 @@ def route_task(message, settings=None, profile=None, previous_route=None):
             return {"provider": target[0], "model": target[1], "routingMode": mode, "routeReason": f'Routing rule “{rule["name"]}” matched.'}
         return {"provider": selected[0], "model": selected[1], "routingMode": "fallback", "routeReason": f'Routing rule “{rule["name"]}” matched, but its target is disabled.'}
     return {"provider": selected[0], "model": selected[1], "routingMode": "default", "routeReason": "Using the selected default model."}
+
+
+def resolve_effort(requested, message, route, profile=None):
+    """Resolve UI auto mode before invoking Prime; never send 'auto' to its CLI."""
+    if requested != "auto":
+        return requested, "Explicit conversation effort."
+    complex_work = bool(route.get("codeGenerationRoute")) or profile in {
+        "development", "network-operations", "cad", "finance"
+    } or bool(re.search(
+        r"\b(architect\w*|design\w*|analy[sz]\w*|diagnos\w*|investigat\w*|"
+        r"troubleshoot\w*|security|review|portfolio|trading|valuation|bios|bmc|"
+        r"firmware|reboot|install\w*|migrat\w*|deploy\w*|cad|manufactur\w*)\b",
+        str(message), re.I))
+    effective = "high" if complex_work else "low"
+    return effective, f"Auto effort: {effective} for {'coding, complex or consequential work' if complex_work else 'routine work'}."
 
 
 def now_iso():
@@ -1106,10 +1128,72 @@ def task_snapshot(user=None):
             row["liveLog"] = list(reversed(preview))
             row["liveLogTruncated"] = len(task.get("liveLog") or []) > len(preview)
             if row.get("status") == "running":
+                row.update(task_timer_view(task))
                 row["elapsedSeconds"] = round(time.time() - row["startedEpoch"], 1)
                 row["silentSeconds"] = round(time.time() - task.get("lastOutputEpoch", task["startedEpoch"]), 1)
             rows.append(row)
         return sorted(rows, key=lambda row: row["started"], reverse=True)[:50]
+
+
+def initialize_task_timer(task):
+    authorization = task.get('authorization') or {}
+    role = task_policy.normalize_role(authorization.get('role'))
+    initial = int((authorization.get('limits') or {}).get('runtimeMinutes', 30)) * 60
+    ceiling = task_policy.ROLE_MAXIMUMS[role].runtime_minutes * 60
+    if not 60 <= initial <= ceiling:
+        raise ValueError('Invalid task runtime limit')
+    now, epoch = time.monotonic(), time.time()
+    task.update(_deadlineMonotonic=now + initial, _hardDeadlineMonotonic=now + ceiling,
+                deadlineEpoch=epoch + initial, hardDeadlineEpoch=epoch + ceiling, timerRevision=0)
+
+
+def task_timer_view(task):
+    if '_deadlineMonotonic' not in task:
+        return {'timerExtendable': False}
+    remaining = max(0, task['_deadlineMonotonic'] - time.monotonic())
+    return {'remainingSeconds': round(remaining, 1), 'deadlineEpoch': task['deadlineEpoch'],
+            'timerRevision': task['timerRevision'], 'timerWarning': remaining <= 300,
+            'timerExtendable': task.get('status') == 'running' and remaining > 0
+                and not task.get('stopRequested') and not task.get('_timerExpired')
+                and task['_deadlineMonotonic'] + 1800 <= task['_hardDeadlineMonotonic']}
+
+
+def extend_task_timer(task_id, revision, owner, role):
+    role = task_policy.normalize_role(role)
+    if type(revision) is not int or revision < 0:
+        raise ValueError('Invalid timer revision')
+    with TASK_LOCK:
+        task = TASKS.get(task_id)
+        if not task or task.get('owner') != owner or task.get('status') != 'running':
+            raise ValueError('Task is no longer running')
+        if '_deadlineMonotonic' not in task:
+            raise ValueError('This task predates timer extensions; start a new task')
+        # The revision makes repeated clicks/network retries add time only once.
+        if revision < task['timerRevision']:
+            return {'id': task_id, **task_timer_view(task)}
+        if revision != task['timerRevision'] or not task_timer_view(task)['timerExtendable']:
+            raise ValueError('The deadline has passed or the runtime ceiling was reached')
+        role_ceiling = task['startedEpoch'] + task_policy.ROLE_MAXIMUMS[role].runtime_minutes * 60
+        if task['deadlineEpoch'] + 1800 > role_ceiling + 1:
+            raise ValueError('An extension would exceed your role runtime limit')
+        task['_deadlineMonotonic'] += 1800
+        task['deadlineEpoch'] += 1800
+        task['timerRevision'] += 1
+        add_runtime_event(task, 'runtime', 'Task timer extended by 30 minutes')
+        result = {'id': task_id, **task_timer_view(task)}
+    legacy.audit('task_timer_extended', task=task_id, owner=owner, revision=result['timerRevision'])
+    return result
+
+
+def task_deadline_expired(task, fallback_deadline):
+    # Serialize deadline expiry with extension requests; expired tasks cannot
+    # acknowledge an extension while the monitor is terminating them.
+    with TASK_LOCK:
+        if time.monotonic() < task.get('_deadlineMonotonic', fallback_deadline):
+            return False
+        task['_timerExpired'] = True
+        task['rpcError'] = 'Task reached its time limit. Its saved work and logs remain available. Send a follow-up to continue in a new task.'
+        return True
 
 
 def recover_failed_task_conversation(task, status):
@@ -1142,7 +1226,7 @@ def recover_failed_task_conversation(task, status):
             "owner": owner,
             "recoveredFromTask": task["id"],
             "recoveredAt": timestamp,
-            "thinking": task.get("thinking"),
+            "thinking": task.get("requestedThinking", task.get("thinking")),
             "routeProvider": task.get("provider"),
             "routeModel": task.get("model"),
             "routingMode": task.get("routingMode"),
@@ -1517,7 +1601,7 @@ def monitor_task(task_id, before):
     while process.poll() is None or pending_lines:
         now = time.monotonic()
         alive = process.poll() is None
-        if alive and now >= deadline:
+        if alive and task_deadline_expired(task, deadline):
             timed_out = True
             os.killpg(process.pid, signal.SIGTERM)
             break
@@ -1683,7 +1767,7 @@ def store_task_route(task):
         data = metadata()
         row = data.setdefault("conversations", {}).setdefault(task["sessionId"], {})
         row.update({
-            "thinking": task.get("thinking"),
+            "thinking": task.get("requestedThinking", task.get("thinking")),
             "routeProvider": task.get("provider"),
             "routeModel": task.get("model"),
             "routingMode": task.get("routingMode"),
@@ -1750,10 +1834,10 @@ def runtime_context(authorization):
         return ""
     code_policy = (
         "Model policy for EVERY profile: Qwen (spark-qwen/qwen3.8-flash-next) generates all nontrivial code, scripts, tests, "
-        "browser automation, and implementation changes. Nemotron only orchestrates, summarizes, and uses very simple "
-        "inspection/delegation cells; it must not write multi-step workflows or complex code, even to repair an error. "
-        "If running as Nemotron and code work emerges, actually delegate in ipython with "
-        "await rlm.spawn('<bounded implementation task and verification>', name='<unique-name>', model='spark-qwen/qwen3.8-flash-next'). "
+        "browser automation, and implementation changes. The default deployment disables Nemotron but retains its files. "
+        "Qwen uses low effort for routine work and high effort for code, complex analysis and consequential operations. "
+        "If a low-effort task discovers complex implementation work, actually delegate in ipython with "
+        "await rlm.spawn('<bounded implementation task and verification>', name='<unique-name>', model='spark-qwen/qwen3.8-flash-next', thinking='high'). "
         "Wait for and inspect the child's real result before reporting completion. Do not claim delegation without a tool call. "
         "If Qwen is unavailable, report that blocker rather than having Nemotron implement it. "
         "These model assignments do not expand task permissions or authorize external actions.\n"
@@ -1777,7 +1861,13 @@ def runtime_context(authorization):
         "If a transport or adapter error repeats, stop that approach and report the exact blocker instead of guessing more APIs or bypassing policy. "
         "No reset, boot override, console input, or other BMC change is authorized by these runtime facts."
     ) if (authorization or {}).get("profile") == "network-operations" else ""
-    return "\n\n<prime_runtime_context>\n" + code_policy + bmc + "\n</prime_runtime_context>"
+    hosting = (
+        " For LAN file/ISO hosting or app previews use the installed lan-web-host skill. "
+        "It returns the Spark LAN URL, not a container address, and supports task/project discovery. "
+        "Stage only intended public content under /project/hosted; never publish a whole workspace. "
+        "Services persist beyond task completion until renewable expiry or explicit stop."
+    ) if (authorization or {}).get('networkMode') in {'lan', 'full'} else ''
+    return "\n\n<prime_runtime_context>\n" + code_policy + bmc + hosting + "\n</prime_runtime_context>"
 
 
 def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITIAL_ADMIN, authorization=None, policy=None, project_id=None, file_ids=None):
@@ -1810,10 +1900,14 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITI
         raise ValueError("Unsupported thinking level")
     previous_route = metadata().get("conversations", {}).get(session_id, {}) if session_id else None
     route = route_task(message, settings, profile=(authorization or {}).get("profile"), previous_route=previous_route)
+    requested_thinking = thinking
+    thinking, effort_reason = resolve_effort(thinking, message, route, (authorization or {}).get("profile"))
+    route["requestedThinking"] = requested_thinking
+    route["routeReason"] += " " + effort_reason
     details = model_details(route["provider"], route["model"])
     task_id = uuid.uuid4().hex
     if container_mode():
-        command = task_common.broker_command(task_id, owner, authorization or {}, route["provider"], route["model"], thinking, session_id, fork)
+        command = task_common.broker_command(task_id, owner, authorization or {}, route["provider"], route["model"], thinking, session_id, fork, project_id=project_id)
         task_cwd = legacy.HOME
         task_env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin")}
     else:
@@ -1824,12 +1918,15 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITI
             command.extend(["--fork" if fork else "--resume", session_id])
         task_cwd = legacy.HOME / "prime-dgx-agent"
         task_env = prime_env()
+    timer = {'authorization': authorization or {}}
+    initialize_task_timer(timer)
     before = session_stems(owner)
     process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=task_cwd, env=task_env, start_new_session=True)
     started = now_iso()
     runtime = "openshell" if container_mode() else "host"
     topic = legacy.safe_topic(message) or "Native task"
     task = {"id": task_id, "sessionId": session_id if not fork else None, "agentSessionId": session_id if session_id and not fork else None, "rpcReady": True, "rpcResponses": {}, "owner": owner, "projectId": project_id, "fileIds": file_ids, "authorization": authorization or {}, "policyPreference": policy or {}, "persistPolicyOnSessionCreate": not bool(session_id) or fork, "submittedMessage": message, "submittedAt": started, "topic": topic, **route, "thinking": thinking, "contextWindow": details.get("contextWindow"), "maxTokens": details.get("maxTokens"), "runtime": runtime, "sandboxName": f"pt-{task_id[:16]}" if runtime == "openshell" else None, "policyRevision": 1 if runtime == "openshell" else None, "status": "running", "progress": "Starting Prime", "progressEvents": [{"at": started, "label": "Request received"}], "runtimeEvents": [{"at": started, "kind": "request", "label": "Request received"}], "liveLog": [], "liveLogBytes": 0, "liveResponse": "", "started": started, "startedEpoch": time.time(), "pid": process.pid, "process": process, "logAvailable": False, "_stdinLock": threading.Lock()}
+    task.update({key: value for key, value in timer.items() if key != 'authorization'})
     with TASK_LOCK:
         TASKS[task_id] = task
     with META_LOCK:
@@ -2397,6 +2494,18 @@ def hmac_compare(left, right):
     return hmac.compare_digest(left, right)
 
 
+def console_snapshots(owner, selected=None, watching=False):
+    if not re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_.-]{1,31}', str(owner)):
+        raise ValueError('Invalid console owner')
+    root = Path(os.environ.get('PRIME_RUNNER_WORKSPACE_ROOT', legacy.HOME / 'prime-agent/tasks')) / owner / '.prime-console'
+    if watching:
+        try:
+            console_feed.watch(root)
+        except FileNotFoundError:
+            pass  # A new user may not have a workspace yet.
+    return console_feed.snapshots(root, selected)
+
+
 class Handler(legacy.Handler):
     def request_user(self):
         value = self.headers.get("X-Prime-User", "")
@@ -2425,7 +2534,13 @@ class Handler(legacy.Handler):
         query = urllib.parse.parse_qs(parsed.query)
         path = parsed.path
         try:
-            if path == "/api/state":
+            if path == '/api/consoles':
+                self.send_json(200, {'sessions': console_snapshots(self.request_user(), watching=query.get('watch') == ['1']),
+                                     'solTransportAvailable': False})
+            elif path == '/api/consoles/frame':
+                rows = console_snapshots(self.request_user(), selected=query.get('id', [''])[0])
+                self.send_json(200 if rows else 404, {'session': rows[0] if rows else None})
+            elif path == "/api/state":
                 user = self.request_user()
                 role = self.headers.get("X-Prime-Role", "user")
                 self.send_json(200, {"settings": legacy.settings_view(), "models": legacy.model_catalog(), "usage": usage_for_user(user), "requestLedger": {"nativeRequests": 0, "recent": []}, "sessions": conversation_catalog(query.get("q", [""])[0], query.get("archived", ["0"])[0] == "1", user), "projects": project_catalog(user), "telemetry": legacy.telemetry(), "nativeTasks": task_snapshot(user), "identity": {"user": user, "role": role}, "taskCapabilities": task_capabilities(role)})
@@ -2504,7 +2619,7 @@ class Handler(legacy.Handler):
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
-        v2 = {"/api/settings", "/api/skills", "/api/tasks/start", "/api/tasks/stop", "/api/tasks/message", "/api/tasks/authorization", "/api/conversations/update", "/api/conversations/delete", "/api/conversations/duplicate", "/api/conversations/promote", "/api/projects/create", "/api/projects/update", "/api/projects/delete", "/api/files/delete", "/api/admin/restart", "/api/admin/retention", "/api/admin/update", "/api/admin/sandboxes", "/api/admin/user-cache", "/api/admin/routing-rules", "/api/admin/skills", "/api/providers/configure", "/api/files/upload"}
+        v2 = {"/api/tasks/extend", "/api/settings", "/api/skills", "/api/tasks/start", "/api/tasks/stop", "/api/tasks/message", "/api/tasks/authorization", "/api/conversations/update", "/api/conversations/delete", "/api/conversations/duplicate", "/api/conversations/promote", "/api/projects/create", "/api/projects/update", "/api/projects/delete", "/api/files/delete", "/api/admin/restart", "/api/admin/retention", "/api/admin/update", "/api/admin/sandboxes", "/api/admin/user-cache", "/api/admin/routing-rules", "/api/admin/skills", "/api/providers/configure", "/api/files/upload"}
         if path not in v2:
             if not csrf_ok(self.headers):
                 self.send_json(403, {"error": "CSRF validation failed"})
@@ -2564,6 +2679,8 @@ class Handler(legacy.Handler):
                 self.send_json(202, {"task": launch_task(payload.get("message"), payload.get("sessionId"), thinking=payload.get("thinking"), owner=user, authorization=authorization, policy=preference, project_id=payload.get("projectId"), file_ids=payload.get("fileIds"))})
             elif path == "/api/tasks/stop":
                 self.send_json(200, stop_native_task(str(payload.get("id", "")), user))
+            elif path == "/api/tasks/extend":
+                self.send_json(200, extend_task_timer(str(payload.get('id', '')), payload.get('timerRevision'), user, role))
             elif path == "/api/tasks/message":
                 self.send_json(202, message_native_task(str(payload.get("id", "")), payload.get("message"), str(payload.get("mode", "steer")), user))
             elif path == "/api/tasks/authorization":

@@ -19,10 +19,28 @@ trap 'rm -rf "$staging" "$build_context"' EXIT
 for command in docker jq setfacl rsync curl; do
   command -v "$command" >/dev/null || { echo "Missing OpenShell prerequisite: $command" >&2; exit 1; }
 done
+if sudo test -S "/var/lib/prime-runner/hosting/${USER}/admin.sock"; then
+  hosting_state=$(sudo -u prime-runner python3 /usr/local/lib/prime-runner/hosting_admin.py --owner "$USER" list)
+  if ! jq -e '.ok == true and (.result.services | length) == 0' >/dev/null <<<"$hosting_state"; then
+    echo "Hosting services exist: stop them explicitly before updating OpenShell." >&2
+    exit 75
+  fi
+fi
 kvm_socket="/var/lib/prime-runner/gateway/${USER}/lan/kvm.sock"
 if sudo test -S "$kvm_socket"; then
-  command -v socat >/dev/null || { echo "socat is required to check active KVM sessions." >&2; exit 1; }
-  kvm_state=$(printf '{"action":"list"}\n' | sudo -u prime-runner socat -T 5 - "UNIX-CONNECT:$kvm_socket") || {
+  kvm_state=$(sudo -u prime-runner python3 - "$kvm_socket" <<'PY'
+import socket, sys
+with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+    connection.settimeout(5)
+    connection.connect(sys.argv[1])
+    connection.sendall(b'{"action":"list"}\n')
+    with connection.makefile('rb') as stream:
+        reply = stream.readline(65537)
+    if not reply or len(reply) > 65536:
+        raise SystemExit('Invalid KVM status response')
+    print(reply.decode())
+PY
+  ) || {
     echo "KVM broker did not answer; defer OpenShell update until its sessions are checked." >&2
     exit 1
   }
@@ -102,6 +120,8 @@ sudo find "$owner_agent/sessions" "$owner_agent/trash" "$owner_agent/project-sou
 sudo install -d -o root -g root -m 0755 /usr/local/lib/prime-runner /usr/local/libexec
 sudo install -o root -g root -m 0644 "$repo/deploy/spark/container/task_common.py" "$repo/deploy/spark/container/model_gateway.py" "$repo/deploy/spark/container/openshell_runner.py" "$repo/deploy/spark/container/kvm_broker.py" /usr/local/lib/prime-runner/
 install -m 0644 "$repo/deploy/spark/container/task_common.py" "${HOME}/prime-dgx-dashboard/task_common.py"
+install -m 0644 "$repo/deploy/spark/container/console_feed.py" "${HOME}/prime-dgx-dashboard/console_feed.py"
+sudo install -o root -g root -m 0644 "$repo/deploy/spark/container/console_feed.py" /usr/local/lib/prime-runner/console_feed.py
 sudo install -o root -g root -m 0755 "$repo/deploy/spark/container/runner_launch.py" /usr/local/libexec/prime-runner-launch
 sudo install -o root -g root -m 0755 "$repo/deploy/spark/container/runner_client.py" /usr/local/libexec/prime-runner-client
 sudo install -o root -g root -m 0755 "$repo/deploy/spark/container/runner_recover.py" /usr/local/libexec/prime-runner-recover
@@ -113,6 +133,7 @@ sudo install -o root -g root -m 0644 "$broker_unit" /etc/systemd/system/prime-ru
 rm -f "$broker_unit"
 kvm_unit=$(mktemp)
 sed -e "s/@RUNNER_UID@/${runner_uid}/g" -e "s/@WEB_OWNER@/${USER}/g" "$repo/deploy/spark/systemd/prime-kvm-broker.service" >"$kvm_unit"
+printf '\n[Service]\nEnvironment="PRIME_RUNNER_WORKSPACE_ROOT=%s"\n' "$workspace_root" >>"$kvm_unit"
 sudo install -o root -g root -m 0644 "$kvm_unit" /etc/systemd/system/prime-kvm-broker.service
 rm -f "$kvm_unit"
 credential_source="$HOME/.prime/agent/auth.json"
@@ -197,6 +218,8 @@ openshell --gateway spark-local settings set --global --key agent_policy_proposa
 
 cp -a "$repo/deploy/spark/container/." "$build_context/"
 install -d -m 0755 "$build_context/managed-skills"
+# The dependency-free lan-web-host client is installed into the owner's mounted
+# skill directory, not baked into these approved image layers.
 for skill in bmc-headless-browser bmc-html5-kvm ipmi-redfish-bmc prime-nvidia-catalog; do
   cp -a "$repo/deploy/spark/prime/skills/$skill" "$build_context/managed-skills/"
 done
@@ -233,3 +256,4 @@ sudo find /var/lib/prime-runner/.config/openshell -type f -exec chmod 0600 {} +
 sudo install -o prime-runner -g prime-runner -m 0400 "$repo/deploy/spark/openshell/image-digests.json" /var/lib/prime-runner/openshell-image-digests.json
 sudo -u prime-runner env HOME=/var/lib/prime-runner openshell --gateway spark-local status
 sudo systemctl enable --now prime-kvm-broker.service
+bash "$repo/deploy/spark/openshell/install-hosting.sh"
