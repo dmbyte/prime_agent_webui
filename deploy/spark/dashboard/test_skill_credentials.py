@@ -49,6 +49,29 @@ class VaultTests(unittest.TestCase):
         self.assertEqual(self.vault.view('alice', [self.req])[0]['status'], 'missing')
         self.assertEqual(self.vault.view('bob', [self.req])[0]['status'], 'saved')
 
+    def test_certificate_policy_defaults_off_and_is_owner_scoped(self):
+        self.save(); self.save('bob')
+        self.assertFalse(self.vault.view('alice', [self.req])[0]['ignoreCertificateErrors'])
+        before = self.vault._load('alice')[self.req['key']]['revision']
+        self.vault.change('alice', [self.req], {'action': 'save', 'key': self.req['key'],
+                          'values': {}, 'ignoreCertificateErrors': True})
+        self.assertTrue(self.vault.view('alice', [self.req])[0]['ignoreCertificateErrors'])
+        self.assertFalse(self.vault.view('bob', [self.req])[0]['ignoreCertificateErrors'])
+        self.assertNotEqual(before, self.vault._load('alice')[self.req['key']]['revision'])
+        self.save(username='', token='')  # Older clients preserve explicit choice.
+        self.assertTrue(self.vault.view('alice', [self.req])[0]['ignoreCertificateErrors'])
+        self.vault.change('alice', [self.req], {'action': 'save', 'key': self.req['key'],
+                          'values': {}, 'ignoreCertificateErrors': False})
+        self.assertFalse(self.vault.view('alice', [self.req])[0]['ignoreCertificateErrors'])
+        self.assertEqual(self.vault._load('alice')[self.req['key']]['values']['token'], 'PRIVATE_FIXTURE_ONLY')
+
+    def test_certificate_policy_rejects_truthy_non_booleans(self):
+        self.save()
+        for value in ('true', 1, None, [], {}):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                self.vault.change('alice', [self.req], {'action': 'save', 'key': self.req['key'],
+                                  'values': {}, 'ignoreCertificateErrors': value})
+
     def test_blank_preserves_and_replacement_survives_reload(self):
         self.save(); self.save(username='', token='replacement')
         another = credentials.Vault(self.vault.root)

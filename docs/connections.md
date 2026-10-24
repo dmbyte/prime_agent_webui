@@ -30,11 +30,13 @@ IPv4 HTTPS origin on port 443. It reads `/redfish/v1/Systems` and at most 16 dir
 members, rejecting pagination, external links, traversal and encoded paths.
 Use a read-only BMC account. No reset, boot override or write is implemented.
 
-TLS verification is mandatory. BMC certificates must chain to the host's trusted
-CA and contain the selected IP address in their subject alternative names. There
-is no ignore-certificate option, DNS target support or nonstandard-port support
-in this pilot. Install the appropriate CA/certificate through the separately
-reviewed host security workflow; do not weaken TLS to pass a test.
+TLS verification is on by default. BMC certificates normally must chain to the
+host's trusted CA and contain the selected IP address in their subject alternative
+names. An owner can explicitly select **Ignore certificate errors** for that saved
+credential in Settings. The direct transport honors it without changing other
+credentials or users; native OpenShell transport rejects unsupported exceptions
+without fallback. Read the [risk and lifecycle details](user-credentials.md).
+DNS targets and nonstandard ports remain unsupported. Prefer valid certificates.
 
 The broker does not use environment proxies, follow redirects, store cookies or
 return arbitrary upstream strings, headers, serial numbers or OEM payloads.

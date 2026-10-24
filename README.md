@@ -671,6 +671,12 @@ The WebUI provides a governed **Skills & tools** workflow:
    Project skills**. New project chats receive that selection as shared context.
    Administrators can later disable, re-enable, deny, or recoverably remove it.
 
+Each saved credential has an owner-only **Ignore certificate errors** checkbox,
+off by default. Direct HTTP and private browser adapters honor it; native
+OpenShell HTTP rejects unsupported exceptions without fallback. It skips expiry,
+hostname and CA checks, not network permissions, and risks credential interception.
+See [certificate policy and connection renewal](docs/user-credentials.md).
+
 This branch also adds **Settings → My credentials**, with per-user encrypted
 storage and fields declared by reviewed, enabled skills. Missing fields are
 shown automatically; users can save, replace or delete their own values without

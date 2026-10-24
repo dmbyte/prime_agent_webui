@@ -71,9 +71,18 @@ def main():
                         page.locator('#credentialSettings summary').click()
                         page.get_by_text('Required values missing', exact=True).wait_for()
                     alice.get_by_label('Token', exact=True).fill('SYNTHETIC_BROWSER_SECRET')
+                    assert not alice.get_by_label('Ignore certificate errors', exact=True).is_checked()
+                    alice.get_by_label('Ignore certificate errors', exact=True).check()
                     with alice.expect_response(lambda response: response.url.endswith('/auth/credentials') and response.request.method == 'POST') as saved:
                         alice.get_by_role('button', name='Save credentials', exact=True).click()
                     assert saved.value.status == 200, 'Synthetic credential save failed'
+                    alice.get_by_text('Saved · configure access in My connections', exact=True).wait_for()
+                    assert alice.get_by_label('Ignore certificate errors', exact=True).is_checked()
+                    assert not bob.get_by_label('Ignore certificate errors', exact=True).is_checked()
+                    alice.get_by_label('Ignore certificate errors', exact=True).uncheck()
+                    with alice.expect_response(lambda response: response.url.endswith('/auth/credentials') and response.request.method == 'POST') as reset:
+                        alice.get_by_role('button', name='Save credentials', exact=True).click()
+                    assert reset.value.status == 200
                     alice.get_by_text('Saved · configure access in My connections', exact=True).wait_for()
                     assert alice.get_by_label('Token', exact=True).input_value() == ''
                     assert 'SYNTHETIC_BROWSER_SECRET' not in alice.content()

@@ -2,12 +2,11 @@
 """Real Chromium/HTTPS and PTY tests; only temporary synthetic credentials.
 
 Requires playwright and cryptography. PRIME_TEST_CHROME selects a local browser.
-The test trusts only its ephemeral certificate's SPKI in its own browser. This
-test-only launch patch is never installed in a connection worker or task image.
+The test uses an expired self-signed certificate: strict mode must reject it,
+and only the saved-credential exception may permit the isolated test login.
 """
 import base64
 from datetime import datetime, timedelta, timezone
-import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import ipaddress
 import json
@@ -27,6 +26,7 @@ from cryptography.x509.oid import NameOID
 from playwright.sync_api import BrowserType
 from connection_browser_worker import Browser
 import connection_sol
+import connections
 
 SECRET = 'synthetic-console'
 
@@ -38,15 +38,13 @@ def main():
         subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, 'Prime synthetic console fixture')])
         now = datetime.now(timezone.utc)
         cert = (x509.CertificateBuilder().subject_name(subject).issuer_name(subject).public_key(key.public_key())
-            .serial_number(x509.random_serial_number()).not_valid_before(now-timedelta(minutes=1))
-            .not_valid_after(now+timedelta(hours=1))
+            .serial_number(x509.random_serial_number()).not_valid_before(now-timedelta(days=2))
+            .not_valid_after(now-timedelta(days=1))
             .add_extension(x509.SubjectAlternativeName([x509.IPAddress(ipaddress.ip_address('127.0.0.1')),
                                                        x509.DNSName('localhost')]), critical=False)
             .sign(key, hashes.SHA256()))
         (root/'key.pem').write_bytes(key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
         (root/'cert.pem').write_bytes(cert.public_bytes(serialization.Encoding.PEM))
-        spki = base64.b64encode(hashlib.sha256(key.public_key().public_bytes(serialization.Encoding.DER,
-                                           serialization.PublicFormat.SubjectPublicKeyInfo)).digest()).decode()
         events = []
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *_): pass
@@ -56,7 +54,9 @@ def main():
                 if cookie: self.send_header('Set-Cookie', 'session=synthetic-private-cookie; Secure; HttpOnly; SameSite=Strict')
                 self.end_headers(); self.wfile.write(raw)
             def do_GET(self):
-                if self.path == '/':
+                if self.path == '/data':
+                    self.answer(200, '{"fixture":true}', 'application/json')
+                elif self.path == '/':
                     self.answer(200, '''<input type=text><input type=password><button onclick="fetch('/login',{method:'POST',body:JSON.stringify({username:document.querySelector('input[type=text]').value,password:document.querySelector('input[type=password]').value})}).then(r=>{if(r.ok)location='/home'})">Log In</button>''')
                 elif self.path in ('/home', '/console') and 'session=synthetic-private-cookie' in self.headers.get('Cookie', ''):
                     canvas = '''<canvas width=640 height=360 tabindex=0></canvas><script>const c=document.querySelector('canvas'); c.getContext('2d').fillText('Synthetic boot screen',20,40); c.addEventListener('keydown',e=>fetch('/event',{method:'POST',body:JSON.stringify({key:e.key})}));</script>'''
@@ -78,12 +78,28 @@ def main():
         original_launch = BrowserType.launch
         def fixture_launch(browser_type, **options):
             options['executable_path'] = os.environ.get('PRIME_TEST_CHROME', '/usr/bin/chromium')
-            options['args'] += ['--ignore-certificate-errors-spki-list='+spki]
             return original_launch(browser_type, **options)
         try:
+            https_init = connections.http.client.HTTPSConnection.__init__
+            def fixture_https(instance, host, port, **options):
+                https_init(instance, '127.0.0.1', server.server_port, **options)
+            with mock.patch.object(connections.http.client.HTTPSConnection, '__init__', fixture_https):
+                for ignored in (False, True, False):
+                    try:
+                        data = connections.get_json('https://127.0.0.1', '/data', {}, ignore_certificate_errors=ignored)
+                    except ssl.SSLCertVerificationError:
+                        assert not ignored
+                    else:
+                        assert ignored and data == {'fixture': True}
             with mock.patch.object(BrowserType, 'launch', fixture_launch):
+                try:
+                    strict = Browser({'kind': 'browser', 'endpoint': f'https://127.0.0.1:{server.server_port}', 'username': 'fixture', 'password': SECRET})
+                except Exception as error:
+                    assert 'ERR_CERT' in str(error), 'Strict browser failed for a non-certificate reason'
+                else:
+                    strict.close(); raise AssertionError('Strict browser accepted invalid certificate')
                 for kind in ('browser', 'kvm'):
-                    payload = {'kind': kind, 'endpoint': f'https://127.0.0.1:{server.server_port}', 'username': 'fixture', 'password': SECRET}
+                    payload = {'kind': kind, 'endpoint': f'https://127.0.0.1:{server.server_port}', 'username': 'fixture', 'password': SECRET, 'ignoreCertificateErrors': True}
                     browser = Browser(payload)
                     try:
                         assert payload == {}, 'Login payload retained'
@@ -106,7 +122,7 @@ def main():
                     finally: browser.close()
         finally:
             server.shutdown(); server.server_close(); thread.join()
-        print('PASS: real HTTPS login/capture, isolated cookie, KVM input, cross-origin denial and login-screen withholding')
+        print('PASS: direct/browser strict TLS rejection and per-credential exception, login/capture, isolated cookie, KVM input, cross-origin denial and login-screen withholding')
 
     # An actual PTY process replaces ipmitool only inside this synthetic test.
     child = "import os,sys,time; print('boot '+os.environ['IPMI_PASSWORD']+' ready',flush=True); v=sys.stdin.buffer.read(1); print('key accepted',flush=True); time.sleep(30)"

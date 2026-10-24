@@ -18,6 +18,30 @@ values; nonblank entries replace them. Saved values are never displayed or sent
 back to the browser. Delete removes the local record, not the credential at the
 remote service. Rotate/revoke a compromised credential at that service too.
 
+Each credential also has **Ignore certificate errors**, off by default. This is
+an owner-scoped encrypted setting, not a global switch or a field supplied by the
+agent. It skips certificate expiry, hostname and CA-chain validation for direct
+HTTP connections and the staged private browser/KVM adapters. An impersonating
+server could receive your credentials; use it only for an endpoint you trust on
+a controlled network. It does not enable old TLS protocols, weak ciphers, HTTP
+downgrades, redirects or access to another target. Some obsolete servers can
+still fail their TLS handshake.
+The checkbox and direct-transport support are live on the reference Spark.
+The private browser/KVM implementation is tested but remains runtime-disabled.
+
+Save with the checkbox selected or cleared; blank password fields retain the
+existing values. Changing this setting changes the credential revision and
+invalidates existing grants/sessions. Renew the corresponding My connections
+entry and start a new task. Existing records default to verification; older
+clients that omit the setting preserve your saved choice. No existing account's
+setting is automatically enabled by an update.
+
+Prime's native OpenShell HTTP adapter does not implement this exception: it
+rejects the request clearly before creating a provider and never silently falls
+back to direct transport. The inspected proxy verifies upstream TLS independently
+of its worker. IPMI/SOL does not use TLS, so this setting does not affect it.
+Tools not integrated with saved credentials are not changed by this setting.
+
 Disabling/removing a skill removes its active requirements. Existing saved entries
 remain as inactive, delete-only records so users can clean them up. Changes to a
 declaration create a new requirement rather than silently reusing old secrets.

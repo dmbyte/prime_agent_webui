@@ -28,7 +28,7 @@ class Browser:
             self.playwright = sync_playwright().start()
             self.browser = self.playwright.chromium.launch(executable_path='/usr/bin/chromium', headless=True, env=env,
                 args=['--disable-dev-shm-usage', '--disable-gpu', '--no-zygote', '--no-first-run', '--no-default-browser-check'], timeout=30000)
-            self.context = self.browser.new_context(ignore_https_errors=False, accept_downloads=False,
+            self.context = self.browser.new_context(ignore_https_errors=request.get('ignoreCertificateErrors') is True, accept_downloads=False,
                 service_workers='block', viewport={'width': 1280, 'height': 720})
             # Guard every navigation, subresource and WebSocket, including redirects
             # and popup requests. The native network policy is a second boundary.

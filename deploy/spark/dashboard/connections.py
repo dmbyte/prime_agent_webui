@@ -25,6 +25,11 @@ CONSOLE_ADAPTERS = {'bmc-browser': ['browser.open', 'browser.capture', 'browser.
                     'bmc-kvm': ['kvm.open', 'kvm.capture', 'kvm.input', 'kvm.close'],
                     'ipmi-sol': ['ipmi.status', 'sol.open', 'sol.read', 'sol.input', 'sol.close']}
 ADAPTERS.update(CONSOLE_ADAPTERS)
+
+
+class UnsupportedCertificatePolicy(ValueError):
+    """Fixed public error; never contains upstream data or credential values."""
+
 TASK = re.compile(r'[a-f0-9]{32}')
 CONNECTION = re.compile(r'c_[a-f0-9]{32}')
 PROJECT = re.compile(r'p_[a-f0-9]{24}')
@@ -257,6 +262,7 @@ class Connections:
         if record.get('revision', record.get('updatedAt')) != row['credentialRevision']:
             raise PermissionError('Saved credentials changed; renew this connection')
         values = record.get('values', {})
+        ignore_certificate_errors = record.get('ignoreCertificateErrors') is True
         deadline = time.monotonic()+90
         def still_authorized():
             self.verify(request['token'], expected_owner)
@@ -267,12 +273,17 @@ class Connections:
             if time.monotonic() >= deadline:
                 raise ValueError('Connection operation timed out')
             still_authorized()
-            return (transport or get_json)(*args)
+            return transport(*args) if transport else get_json(*args, ignore_certificate_errors=ignore_certificate_errors)
         if row['adapter'] in CONSOLE_ADAPTERS:
             if self.sessions is None:
                 raise PermissionError('Private console runtime is not activated')
-            result = self.sessions.dispatch(request, expected_owner, claim, row, values)
+            result = self.sessions.dispatch(request, expected_owner, claim, row,
+                                            dict(values, ignoreCertificateErrors=ignore_certificate_errors))
         elif self.native is not None and transport is None:
+            if ignore_certificate_errors:
+                # The inspected proxy verifies upstream TLS, independently of the
+                # worker. Do not silently bypass it or change every user's policy.
+                raise UnsupportedCertificatePolicy()
             with self.native.lease(row, values, min(claim['expiresAt'], row['expiresAt'])) as lease:
                 def native_transport(*args):
                     if time.monotonic() >= deadline:
@@ -292,10 +303,14 @@ class Connections:
         return result
 
 
-def get_json(origin, path, headers):
+def get_json(origin, path, headers, *, ignore_certificate_errors=False):
     """Direct TLS only: no environment proxies, redirects, cookies or retries."""
     host = urllib.parse.urlsplit(origin).hostname
-    connection = http.client.HTTPSConnection(host, 443, timeout=10, context=ssl.create_default_context())
+    context = ssl.create_default_context()
+    if ignore_certificate_errors is True:
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+    connection = http.client.HTTPSConnection(host, 443, timeout=10, context=context)
     try:
         connection.request('GET', path, headers={'Accept': 'application/json', 'User-Agent': 'Prime-Connections/1', **headers})
         response = connection.getresponse()

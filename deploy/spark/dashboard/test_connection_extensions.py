@@ -103,6 +103,22 @@ class ConsoleTests(unittest.TestCase):
                     'operation': 'github.repository', 'arguments': {'repository': 'example/demo'}}, 'alice')
             direct.assert_not_called()
 
+    def test_private_browser_receives_saved_policy_not_task_override(self):
+        self.configure('bmc-browser')
+        self.call('browser.open')
+        self.assertIs(self.factory.call_args.args[2]['ignoreCertificateErrors'], False)
+        self.manager.vault.change('alice', [self.req], {'action': 'save', 'key': self.req['key'],
+                                  'values': {}, 'ignoreCertificateErrors': True})
+        self.manager.sessions.reap()
+        self.worker.close.assert_called_once()
+        self.manager.change('alice', dict(self.body, id=self.key))
+        self.manager.revoke(fixtures.TASK)
+        self.token = self.manager.issue('alice', fixtures.TASK, fixtures.PROJECT, fixtures.POLICY)
+        self.call('browser.open')
+        self.assertIs(self.factory.call_args.args[2]['ignoreCertificateErrors'], True)
+        with self.assertRaises(ValueError):
+            self.call('browser.open', {'requestId': 'b'*32, 'ignoreCertificateErrors': True})
+
     def configure(self, adapter='ipmi-sol'):
         patch = mock.patch.dict(os.environ, {'PRIME_CONNECTION_CONSOLES_ENABLED': '1'})
         patch.start(); self.addCleanup(patch.stop)

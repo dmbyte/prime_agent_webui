@@ -54,6 +54,8 @@ class Handler(BaseHTTPRequestHandler):
             result = self.server.manager.dispatch(body, self.headers.get('X-Prime-Connection-Owner', ''))
             task_id = body['token'].split('.')[0]
             status = 200
+        except connections.UnsupportedCertificatePolicy:
+            status, result = 400, {'error': 'Prime native OpenShell HTTP does not support this credential certificate exception. Use verified TLS or ask the administrator about direct transport; no fallback was attempted.'}
         except PermissionError:
             pass
         except (ValueError, TypeError, KeyError, AttributeError, RecursionError):

@@ -6,6 +6,11 @@ reference Spark.** Existing read-only GitHub/Redfish connections still use the
 direct host transport. No production service, model, task, user session, normal
 browser, or persistent KVM session was restarted for this staging work.
 
+Subsequently, the per-user certificate checkbox and direct-transport support were
+activated while idle. Matching connection modules are installed, but native HTTP
+and private console flags remain off. Only auth and the direct broker restarted;
+no task was interrupted and no saved exception was enabled automatically.
+
 ## Native OpenShell HTTP transport
 
 `PRIME_CONNECTION_HTTP_TRANSPORT=openshell` on the connection broker selects
@@ -24,6 +29,9 @@ in argv or a profile file. The worker receives an opaque placeholder. For Basic
 authentication the provider holds the encoded username/password pair, and the
 proxy substitutes it in the Authorization header. TLS verification remains on;
 redirects, cookies, arbitrary methods/URLs and raw error returns are disallowed.
+Prime's native adapter rejects a saved **Ignore certificate errors** policy before
+creating any provider; it does not silently switch transport or disable proxy
+inspection. Direct host transport supports this owner-selected exception.
 The same bounded summary filters remain at the host broker. Grants are checked
 before every read and again before returning results.
 
@@ -70,9 +78,14 @@ remain in the isolated worker; capture/input responses never expose storage,
 cookies, page source, arbitrary script, arbitrary selectors or request APIs.
 
 Network policy pins Chromium to the exact BMC IP and TCP 443. This is an opaque
-TLS transport, not native HTTP secret substitution; Chromium must independently
-verify the BMC certificate. Its trust store must trust the CA and the certificate
-must match the selected IP. No ignore-TLS setting is offered. HTTP requests,
+TLS transport, not native HTTP secret substitution; Chromium independently
+verifies the BMC certificate by default. Its trust store must trust the CA and the
+certificate must match the selected IP unless the owner explicitly saved
+**Ignore certificate errors** for this credential. Only the trusted broker passes
+that encrypted setting to the private browser; a task cannot set it. Changing
+the setting revokes existing grants/sessions and requires connection renewal.
+This bypasses expiry, hostname and CA checks, risking credential interception;
+it does not enable obsolete protocols or ciphers. HTTP requests,
 redirects, subresources, popup/frame access and WebSockets are restricted to that
 same HTTPS/WSS origin. Service workers and downloads are disabled.
 
@@ -200,14 +213,15 @@ delete sandboxes or roll back OpenShell just to disable these adapters.
 
 - `scripts/validate-release.sh`: authorization, no-fallback, lifecycle, closed
   command/operation schemas, redaction and approval replay unit regressions.
-  All 360 tests (335 dashboard and 25 managed-skill tests) passed locally and
-  from a clean source export on the reference Spark.
+  All 364 tests pass locally and in clean Spark export, including saved certificate
+  policy owner/default/revision/transport/session coverage.
 - `validate-credentials-ui.py`: real browser/HTTP, two-user separation, project
   settings, CSRF, human action approval and repeated-decision rejection.
 - `validate-private-console.py`: real HTTPS/Chromium login, cookies, capture,
   cross-origin denial, canvas keys and PTY lifecycle, using local synthetic data.
-  Its certificate SPKI exception is test-only, never a production bypass. It has
-  also passed inside the actual pinned Linux OpenShell network-operations image.
+  Uses an expired self-signed test certificate: strict direct/browser requests
+  must fail, and only the explicit per-credential exception permits login. Origin
+  restrictions still apply. Also runs in the pinned Linux network-operations image.
 - On the Spark, explicitly opt into the synthetic public echo test:
 
   ```sh
@@ -229,9 +243,10 @@ delete sandboxes or roll back OpenShell just to disable these adapters.
 Passing fixtures is not proof of iLO firmware compatibility, actual provider
 permissions or internal certificate trust. The first approved live target check
 found no matching saved login and rejected its weak, expired certificate before
-sending credentials. Save credentials through Settings, never chat; repair the
-target certificate in a separately approved maintenance window, not by disabling
-TLS verification. Real-target tests, complete matched console-service validation,
+sending credentials. The owner subsequently recovered the login into Settings.
+Prefer certificate repair in a separately approved window; an explicit saved
+certificate exception is now available for direct/private-browser adapters.
+No exception is enabled automatically. Real-target tests, complete matched console-service validation,
 and idle-window activation remain explicit deployment gates.
 OAuth refresh, MCP serving and richer vendor-specific console adapters remain
 future work; no cloud vault or cloud credential transfer has been added.

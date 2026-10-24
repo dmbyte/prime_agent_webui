@@ -77,6 +77,29 @@ class ConnectionTests(unittest.TestCase):
             with self.subTest(owner=owner), self.assertRaises((ValueError, PermissionError)):
                 self.manager.dispatch(request, owner)
 
+    def test_certificate_policy_is_saved_only_and_revokes_previous_grants(self):
+        request = {'token': self.token, 'action': 'call', 'connection': self.key,
+                   'operation': 'github.repository', 'arguments': {'repository': 'example/demo'}}
+        with self.assertRaises(ValueError):
+            self.manager.dispatch(dict(request, ignoreCertificateErrors=True), 'alice')
+        with mock.patch.object(connections, 'get_json', return_value={'private': True}) as transport:
+            self.manager.dispatch(request, 'alice')
+            self.assertIs(transport.call_args.kwargs['ignore_certificate_errors'], False)
+            self.manager.vault.change('alice', [self.req], {'action': 'save', 'key': self.req['key'],
+                                      'values': {}, 'ignoreCertificateErrors': True})
+            with self.assertRaises(PermissionError): self.manager.dispatch(request, 'alice')
+            self.manager.change('alice', dict(self.body, id=self.key))
+            self.manager.revoke(TASK)
+            request['token'] = self.manager.issue('alice', TASK, PROJECT, POLICY)
+            self.manager.dispatch(request, 'alice')
+            self.assertIs(transport.call_args.kwargs['ignore_certificate_errors'], True)
+            self.manager.native = mock.Mock()
+            transport.reset_mock()
+            with self.assertRaises(connections.UnsupportedCertificatePolicy):
+                self.manager.dispatch(request, 'alice')
+            self.manager.native.lease.assert_not_called()
+            transport.assert_not_called()
+
     def test_task_expiry_stop_owner_project_change_and_account_disable_denied(self):
         for changes in ({'status': 'completed'}, {'owner': 'bob'}, {'projectId': None}):
             original = dict(self.meta['tasks'][TASK]); self.meta['tasks'][TASK].update(changes); self.save_meta()

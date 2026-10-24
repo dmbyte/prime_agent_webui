@@ -204,7 +204,8 @@ class Vault:
                 fields = [dict(field, configured=bool(stored.get('values', {}).get(field['id']))) for field in req['fields']]
                 complete = all(field['configured'] for field in fields if field['required'])
                 rows.append(dict(req, fields=fields, status='saved' if stored and complete else 'missing',
-                                 updatedAt=stored.get('updatedAt'), runtimeAvailable=False))
+                                 updatedAt=stored.get('updatedAt'), runtimeAvailable=False,
+                                 ignoreCertificateErrors=stored.get('ignoreCertificateErrors') is True))
             # Allow removal after disabling/removing a skill, but never resaving an inactive grant.
             active = {row['key'] for row in requirements}
             for key, stored in saved.items():
@@ -214,8 +215,10 @@ class Vault:
             return rows
 
     def change(self, owner, requirements, body):
-        if not isinstance(body, dict) or set(body) - {'action', 'key', 'values'}:
+        if not isinstance(body, dict) or set(body) - {'action', 'key', 'values', 'ignoreCertificateErrors'}:
             raise ValueError('Invalid credential request')
+        if 'ignoreCertificateErrors' in body and (body.get('action') != 'save' or type(body['ignoreCertificateErrors']) is not bool):
+            raise ValueError('Certificate setting must be true or false on a save request')
         key, action = body.get('key'), body.get('action')
         if not isinstance(key, str) or not re.fullmatch(r'[a-f0-9]{64}', key):
             raise ValueError('Invalid credential reference')
@@ -242,6 +245,7 @@ class Vault:
                 if any(not previous.get(f['id']) for f in req['fields'] if f['required']):
                     raise ValueError('Complete all required credential fields')
                 saved[key] = {'values': previous, 'label': req['label'], 'skillName': req['skillName'], 'updatedAt': int(time.time()),
+                              'ignoreCertificateErrors': body.get('ignoreCertificateErrors', saved.get(key, {}).get('ignoreCertificateErrors') is True),
                               'revision': secrets.token_hex(16)}
             else:
                 raise ValueError('Unsupported credential action')

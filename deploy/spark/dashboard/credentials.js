@@ -53,6 +53,12 @@
       input.setAttribute('aria-label', field.label);
       fields.set(field.id, input); label.append(input); box.append(label);
     }
+    const certificate = document.createElement('input'); certificate.type = 'checkbox';
+    certificate.checked = row.ignoreCertificateErrors === true;
+    certificate.setAttribute('aria-label', 'Ignore certificate errors');
+    const certificateLabel = el('label', 'Ignore certificate errors'); certificateLabel.prepend(certificate);
+    certificateLabel.hidden = row.status === 'inactive'; box.append(certificateLabel);
+    if (row.status !== 'inactive') box.append(el('p', 'Off by default. Applies only to this saved credential when used by a supported connection adapter. Bypasses expiry, hostname and trust checks, so an impersonating server could receive your password. Does not change TLS globally or grant access. Prime’s native OpenShell HTTP adapter does not support this exception; IPMI/SOL does not use TLS. Saving changes requires renewing existing connections.', 'muted'));
     const actions = el('div', '', 'dialog-actions');
     const save = el('button', 'Save credentials'); save.type = 'button';
     save.hidden = row.status === 'inactive';
@@ -64,7 +70,7 @@
       // Remove typed secrets from the DOM on submission, including failed requests.
       for (const input of fields.values()) input.value = '';
       try {
-        await request({action, key: row.key, ...(action === 'save' ? {values} : {})});
+        await request({action, key: row.key, ...(action === 'save' ? {values, ignoreCertificateErrors: certificate.checked} : {})});
         await load();
       } catch (error) {status.textContent = error.message;}
       finally {for (const key of Object.keys(values)) values[key] = ''; save.disabled = remove.disabled = false;}
