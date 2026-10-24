@@ -1,10 +1,37 @@
-# Per-user skill credential setup
+# Per-user target and skill credentials
+
+## Reusable target logins
+
+**Settings → My credentials → Add reusable BMC target** stores a named HTTPS
+target, username and password once. Under **My connections**, select that saved
+target, a compatible reviewed tool requirement and a project (or explicitly all
+your chats). Repeat for another tool: browser, KVM and Redfish references use the
+same encrypted credential record, not separate password copies. Only adapters
+enabled by the administrator can run; saving a target grants no task access.
+
+Each connection still has independent enablement, expiry, project scope and
+reviewed operations. Disabling a skill removes its access, without destroying
+the target used by other tools. Password, target or certificate-policy changes
+invalidate **all** connections/sessions referring to that credential; renew the
+desired connections and start a new task. Deletion likewise revokes every
+reference. One credential cannot silently authenticate to a different endpoint.
+
+Existing skill-specific entries remain usable. **Create reusable target from
+this login** explicitly imports an active user-wide BMC login into one named
+target; the original is preserved, no grants are created, and its certificate
+choice is retained. Project-only records cannot be promoted to user-wide access.
+Future tool grants reference this one target; imports do not link later changes
+back to legacy entries. Nothing is migrated automatically by the installer.
+This is per-user reuse, not credential sharing between accounts. Target name and
+address are visible to the owner; usernames/passwords are never returned.
+
+## Skill-specific requirements
 
 This branch adds **Settings → My credentials**. Saving is not automatic runtime
 credential injection. A separately gated **My connections** pilot can consume
 reviewed GitHub/Redfish requirements through bounded local read-only operations.
-The read-only pilot is activated on the reference Spark. Additional isolated
-browser/KVM/IPMI/SOL and native OpenShell HTTP paths are staged, not activated;
+The read-only pilot and isolated browser/KVM adapters are activated on the
+reference Spark. IPMI/SOL and native OpenShell HTTP paths remain disabled;
 see [connection extensions](connection-extensions.md). Other tools still show
 **tool integration pending**. See [connections](connections.md).
 Do not claim a connection is tested or operational merely because it is Saved.
@@ -21,13 +48,13 @@ remote service. Rotate/revoke a compromised credential at that service too.
 Each credential also has **Ignore certificate errors**, off by default. This is
 an owner-scoped encrypted setting, not a global switch or a field supplied by the
 agent. It skips certificate expiry, hostname and CA-chain validation for direct
-HTTP connections and the staged private browser/KVM adapters. An impersonating
+HTTP connections and the private browser/KVM adapters. An impersonating
 server could receive your credentials; use it only for an endpoint you trust on
 a controlled network. It does not enable old TLS protocols, weak ciphers, HTTP
 downgrades, redirects or access to another target. Some obsolete servers can
 still fail their TLS handshake.
 The checkbox and direct-transport support are live on the reference Spark.
-The private browser/KVM implementation is tested but remains runtime-disabled.
+The private browser/KVM adapters are enabled with an explicit adapter allowlist.
 
 Save with the checkbox selected or cleared; blank password fields retain the
 existing values. Changing this setting changes the credential revision and
@@ -84,7 +111,7 @@ never live task-writable skill files. The managed skill installer publishes
 requirements in its metadata inventory; NVIDIA catalog manifests can carry the
 same schema. Built-in BMC setup declarations are supplied separately in
 `deploy/spark/prime/managed-credential-requirements.json`, without changing pinned
-task images. Browser/KVM declarations remain setup-only. The management declaration
+task images. Browser/KVM declarations require explicit grants. The management declaration
 now advertises the `redfish-readonly` adapter; it does not enable IPMI/SOL,
 browser login or server mutations. Adding this reviewed adapter changes the
 requirement identity: old values become inactive and are not silently reused.

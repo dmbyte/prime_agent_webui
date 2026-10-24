@@ -71,7 +71,7 @@ USAGE_CACHE = {}
 USAGE_CACHE_LOCK = threading.Lock()
 MESSAGE_CACHE = {}
 MESSAGE_CACHE_LOCK = threading.Lock()
-META_LOCK = threading.Lock()
+META_LOCK = threading.RLock()
 LEDGER_LOCK = threading.Lock()
 EXECUTION_GRANTS = {}
 EXECUTION_GRANT_LOCK = threading.Lock()
@@ -388,23 +388,32 @@ def skill_catalog(user=None, admin=False):
 
 
 def installed_skill_inventory(user):
-    """Owner-scoped, metadata-only index published by the managed installer."""
-    index = legacy.HOME / ".prime/agent/skill-inventory.json"
-    payload = legacy.read_json(index, {})
-    if payload.get("owner") != user:
+    """Explicit shared distribution index plus this user's personal inventory."""
+    root = legacy.HOME / '.prime/agent'
+    if not re.fullmatch(r'[A-Za-z0-9_.-]{2,32}', str(user)):
         return []
+    index = root/'skill-inventories'/f'{user}.json'
+    if not index.exists(): index = root/'skill-inventory.json'
+    personal = legacy.read_json(index, {})
+    payloads = [(personal, False)] if personal.get('owner') == user else []
+    shared = root/'global-skill-inventory.json'
+    if shared.exists() or shared.is_symlink():
+        payload = json.loads(credential_declarations._read(shared))
+        if payload.get('version') != 1 or payload.get('scope') != 'global' or not re.fullmatch(r'[a-f0-9]{64}', str(payload.get('generation', ''))):
+            raise ValueError('Invalid shared skill inventory')
+        payloads.append((payload, True))
     rows = []
-    for row in payload.get("skills", []):
-        if not isinstance(row, dict):
-            continue
-        skill_id, slug = str(row.get("id", "")), str(row.get("slug", ""))
-        if not re.fullmatch(r"(?:managed|nvidia):[a-z0-9][a-z0-9-]*", skill_id) or not re.fullmatch(r"[a-z0-9][a-z0-9-]*", slug):
-            continue
-        rows.append({"id": skill_id, "name": str(row.get("name", ""))[:80],
-                     "slug": slug, "description": str(row.get("description", ""))[:1000],
-                     "source": "NVIDIA catalog" if skill_id.startswith("nvidia:") else "Installed Prime skill",
-                     "status": "installed", "enabled": True, "scope": "personal"})
-    return rows
+    for payload, global_scope in payloads:
+        for row in payload.get("skills", []):
+            if not isinstance(row, dict): continue
+            skill_id, slug = str(row.get("id", "")), str(row.get("slug", ""))
+            if not re.fullmatch(r"(?:managed|nvidia):[a-z0-9][a-z0-9-]*", skill_id) or not re.fullmatch(r"[a-z0-9][a-z0-9-]*", slug): continue
+            rows.append({"id": skill_id, "name": str(row.get("name", ""))[:80],
+                         "slug": slug, "description": str(row.get("description", ""))[:1000],
+                         "source": "NVIDIA catalog" if skill_id.startswith("nvidia:") else "Installed Prime skill",
+                         "status": "installed", "enabled": True, "scope": "global" if global_scope else "personal",
+                         **({'runtimePrefix': 'shared-skills/'+payload['generation']+'/'} if global_scope else {})})
+    return list({row['id']: row for row in rows}.values())
 
 
 def available_project_skills(user, project_id=None):
@@ -812,6 +821,15 @@ def update_project(project_id, payload, user=INITIAL_ADMIN, role="user"):
     return {"id": project_id, **current, "conversationCount": count}
 
 
+def add_project_skill(payload, user, role='user'):
+    if not isinstance(payload, dict) or set(payload) != {'projectId', 'skillId'}:
+        raise ValueError('Choose a project and an installed skill')
+    with META_LOCK:
+        project = require_project(payload['projectId'], user)
+        ids = normalize_skill_ids(list(project.get('skillIds', []))+[payload['skillId']], user, payload['projectId'])
+        return update_project(payload['projectId'], {'skillIds': ids}, user, role)
+
+
 def related_conversation_file_ids(session_id, user, data=None):
     data = data or metadata()
     row = data.get("conversations", {}).get(session_id, {})
@@ -926,7 +944,7 @@ def project_context(project_id, user):
               and (enabled[value].get("scope") != "project" or enabled[value].get("projectId") == project_id)]
     if skills:
         sections.append("Project-selected skills (use when relevant; NVIDIA catalog entries load on demand):\n" +
-                        "\n".join(f"- {row['name']}: /home/prime/.prime/agent/"
+                        "\n".join(f"- {row['name']}: /home/prime/.prime/agent/{row.get('runtimePrefix', '')}"
                                   f"{'catalogs/nvidia/skills' if row['id'].startswith('nvidia:') else 'skills'}/{row['slug']}/SKILL.md"
                                   for row in skills))
     if not sections:
@@ -2811,7 +2829,7 @@ class Handler(legacy.Handler):
                 self.send_json(200, {"files": rows, "usedBytes": sum(row["sizeBytes"] for row in rows), "limitBytes": legacy.MAX_UPLOAD_STORAGE_BYTES})
             elif path == "/api/skills":
                 user = self.request_user()
-                self.send_json(200, {"skills": skill_catalog(user), "available": available_project_skills(user), "toolProfiles": tool_inventory()})
+                self.send_json(200, {"skills": skill_catalog(user), "available": available_project_skills(user), "projects": project_catalog(user), "toolProfiles": tool_inventory()})
             elif path == "/api/files/content":
                 file = upload_path(query.get("id", [""])[0], self.request_user())
                 if file.stat().st_size > 10 * 1024 * 1024:
@@ -2857,6 +2875,7 @@ class Handler(legacy.Handler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         v2 = {"/api/tasks/extend", "/api/settings", "/api/skills", "/api/tasks/start", "/api/tasks/stop", "/api/tasks/message", "/api/tasks/authorization", "/api/conversations/update", "/api/conversations/delete", "/api/conversations/duplicate", "/api/conversations/promote", "/api/projects/create", "/api/projects/update", "/api/projects/delete", "/api/files/delete", "/api/admin/restart", "/api/admin/retention", "/api/admin/update", "/api/admin/sandboxes", "/api/admin/user-cache", "/api/admin/routing-rules", "/api/admin/skills", "/api/providers/configure", "/api/files/upload"}
+        v2.add('/api/projects/skills')
         if path not in v2:
             if not csrf_ok(self.headers):
                 self.send_json(403, {"error": "CSRF validation failed"})
@@ -2891,6 +2910,8 @@ class Handler(legacy.Handler):
                 self.send_json(200, {"settings": legacy.save_settings(payload)})
             elif path == "/api/skills":
                 self.send_json(201, {"skill": request_skill(payload, user)})
+            elif path == '/api/projects/skills':
+                self.send_json(200, {'project': add_project_skill(payload, user, role)})
             elif path == "/api/providers/configure":
                 self.require_admin()
                 self.send_json(200, configure_provider(payload))

@@ -64,6 +64,25 @@ retention limitations, and activation without interrupting active tasks.
 
 ## New users and storage recovery
 
+The reviewed shared-skill publisher stores versioned packages at
+`/usr/local/share/prime-agent/shared-skills` (root-owned). The runner's
+`shared_skills.py` copies the current generation into each user's own Prime agent
+volume at next launch and registers the five bundled skills plus the lazy NVIDIA
+catalog. Existing personal names are preserved; explicit project selections use
+the generation-qualified path. Never share an administrator's mutable skill tree.
+
+Run `deploy/spark/prime/install-skills.sh` with its pinned clean NVIDIA checkout
+to publish all 371 entries on first setup. Later `--inventory-only` updates
+refresh bundled packages and preserve an already-published NVIDIA catalog; they
+do not promote a private user's old catalog into global state. A first multi-user
+upgrade from an older install should run the pinned skill installer or the
+operator-only `install-managed-skills.py --publish-shared-only --owner USER
+--bundled PATH --nvidia-source CLEAN_PINNED_CHECKOUT` while idle.
+The protected metadata index makes installed skills discoverable to all WebUI
+accounts, without exposing anyone's personal uploaded skill inventory.
+`validate-shared-skill-runtime.py` tests a fresh ordinary-user task and selected
+package reads with isolated synthetic metadata and no BMC/network access.
+
 The installer registers existing users' volumes; first task launch now handles
 new accounts too. `runner_launch.py` prepares the protected owner directories,
 initializes missing managed instructions and cache/tool folders, waits for the

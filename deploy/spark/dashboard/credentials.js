@@ -29,7 +29,7 @@
     group.id = 'credentialSettings';
     const summary = el('summary', 'My credentials');
     const body = el('div', '', 'collapsible-body');
-    body.append(el('p', 'Private to your login. Enabled, reviewed skills declare the fields shown here. Saved values cannot be displayed; blank fields preserve existing values.', 'muted'));
+    body.append(el('p', 'Private to your login. Save a named BMC target once, then let compatible reviewed tools reference it through My connections. Passwords cannot be displayed; blank fields preserve existing values.', 'muted'));
     body.append(el('p', 'Saving does not grant tool access. Bind reviewed requirements in My connections below. Private browser/KVM and IPMI/SOL require separate administrator activation and validation.', 'muted'));
     const refresh = el('button', 'Refresh requirements'); refresh.type = 'button';
     refresh.onclick = load;
@@ -42,7 +42,14 @@
     const box = el('div', '', 'settings-card credential-card');
     box.append(el('strong', `${row.skillName} · ${row.label}`));
     box.append(el('p', row.description || '', 'muted'));
-    const status = el('p', row.status === 'saved' ? (row.adapter ? 'Saved · configure access in My connections' : 'Saved · tool integration pending') : row.status === 'inactive' ? 'Inactive requirement · delete stored values if no longer needed' : 'Required values missing');
+    if (row.endpoint) box.append(el('p', row.endpoint, 'muted'));
+    let targetName;
+    if (row.kind === 'bmc-target') {
+      const label = el('label', 'Target name'); targetName = document.createElement('input');
+      targetName.value = row.label; targetName.maxLength = 80; targetName.setAttribute('aria-label', 'Target name');
+      label.append(targetName); box.append(label);
+    }
+    const status = el('p', row.status === 'saved' ? (row.adapter || row.kind === 'bmc-target' ? 'Saved · configure access in My connections' : 'Saved · tool integration pending') : row.status === 'inactive' ? 'Inactive requirement · delete stored values if no longer needed' : 'Required values missing');
     status.setAttribute('role', 'status'); box.append(status);
     const fields = new Map();
     for (const field of row.fields) {
@@ -70,7 +77,9 @@
       // Remove typed secrets from the DOM on submission, including failed requests.
       for (const input of fields.values()) input.value = '';
       try {
-        await request({action, key: row.key, ...(action === 'save' ? {values, ignoreCertificateErrors: certificate.checked} : {})});
+        await request({action: action === 'save' && row.kind === 'bmc-target' ? 'save-target' : action, key: row.key,
+          ...(action === 'save' ? {values, ignoreCertificateErrors: certificate.checked,
+            ...(targetName ? {name: targetName.value} : {})} : {})});
         await load();
       } catch (error) {status.textContent = error.message;}
       finally {for (const key of Object.keys(values)) values[key] = ''; save.disabled = remove.disabled = false;}
@@ -78,13 +87,46 @@
     save.onclick = () => run('save');
     remove.onclick = () => {if (confirm('Delete your saved values for this connection? This does not revoke the credential at its provider.')) run('delete');};
     actions.append(save, remove); box.append(actions);
+    if (row.status === 'saved' && ['redfish-readonly', 'bmc-browser', 'bmc-kvm', 'ipmi-sol'].includes(row.adapter) && row.scope !== 'project') {
+      const reuse = el('button', 'Create reusable target from this login'); reuse.type = 'button';
+      reuse.onclick = async () => {
+        const name = prompt('Name for this saved target (the original entry stays unchanged):'); if (!name) return;
+        reuse.disabled = true;
+        try {await request({action: 'save-target', name, sourceKey: row.key}); await load();}
+        catch (error) {status.textContent = error.message; reuse.disabled = false;}
+      };
+      box.append(reuse);
+    }
     return box;
+  }
+  function newTarget() {
+    const box = el('details', '', 'settings-card'); box.append(el('summary', 'Add reusable BMC target'));
+    box.append(el('p', 'Save one target, username and password. Each tool still needs its own explicit connection grant; saving alone grants no access.', 'muted'));
+    const form = el('form'), fields = {};
+    for (const [key, title] of [['name', 'Target name'], ['endpoint', 'Target HTTPS origin'], ['username', 'Username'], ['password', 'Password']]) {
+      const label = el('label', title), input = document.createElement('input');
+      input.type = key === 'password' ? 'password' : 'text'; input.required = true;
+      input.autocomplete = 'off'; input.setAttribute('aria-label', title); input.maxLength = key === 'name' ? 80 : 8192;
+      label.append(input); form.append(label); fields[key] = input;
+    }
+    const status = el('p'), save = el('button', 'Save target'); save.type = 'submit';
+    form.append(el('p', 'Certificate verification is on by default. You can change it on the saved target.', 'muted'), save, status);
+    form.onsubmit = async event => {
+      event.preventDefault(); save.disabled = true;
+      const values = Object.fromEntries(['endpoint', 'username', 'password'].map(k => [k, fields[k].value]));
+      fields.password.value = '';
+      try {await request({action: 'save-target', name: fields.name.value, values}); await load();}
+      catch (error) {status.textContent = error.message; save.disabled = false;}
+      finally {for (const key of Object.keys(values)) values[key] = '';}
+    };
+    box.append(form); return box;
   }
   async function load() {
     const list = section(); if (!list) return;
     list.replaceChildren(el('p', 'Loading credential requirements…', 'muted'));
     try {
       const data = await request(); list.replaceChildren();
+      list.append(newTarget());
       for (const row of data.credentials) list.append(card(row));
       if (!data.credentials.length) list.append(el('p', 'No enabled skills currently declare credential requirements.', 'muted'));
     } catch (error) {list.replaceChildren(el('p', error.message, 'muted'));}
@@ -103,7 +145,9 @@
       for (const [id, text] of rows) {const option = el('option', text); option.value = id; field.append(option);}
       field.value = value || rows[0]?.[0] || ''; label.append(field); form.append(label); return field;
     };
-    const req = select('Reviewed credential requirement', data.requirements.filter(r => r.saved).map(r => [r.key, `${r.skillName} · ${r.label}`]), current.credentialKey);
+    const sources = data.credentials || data.requirements.filter(r => r.saved).map(r => ({key: r.key, label: `${r.skillName} · ${r.label}`, adapters: [r.adapter], requirementKey: r.key}));
+    const source = select('Saved target or credential', sources.map(r => [r.key, `${r.label}${r.endpoint ? ' · '+r.endpoint : ''}`]), current.credentialKey);
+    const req = select('Reviewed credential requirement', [], '');
     const project = select('Allow use in', [['', 'All my chats (explicit user-wide grant)'], ...data.projects.map(p => [p.id, p.name])], current.projectId);
     const target = input('Approved BMC HTTPS IPv4 origin', 'text', current.adapter && current.adapter !== 'github-readonly' ? current.endpoint : '');
     target.placeholder = 'https://192.168.1.20';
@@ -111,12 +155,25 @@
     const enabled = input('Enable this connection', 'checkbox', ''); enabled.checked = current.enabled !== false;
     const refreshFields = () => {
       const requirement = data.requirements.find(r => r.key === req.value);
+      const credential = sources.find(r => r.key === source.value);
+      if (credential?.kind === 'bmc-target') target.value = credential.endpoint;
+      target.readOnly = credential?.kind === 'bmc-target';
       target.parentElement.hidden = !requirement || requirement.adapter === 'github-readonly';
       target.required = !!requirement && requirement.adapter !== 'github-readonly';
       project.disabled = !!requirement?.projectId;
       if (requirement?.projectId) project.value = requirement.projectId;
     };
-    req.onchange = refreshFields; refreshFields();
+    const refreshRequirements = () => {
+      const credential = sources.find(r => r.key === source.value), previous = req.value;
+      req.replaceChildren();
+      for (const r of data.requirements.filter(r => credential?.adapters.includes(r.adapter) && (!credential.requirementKey || credential.requirementKey === r.key))) {
+        const option = el('option', `${r.skillName} · ${r.label}`); option.value = r.key; req.append(option);
+      }
+      const wanted = previous || current.requirementKey || current.credentialKey;
+      if ([...req.options].some(o => o.value === wanted)) req.value = wanted;
+      refreshFields();
+    };
+    req.onchange = refreshFields; source.onchange = () => {refreshRequirements(); save.disabled = !req.options.length;}; refreshRequirements();
     form.append(el('p', 'Saving invalidates existing task grants; new tasks receive the new grant. Credential access does not authorize publishing, rebooting or trading. SOL opening and console input require separate exact-action approval below.', 'muted'));
     const status = el('p', '', 'muted'); status.setAttribute('role', 'status');
     const save = el('button', current.id ? 'Save connection changes' : 'Add connection'); save.type = 'submit'; save.disabled = !req.options.length;
@@ -124,7 +181,7 @@
     form.onsubmit = async event => {
       event.preventDefault(); save.disabled = true;
       try {
-        await request({action: 'save', ...(current.id ? {id: current.id} : {}), name: name.value, credentialKey: req.value,
+        await request({action: 'save', ...(current.id ? {id: current.id} : {}), name: name.value, credentialKey: source.value, requirementKey: req.value,
           projectId: project.value || null, endpoint: target.value, enabled: enabled.checked,
           expiresAt: Math.floor(Date.now()/1000) + Number(expiry.value)*86400}, '/auth/connections');
         await loadConnections();
@@ -142,7 +199,7 @@
     const body = group.querySelector('.collapsible-body');
     try {
       const data = await request(null, '/auth/connections'); body.replaceChildren();
-      body.append(el('p', data.runtimeEnabled ? `Read-only runtime enabled. Private console runtime ${data.consoleRuntimeEnabled ? 'enabled' : 'staged/disabled'}. Connections are scoped to your account and project. Saved does not mean tested.` : 'Staged setup: runtime access is disabled. Saving here does not activate services or interrupt tasks.', 'muted'));
+      body.append(el('p', data.runtimeEnabled ? `Read-only runtime enabled. Private adapters: ${data.consoleAdapters?.length ? data.consoleAdapters.join(', ') : 'staged/disabled'}. Connections are scoped to your account and project. Saved does not mean tested.` : 'Staged setup: runtime access is disabled. Saving here does not activate services or interrupt tasks.', 'muted'));
       const refresh = el('button', 'Refresh connections'); refresh.type = 'button'; refresh.onclick = loadConnections; body.append(refresh);
       const approvals = el('div'); approvals.id = 'connectionApprovals'; body.append(approvals);
       renderApprovals(data.consoleApprovals || []);
@@ -159,7 +216,7 @@
         };
         box.append(remove); body.append(box);
       }
-      if (!data.requirements.some(r => r.saved)) body.append(el('p', 'Save credentials for a reviewed connection requirement first.', 'muted'));
+      if (!data.credentials?.length && !data.requirements.some(r => r.saved)) body.append(el('p', 'Save a reusable target or credentials for a reviewed requirement first.', 'muted'));
       body.append(connectionForm(data));
     } catch (error) {body.replaceChildren(el('p', error.message, 'muted'));}
   }

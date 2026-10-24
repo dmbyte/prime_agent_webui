@@ -17,6 +17,15 @@ import time
 MANIFEST = 'credential-requirements.json'
 LOCK = threading.RLock()
 ID = re.compile(r'[a-z][a-z0-9_-]{0,63}')
+BMC_ADAPTERS = {'redfish-readonly', 'bmc-browser', 'bmc-kvm', 'ipmi-sol'}
+
+
+def target_requirement(key, record):
+    """Fixed trusted schema, independent of any installed skill declaration."""
+    return dict(key=key, label=record['label'], skillName='Saved target', kind='bmc-target',
+                description='One target login, reusable by compatible reviewed tools.',
+                fields=[dict(id=name, label=label, required=True) for name, label in
+                        [('endpoint', 'Target HTTPS origin'), ('username', 'Username'), ('password', 'Password')]])
 
 
 def declarations(value):
@@ -71,7 +80,8 @@ def read_manifest(path):
 
 
 def requirement_id(skill, declaration):
-    # A schema change requires resaving; never reuse secrets across skill IDs.
+    # Legacy skill records remain declaration-bound. Reuse requires an explicit
+    # saved target and separate reviewed connection grants, never key aliasing.
     content = json.dumps([skill, declaration], sort_keys=True, separators=(',', ':'))
     return hashlib.sha256(content.encode()).hexdigest()
 
@@ -210,11 +220,19 @@ class Vault:
             active = {row['key'] for row in requirements}
             for key, stored in saved.items():
                 if key not in active:
-                    rows.append({'key': key, 'label': stored['label'], 'skillName': stored['skillName'],
-                                 'fields': [], 'status': 'inactive', 'runtimeAvailable': False})
+                    if stored.get('kind') == 'bmc-target':
+                        req = target_requirement(key, stored)
+                        rows.append(dict(req, fields=[dict(f, configured=True) for f in req['fields']],
+                                         status='saved', runtimeAvailable=False, endpoint=stored['values']['endpoint'],
+                                         ignoreCertificateErrors=stored.get('ignoreCertificateErrors') is True))
+                    else:
+                        rows.append({'key': key, 'label': stored['label'], 'skillName': stored['skillName'],
+                                     'fields': [], 'status': 'inactive', 'runtimeAvailable': False})
             return rows
 
     def change(self, owner, requirements, body):
+        if isinstance(body, dict) and body.get('action') == 'save-target':
+            return self.save_target(owner, requirements, body)
         if not isinstance(body, dict) or set(body) - {'action', 'key', 'values', 'ignoreCertificateErrors'}:
             raise ValueError('Invalid credential request')
         if 'ignoreCertificateErrors' in body and (body.get('action') != 'save' or type(body['ignoreCertificateErrors']) is not bool):
@@ -251,6 +269,53 @@ class Vault:
                 raise ValueError('Unsupported credential action')
             self._save(owner, saved)
         return {'saved': action == 'save', 'deleted': action == 'delete'}
+
+    def save_target(self, owner, requirements, body):
+        if set(body) - {'action', 'key', 'name', 'sourceKey', 'values', 'ignoreCertificateErrors'}:
+            raise ValueError('Invalid target credential request')
+        from connections import endpoint
+        name = body.get('name')
+        if not isinstance(name, str) or not 1 <= len(name.strip()) <= 80 or any(ord(c) < 32 for c in name):
+            raise ValueError('Target name must be 1-80 printable characters')
+        if 'ignoreCertificateErrors' in body and type(body['ignoreCertificateErrors']) is not bool:
+            raise ValueError('Certificate setting must be true or false')
+        key = body.get('key') or secrets.token_hex(32)
+        if not isinstance(key, str) or not re.fullmatch(r'[a-f0-9]{64}', key):
+            raise ValueError('Invalid target reference')
+        with LOCK:
+            saved = self._load(owner)
+            old = saved.get(key, {})
+            if body.get('key') and old.get('kind') != 'bmc-target':
+                raise ValueError('Saved target not found')
+            if not old and sum(r.get('kind') == 'bmc-target' for r in saved.values()) >= 64:
+                raise ValueError('At most 64 saved targets per user')
+            source = body.get('sourceKey')
+            if source:
+                # Explicit owner migration only; no task or cross-owner credential reuse.
+                if old:
+                    raise ValueError('Cannot import over an existing target')
+                req = next((r for r in requirements if r['key'] == source and
+                            r.get('adapter') in BMC_ADAPTERS and r.get('scope') != 'project'), None)
+                if not req or source not in saved:
+                    raise ValueError('Select an active user-wide BMC credential')
+                old = saved[source]
+            values = body.get('values', {})
+            if not isinstance(values, dict) or set(values) - {'endpoint', 'username', 'password'}:
+                raise ValueError('Invalid target fields')
+            merged = dict(old.get('values', {}))
+            for field, value in values.items():
+                if not isinstance(value, str) or len(value.encode()) > 8192 or '\x00' in value:
+                    raise ValueError('Invalid target field value')
+                if value:
+                    merged[field] = value
+            if any(not merged.get(f) for f in ('endpoint', 'username', 'password')):
+                raise ValueError('Complete all target credential fields')
+            merged['endpoint'] = endpoint(merged['endpoint'])
+            saved[key] = dict(kind='bmc-target', values=merged, label=name.strip(), skillName='Saved target',
+                              updatedAt=int(time.time()), revision=secrets.token_hex(16),
+                              ignoreCertificateErrors=body.get('ignoreCertificateErrors', old.get('ignoreCertificateErrors') is True))
+            self._save(owner, saved)
+        return {'key': key, 'saved': True, 'deleted': False}
 
     def delete_owner(self, owner):
         # Prevent a subsequently recreated username from inheriting old secrets.

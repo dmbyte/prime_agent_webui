@@ -19,7 +19,7 @@ class BrowserSession:
             'read_only': ['/usr', '/lib', '/etc', '/proc', '/opt/prime-kernel'],
             'read_write': ['/tmp', '/dev/null', '/dev/urandom', '/dev/random', '/dev/shm']},
             'landlock': {'compatibility': 'hard_requirement'},
-            'network_policies': {'bmc': {'endpoints': [{'host': host, 'port': 443, 'protocol': 'tcp',
+            'network_policies': {'bmc': {'endpoints': [{'host': host, 'port': 443,
                 'tls': 'skip', 'allowed_ips': [host+'/32']}], 'binaries': [{'path': '/usr/lib/chromium/chromium'}]}}}
         self.policy_path = runtime.root/(name+'.policy.json')
         credentials._write(runtime.root/(name+'.json'), json.dumps({'expiresAt': expiry}).encode())

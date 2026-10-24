@@ -59,6 +59,7 @@ required=(
   deploy/spark/systemd/prime-volume-provisioner.service
   deploy/spark/container/runner_client.py
   deploy/spark/container/runner_launch.py
+  deploy/spark/container/shared_skills.py
   deploy/spark/container/runner_recover.py
   deploy/spark/systemd/prime-model-gateway.service
   deploy/spark/systemd/prime-runner-broker.service

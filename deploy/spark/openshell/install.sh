@@ -120,7 +120,7 @@ sudo find "$owner_agent/sessions" "$owner_agent/trash" "$owner_agent/project-sou
 sudo install -d -o root -g root -m 0755 /usr/local/lib/prime-runner /usr/local/libexec
 sudo install -o root -g root -m 0644 "$repo/deploy/spark/container/task_common.py" "$repo/deploy/spark/container/model_gateway.py" "$repo/deploy/spark/container/openshell_runner.py" "$repo/deploy/spark/container/kvm_broker.py" /usr/local/lib/prime-runner/
 sudo install -o root -g root -m 0644 "$repo/deploy/spark/container/inference_policy.py" /usr/local/lib/prime-runner/
-sudo install -o root -g root -m 0644 "$repo/deploy/spark/container/volume_provisioner.py" "$repo/deploy/spark/prime/AGENTS.managed.md" /usr/local/lib/prime-runner/
+sudo install -o root -g root -m 0644 "$repo/deploy/spark/container/volume_provisioner.py" "$repo/deploy/spark/container/shared_skills.py" "$repo/deploy/spark/prime/AGENTS.managed.md" /usr/local/lib/prime-runner/
 volume_unit=$(mktemp)
 sed -e "s/@WEB_OWNER@/${USER}/g" "$repo/deploy/spark/systemd/prime-volume-provisioner.service" >"$volume_unit"
 printf '\n[Service]\nEnvironment="PRIME_RUNNER_WORKSPACE_ROOT=%s"\n' "$workspace_root" >>"$volume_unit"

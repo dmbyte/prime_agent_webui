@@ -8,6 +8,7 @@ from unittest import mock
 
 import connection_approvals
 import connection_browser_worker
+import connection_browser
 import connection_native
 import connection_sessions
 import connection_sol
@@ -17,6 +18,35 @@ import test_connections as fixtures
 
 
 class NativeTests(unittest.TestCase):
+    def test_browser_policy_uses_ip_pinned_connect_not_dns_only_tcp(self):
+        runtime=mock.Mock()
+        with tempfile.TemporaryDirectory() as directory:
+            runtime.root=Path(directory)
+            runtime.image.return_value='fixture-image'
+            with mock.patch.object(connection_browser.subprocess,'Popen',side_effect=RuntimeError('stop after policy')):
+                with self.assertRaises(RuntimeError):
+                    connection_browser.BrowserSession(runtime,'pc-'+'1'*16,
+                        {'endpoint':'https://192.168.1.4','username':'fixture','password':'synthetic'},'browser',time.time()+60)
+            call=runtime.run.call_args.args[0]
+            self.assertIn('--policy',call)
+            # cleanup removes the policy file, so intercept its write to inspect.
+        source=Path(connection_browser.__file__).read_text()
+        self.assertNotIn("'protocol': 'tcp'",source)
+        self.assertIn("'tls': 'skip'",source)
+        self.assertIn("'allowed_ips': [host+'/32']",source)
+        worker=Path(connection_browser_worker.__file__).read_text()
+        self.assertIn("os.environ.get('HTTPS_PROXY')",worker)
+        self.assertIn("'proxy': {'server': proxy}",worker)
+
+    def test_private_browser_activation_does_not_enable_ipmi(self):
+        with mock.patch.dict(os.environ, {'PRIME_CONNECTION_CONSOLES_ENABLED':'1',
+                                         'PRIME_CONNECTION_CONSOLE_ADAPTERS':'bmc-browser,bmc-kvm'}):
+            self.assertTrue(connections.permitted({'adapter':'bmc-browser'},fixtures.POLICY))
+            self.assertTrue(connections.permitted({'adapter':'bmc-kvm'},fixtures.POLICY))
+            self.assertFalse(connections.permitted({'adapter':'ipmi-sol'},fixtures.POLICY))
+        with mock.patch.dict(os.environ, {'PRIME_CONNECTION_CONSOLES_ENABLED':'1','PRIME_CONNECTION_CONSOLE_ADAPTERS':'unknown'}):
+            with self.assertRaises(ValueError): connections.console_adapters()
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)

@@ -1,9 +1,10 @@
 # Read-only local connections — opt-in pilot
 
-This page describes the deployed read-only path. The next implementation adds
-opt-in native HTTP substitution and isolated console adapters, still staged:
-see [connection extensions](connection-extensions.md). Those flags default off;
-the existing direct read-only service remains in use on the reference Spark.
+This page describes the deployed direct read-only path. Private browser/KVM
+adapters are also enabled on the reference Spark; native HTTP substitution and
+IPMI/SOL remain disabled. See [connection extensions](connection-extensions.md).
+One [saved target](user-credentials.md#reusable-target-logins) may supply several
+independently scoped reviewed tool connections without copying its password.
 
 This is the first implementation stage of trusted per-user credential consumption.
 It was **activated on the reference Spark on October 24, 2026**, after checking

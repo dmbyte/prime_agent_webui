@@ -1,15 +1,18 @@
-# Native HTTP and private console connections — staged
+# Native HTTP and private console connections
 
-The original proposal's **item 2 (trusted local connection service) is live**.
-**Item 3 is implemented and tested in isolated staging, not activated on the
-reference Spark.** Existing read-only GitHub/Redfish connections still use the
-direct host transport. No production service, model, task, user session, normal
-browser, or persistent KVM session was restarted for this staging work.
+The reference Spark enables the trusted local read-only service and private
+**browser/KVM** adapters. Native OpenShell HTTP substitution and **IPMI/SOL remain
+disabled**. Existing GitHub/Redfish reads use direct host transport. Browser/KVM
+activation was performed while all users and sandboxes were idle, restarting only
+auth, dashboard API and the connection broker. No model, gateway or task-runner
+restart, password migration, new task grant or automatic TLS exception occurred.
 
-Subsequently, the per-user certificate checkbox and direct-transport support were
-activated while idle. Matching connection modules are installed, but native HTTP
-and private console flags remain off. Only auth and the direct broker restarted;
-no task was interrupted and no saved exception was enabled automatically.
+A reusable saved target can supply multiple reviewed tool connections without
+duplicating passwords. Each connection retains its own project scope, operations
+and expiry. See [reusable targets](user-credentials.md#reusable-target-logins).
+Synthetic private sandbox login/capture, owner isolation, strict TLS rejection,
+saved exception, rotation revocation and cleanup passed under the hardened unit.
+Actual BMC firmware/login compatibility remains unverified.
 
 ## Native OpenShell HTTP transport
 
@@ -54,6 +57,9 @@ isolation-first, not a low-latency pooled transport.
 All require Network operations, LAN/Full access, tools enabled, the original
 task's owner/project/revision-bound capability, and the separate
 `PRIME_CONNECTION_CONSOLES_ENABLED=1` activation gate.
+Set `PRIME_CONNECTION_CONSOLE_ADAPTERS=bmc-browser,bmc-kvm` on auth, API and broker
+to enable only those adapters. Without the allowlist, the legacy gate includes
+all console adapters; use an explicit list for a partial rollout.
 
 | Reviewed adapter | Operations | Additional human approval |
 |---|---|---|
@@ -88,6 +94,12 @@ This bypasses expiry, hostname and CA checks, risking credential interception;
 it does not enable obsolete protocols or ciphers. HTTP requests,
 redirects, subresources, popup/frame access and WebSockets are restricted to that
 same HTTPS/WSS origin. Service workers and downloads are disabled.
+
+For OpenShell 0.1.5, use an endpoint with `tls: skip`, the exact IP `/32`, port
+443 and the Chromium executable restriction, **without `protocol: tcp`**.
+Native TCP rules reject IP literals. Chromium is explicitly configured to use
+OpenShell's injected HTTPS proxy; omitting this breaks sandbox egress. The real
+private-worker canary, not only a direct browser fixture, covers this boundary.
 
 The initial conservative login adapter recognizes one visible username text
 field, one password field and an unambiguous Log In/Sign In button. KVM additionally
@@ -176,16 +188,19 @@ one to stage files while users are working. Work from a separate source export.
 
    ```ini
    [Service]
-   Environment=PRIME_CONNECTION_HTTP_TRANSPORT=openshell
+   Environment=PRIME_CONNECTION_HTTP_TRANSPORT=direct
    Environment=PRIME_CONNECTION_CONSOLES_ENABLED=1
+   Environment=PRIME_CONNECTION_CONSOLE_ADAPTERS=bmc-browser,bmc-kvm
    Environment=PRIME_CONNECTION_IMAGE_MANIFEST=/absolute/protected/connection-images.json
    ReadWritePaths=%h/.config/prime-agent/connection-runtime
    ReadWritePaths=%h/.config/prime-agent/connection-approvals
    ReadWritePaths=%h/.config/openshell/gateways/spark-local
    TasksMax=96
+   KillMode=control-group
    ```
 
-   Choose `direct` and/or leave consoles at `0` when enabling only one path.
+   These are the reference deployment choices. Select `openshell` only after
+   separately validating/approving native HTTP; leave consoles at `0` to disable.
    The OpenShell client directory exception is required because the CLI writes
    and removes its `last_sandbox` selection. Do not make the vault writable by
    this service. Preserve `ProtectHome=read-only`, `ProtectSystem=strict`,
@@ -195,8 +210,9 @@ one to stage files while users are working. Work from a separate source export.
    **auth and dashboard API** so Settings and new-task grant issuance agree with
    the broker. Existing tasks never gain new connections. The gateway and runner
    capability channel is unchanged. Publish reviewed managed declarations only
-   when ready; changed browser/KVM requirement IDs require users to resave and
-   re-consent. Older encrypted records remain removable; no silent migration.
+   when ready; changed browser/KVM requirement IDs require explicit new grants.
+   Users can select one reusable target instead of saving values per requirement.
+   Older encrypted records remain removable; no silent migration.
 7. Pass the tests below, then verify an approved real read-only BMC login/status
    request with the target's actual certificate and firmware. Do not reboot,
    change boot settings or send input as a connection test. Explicitly approve
@@ -213,7 +229,7 @@ delete sandboxes or roll back OpenShell just to disable these adapters.
 
 - `scripts/validate-release.sh`: authorization, no-fallback, lifecycle, closed
   command/operation schemas, redaction and approval replay unit regressions.
-  All 364 tests pass locally and in clean Spark export, including saved certificate
+  All 393 tests pass locally and in clean Spark export, including saved certificate
   policy owner/default/revision/transport/session coverage.
 - `validate-credentials-ui.py`: real browser/HTTP, two-user separation, project
   settings, CSRF, human action approval and repeated-decision rejection.
@@ -222,6 +238,12 @@ delete sandboxes or roll back OpenShell just to disable these adapters.
   Uses an expired self-signed test certificate: strict direct/browser requests
   must fail, and only the explicit per-credential exception permits login. Origin
   restrictions still apply. Also runs in the pinned Linux network-operations image.
+- `validate-private-browser.py`: explicit synthetic LAN fixture and the actual
+  isolated OpenShell browser session, including a reusable target, invalid TLS,
+  owner checks, rotation/revocation and cleanup. Run `--serve` only on an unused
+  private IP TCP 443; run `--client` with a separate protected state directory and
+  deployed image manifest. Stop the fixture server afterward. Never point this
+  synthetic client at an actual BMC or the production lease journal.
 - On the Spark, explicitly opt into the synthetic public echo test:
 
   ```sh
@@ -246,8 +268,10 @@ found no matching saved login and rejected its weak, expired certificate before
 sending credentials. The owner subsequently recovered the login into Settings.
 Prefer certificate repair in a separately approved window; an explicit saved
 certificate exception is now available for direct/private-browser adapters.
-No exception is enabled automatically. Real-target tests, complete matched console-service validation,
-and idle-window activation remain explicit deployment gates.
+No exception is enabled automatically. Matched service activation and synthetic
+private-worker validation are complete; a separately authorized real-target
+login/status test remains outstanding. Other installations still require their
+own idle-window activation and checks.
 OAuth refresh, MCP serving and richer vendor-specific console adapters remain
 future work; no cloud vault or cloud credential transfer has been added.
 

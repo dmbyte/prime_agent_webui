@@ -133,6 +133,44 @@ def main():
                     for path in (home/'skill-vault').iterdir():
                         assert b'SYNTHETIC_BROWSER_SECRET' not in path.read_bytes()
                     print('PASS: real browser credential and project-scoped connection save/delete, blank secret inputs, metadata-only responses, staged status and two-user isolation')
+                    # Same target login backs two independently reviewed tool grants.
+                    for adapter in ('bmc-browser', 'bmc-kvm'):
+                        meta['skills']['s_'+adapter] = dict(owner='alice', status='installed', enabled=True,
+                            name=adapter, credentialRequirements=[dict(id='bmc', label=adapter, adapter=adapter,
+                            fields=[dict(id=x, label=x) for x in ('endpoint','username','password')])])
+                    (agent/'webui-metadata.json').write_text(json.dumps(meta))
+                    alice.get_by_role('button', name='Refresh requirements').click()
+                    alice.get_by_text('Add reusable BMC target', exact=True).click()
+                    create = alice.locator('details.settings-card').filter(has=alice.get_by_text('Add reusable BMC target', exact=True))
+                    create.get_by_label('Target name', exact=True).fill('Reusable fixture')
+                    create.get_by_label('Target HTTPS origin', exact=True).fill('https://192.168.1.20')
+                    create.get_by_label('Username', exact=True).fill('fixture')
+                    create.get_by_label('Password', exact=True).fill('SYNTHETIC_TARGET_SECRET')
+                    create.get_by_role('button', name='Save target', exact=True).click()
+                    alice.get_by_text('Saved target · Reusable fixture', exact=True).wait_for()
+                    for adapter in ('bmc-browser', 'bmc-kvm'):
+                        form = alice.locator('#connectionSettings form').last
+                        form.get_by_label('Connection name', exact=True).fill(adapter+' fixture')
+                        form.get_by_label('Saved target or credential', exact=True).select_option(label='Reusable fixture · https://192.168.1.20')
+                        form.get_by_label('Reviewed credential requirement', exact=True).select_option(label=adapter+' · '+adapter)
+                        form.get_by_label('Allow use in', exact=True).select_option(project_id)
+                        assert form.get_by_label('Approved BMC HTTPS IPv4 origin', exact=True).input_value() == 'https://192.168.1.20'
+                        form.get_by_role('button', name='Add connection', exact=True).click()
+                        alice.get_by_text(adapter+' fixture', exact=True).wait_for()
+                    data = alice.evaluate("async()=>await (await fetch('/auth/connections')).json()")
+                    assert len(data['connections']) == 2
+                    keys = {r['credentialKey'] for r in data['connections']}; assert len(keys) == 1
+                    assert 'SYNTHETIC_TARGET_SECRET' not in json.dumps(data) and 'SYNTHETIC_TARGET_SECRET' not in alice.content()
+                    assert len(original_manager(home, home).vault._load('alice')) == 1
+                    bob_data = bob.evaluate("async()=>await (await fetch('/auth/connections')).json()")
+                    assert not bob_data['credentials'] and not bob_data['connections']
+                    target = alice.locator('.credential-card').filter(has=alice.get_by_text('Saved target · Reusable fixture', exact=True))
+                    target.get_by_label('Ignore certificate errors', exact=True).check()
+                    target.get_by_role('button', name='Save credentials', exact=True).click()
+                    alice.get_by_text('Saved target · Reusable fixture', exact=True).wait_for()
+                    data = alice.evaluate("async()=>await (await fetch('/auth/connections')).json()")
+                    assert all(r['status'] == 'unavailable' for r in data['connections'])
+                    print('PASS: one saved target, two project-scoped tool grants, shared TLS setting, rotation revokes both, no secret readback or cross-user access')
                 finally: browser.close()
         finally:
             server.shutdown(); server.server_close(); worker.join()

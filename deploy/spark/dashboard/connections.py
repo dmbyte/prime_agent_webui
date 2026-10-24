@@ -74,11 +74,20 @@ def permitted(row, context):
         return False
     mode = context.get('networkMode', 'restricted')
     if row['adapter'] in CONSOLE_ADAPTERS:
-        return (os.environ.get('PRIME_CONNECTION_CONSOLES_ENABLED') == '1' and mode in ('lan', 'full')
+        return (row['adapter'] in console_adapters() and mode in ('lan', 'full')
                 and context.get('profile') == 'network-operations')
     return (row['adapter'] == 'github-readonly' and mode in ('internet', 'full') or
             row['adapter'] == 'redfish-readonly' and mode in ('lan', 'full')
             and context.get('profile') == 'network-operations')
+
+
+def console_adapters():
+    if os.environ.get('PRIME_CONNECTION_CONSOLES_ENABLED') != '1':
+        return set()
+    selected = set(os.environ.get('PRIME_CONNECTION_CONSOLE_ADAPTERS', ','.join(CONSOLE_ADAPTERS)).split(','))
+    if not selected <= CONSOLE_ADAPTERS.keys():
+        raise ValueError('Unsupported private console adapter selection')
+    return selected
 
 
 class Connections:
@@ -100,12 +109,16 @@ class Connections:
         return credentials.catalog(owner, self.home)
 
     def eligible(self, owner, row, project_id=None):
-        req = next((r for r in self.requirements(owner) if r['key'] == row['credentialKey']
+        req = next((r for r in self.requirements(owner) if r['key'] == row.get('requirementKey', row['credentialKey'])
                     and r.get('adapter') == row['adapter']), None)
         if not req or not row['enabled'] or row['expiresAt'] <= time.time():
             return False
         stored = self.vault._load(owner).get(row['credentialKey'], {})
         if not stored or stored.get('revision', stored.get('updatedAt')) != row['credentialRevision']:
+            return False
+        if row['credentialKey'] != req['key'] and (stored.get('kind') != 'bmc-target' or req['adapter'] not in credentials.BMC_ADAPTERS):
+            return False
+        if stored.get('kind') == 'bmc-target' and stored.get('values', {}).get('endpoint') != row['endpoint']:
             return False
         if row['projectId'] and row['projectId'] != project_id:
             return False
@@ -124,10 +137,17 @@ class Connections:
                 'requirements': [dict(key=r['key'], label=r['label'], skillName=r['skillName'], adapter=r['adapter'],
                                       saved=r['key'] in saved, projectId=r.get('projectId'))
                                  for r in requirements if r.get('adapter') in ADAPTERS],
+                'credentials': ([dict(key=key, label=record['label'], kind='bmc-target', endpoint=record['values']['endpoint'],
+                                      adapters=sorted(credentials.BMC_ADAPTERS))
+                                 for key, record in saved.items() if record.get('kind') == 'bmc-target'] +
+                                [dict(key=r['key'], label=r['skillName']+' · '+r['label'], kind='legacy',
+                                      adapters=[r['adapter']], requirementKey=r['key'])
+                                 for r in requirements if r.get('adapter') in ADAPTERS and r['key'] in saved]),
                 'projects': [{'id': key, 'name': row.get('name', key)} for key, row in self.metadata().get('projects', {}).items()
                              if row.get('owner') == owner],
                 'runtimeEnabled': os.environ.get('PRIME_CONNECTIONS_ENABLED') == '1',
                 'consoleRuntimeEnabled': os.environ.get('PRIME_CONNECTION_CONSOLES_ENABLED') == '1',
+                'consoleAdapters': sorted(console_adapters()),
                 'consoleApprovals': [dict(pending, endpoint=rows.get(pending['connection'], {}).get('endpoint'),
                                          name=rows.get(pending['connection'], {}).get('name'))
                                      for pending in Approvals(self.root).pending(owner)]}
@@ -138,7 +158,7 @@ class Connections:
             if set(body) != {'action', 'id', 'approve'}:
                 raise ValueError('Invalid console approval')
             return Approvals(self.root).decide(owner, body['id'], body['approve'], self)
-        if not isinstance(body, dict) or set(body) - {'action', 'id', 'name', 'credentialKey', 'projectId', 'endpoint', 'expiresAt', 'enabled'}:
+        if not isinstance(body, dict) or set(body) - {'action', 'id', 'name', 'credentialKey', 'requirementKey', 'projectId', 'endpoint', 'expiresAt', 'enabled'}:
             raise ValueError('Invalid connection request')
         key = body.get('id') or 'c_' + secrets.token_hex(16)
         if not isinstance(key, str) or not CONNECTION.fullmatch(key):
@@ -165,17 +185,23 @@ class Connections:
                 if project_id and (not isinstance(project_id, str) or not PROJECT.fullmatch(project_id)
                                   or self.metadata().get('projects', {}).get(project_id, {}).get('owner') != owner):
                     raise ValueError('Project not available')
-                req = next((r for r in self.requirements(owner) if r['key'] == body.get('credentialKey') and r.get('adapter') in ADAPTERS), None)
+                req = next((r for r in self.requirements(owner) if r['key'] == body.get('requirementKey', body.get('credentialKey')) and r.get('adapter') in ADAPTERS), None)
                 if not req or req.get('scope') == 'project' and req.get('projectId') != project_id:
                     raise ValueError('Reviewed credential requirement not available in this scope')
-                record = self.vault._load(owner).get(req['key'], {})
+                credential_key = body.get('credentialKey')
+                if not isinstance(credential_key, str):
+                    raise ValueError('Select a saved credential')
+                record = self.vault._load(owner).get(credential_key, {})
+                if credential_key != req['key'] and (record.get('kind') != 'bmc-target' or req['adapter'] not in credentials.BMC_ADAPTERS):
+                    raise ValueError('Saved credential is not compatible with this requirement')
                 stored = record.get('values', {})
                 if any(not stored.get(f['id']) for f in req['fields'] if f['required']):
                     raise ValueError('Save the required credentials first')
-                target = 'https://api.github.com' if req['adapter'] == 'github-readonly' else endpoint(body.get('endpoint'))
+                target = ('https://api.github.com' if req['adapter'] == 'github-readonly' else
+                          endpoint(body.get('endpoint') or (stored.get('endpoint') if record.get('kind') == 'bmc-target' else None)))
                 if req['adapter'] != 'github-readonly' and endpoint(stored.get('endpoint')) != target:
                     raise ValueError('Approved endpoint must match the saved credential endpoint')
-                rows[key] = dict(name=name.strip(), credentialKey=req['key'], adapter=req['adapter'], projectId=project_id,
+                rows[key] = dict(name=name.strip(), credentialKey=credential_key, requirementKey=req['key'], adapter=req['adapter'], projectId=project_id,
                                  endpoint=target, expiresAt=expiry, enabled=body.get('enabled', True), revision=secrets.token_hex(16),
                                  credentialRevision=record.get('revision', record.get('updatedAt')))
             else:

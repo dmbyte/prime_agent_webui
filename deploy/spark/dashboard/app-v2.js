@@ -80,7 +80,53 @@ function rebuildModelOptions(preferred){const select=$("model"),current=preferre
 function renderSettings(){const settings=state.settings;enabledProviders=new Set(settings.enabledProviders||[]);rebuildModelOptions(`${settings.provider}/${settings.model}`);$("thinking").value=settings.thinking;$("reserve").value=settings.reserveTokens;$("recent").value=settings.keepRecentTokens;$("settingsIdentity").textContent=state.identity?.user||"User";rangeLabels();renderProviders()}
 function ensureSkillUI(){if(!$("skillSettings")){const details=document.createElement("details");details.id="skillSettings";details.className="collapsible-group";details.dataset.collapseKey="settings-skills";details.innerHTML='<summary><span><strong>Skills &amp; tools</strong><small>Installed skills and administrator review</small></span></summary><div class="collapsible-body"><div class="skill-toolbar"><button id="requestSkill" class="primary" type="button">＋ Request skill archive</button></div><div id="skillList"></div><p class="muted">Installed skills can be selected directly in a project. New skill archives require review.</p></div>';const account=document.querySelector('[data-collapse-key="settings-account"]');account.parentNode.insertBefore(details,account);bindCollapsible(details,false);$("requestSkill").onclick=openSkillDialog}if(!$("projectSkillList")){const fieldset=document.createElement("fieldset");fieldset.innerHTML='<legend>Project skills</legend><p class="muted">Choose installed skills for every chat. NVIDIA skills remain lazy-loaded.</p><input id="projectSkillSearch" type="search" placeholder="Search installed and NVIDIA skills" aria-label="Search project skills"><div id="projectSkillList" class="project-source-list"></div>';const sources=$("projectSourceList").closest("fieldset");sources.parentNode.insertBefore(fieldset,sources)}}
 function skillStatusLabel(skill){return skill.status==="image-required"?"Sandbox image change required":skill.status.charAt(0).toUpperCase()+skill.status.slice(1)}
-async function loadSkills(){ensureSkillUI();const box=$("skillList");box.innerHTML='<p class="muted">Loading skills…</p>';try{const data=await request("/api/skills");box.replaceChildren();const available=document.createElement("p");available.className="muted";available.textContent=`${(data.available||[]).length} installed skills available for projects. Open a project's settings to search and select them.`;box.append(available);for(const skill of data.skills){const row=document.createElement("div");row.className="skill-row settings-card";row.innerHTML='<div><strong></strong><small></small><p></p></div><span class="status-pill"></span>';row.querySelector("strong").textContent=skill.name;row.querySelector("small").textContent=`${skill.scope}${skill.projectId?" · project":""} · ${skill.sourceHash.slice(0,12)}`;row.querySelector("p").textContent=[skill.description,skill.permissions.length?`Access: ${skill.permissions.join(", ")}`:"",skill.dependencies.length?`Dependencies: ${skill.dependencies.join(", ")}`:"",skill.reviewNote||""].filter(Boolean).join(" · ");const badge=row.querySelector(".status-pill");badge.textContent=skillStatusLabel(skill);badge.classList.toggle("healthy",skill.status==="installed"&&skill.enabled);box.append(row)}if(!data.skills.length){const empty=document.createElement("p");empty.className="muted";empty.textContent="No new skill requests yet.";box.append(empty)}}catch(error){box.innerHTML='<p class="muted"></p>';box.firstChild.textContent=error.message}}
+function renderInstalledSkills(data, box) {
+  const search=document.createElement('input'), list=document.createElement('div'), hint=document.createElement('p');
+  search.type='search'; search.placeholder='Search installed skills'; search.setAttribute('aria-label','Search installed skills');
+  hint.className='muted'; hint.textContent=`${(data.available||[]).length} installed skills. Shared skills are pre-approved: use them by name in chat or add them to a project. New archives still require administrator review.`;
+  box.append(hint,search,list);
+  const render=()=>{
+    list.replaceChildren(); const query=search.value.trim().toLowerCase();
+    const matching=(data.available||[]).filter(s=>`${s.name} ${s.description||''}`.toLowerCase().includes(query));
+    for(const skill of matching.slice(0,60)) {
+      const row=document.createElement('div'), title=document.createElement('strong'), description=document.createElement('p'), select=document.createElement('select'), add=document.createElement('button'), status=document.createElement('p');
+      row.className='settings-card installed-skill'; title.textContent=skill.name;
+      description.textContent=`${skill.scope==='global'?'Shared · pre-approved':skill.scope} · ${skill.description||''}`;
+      description.style.overflowWrap='anywhere'; status.setAttribute('role','status');
+      select.setAttribute('aria-label',`Project for ${skill.name}`);
+      for(const project of data.projects||[]) {
+        if(skill.scope==='project'&&skill.projectId!==project.id) continue;
+        const option=document.createElement('option'); option.value=project.id; option.textContent=project.name; select.append(option);
+      }
+      if(currentProject&&[...select.options].some(o=>o.value===currentProject)) select.value=currentProject;
+      add.type='button'; add.textContent='Add to project'; add.disabled=!select.options.length;
+      if(!select.options.length) status.textContent='Create a project first, or ask Prime to use this skill in chat.';
+      add.onclick=async()=>{
+        add.disabled=true;
+        try {await request('/api/projects/skills',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({projectId:select.value,skillId:skill.id})}); status.textContent='Added to project. Available on its next task.';}
+        catch(error){status.textContent=error.message;} finally{add.disabled=false;}
+      };
+      row.append(title,description,select,add,status); list.append(row);
+    }
+    if(matching.length>60) {const more=document.createElement('p'); more.textContent=`Showing 60 of ${matching.length}. Refine your search to find another skill.`; list.append(more);}
+    if(!matching.length) {const empty=document.createElement('p'); empty.textContent='No matching installed skills.'; list.append(empty);}
+  };
+  search.oninput=render; render();
+}
+async function loadSkills(){
+  ensureSkillUI(); const box=$("skillList"); box.textContent='Loading skills…';
+  try {
+    const data=await request('/api/skills'); box.replaceChildren(); renderInstalledSkills(data,box);
+    const heading=document.createElement('h4'); heading.textContent='Your archive requests'; box.append(heading);
+    for(const skill of data.skills) {
+      const row=document.createElement('div'), title=document.createElement('strong'), description=document.createElement('p');
+      row.className='settings-card'; title.textContent=`${skill.name} · ${skillStatusLabel(skill)}`;
+      description.textContent=[skill.description,skill.reviewNote,skill.permissions?.length?`Access: ${skill.permissions.join(', ')}`:'',skill.dependencies?.length?`Dependencies: ${skill.dependencies.join(', ')}`:''].filter(Boolean).join(' · ');
+      row.append(title,description); box.append(row);
+    }
+    if(!data.skills.length){const empty=document.createElement('p');empty.textContent='No new skill requests yet.';box.append(empty);}
+  } catch(error){box.textContent=error.message;}
+}
 function openSkillDialog(){const project=$("skillProject");project.innerHTML='<option value="">Personal skill (available to your projects)</option>';for(const row of state.projects||[]){const option=document.createElement("option");option.value=row.id;option.textContent=`Project · ${row.name}`;project.append(option)}if(currentProject)project.value=currentProject;$("skillRequestStatus").textContent="";$("skillRequestDialog").showModal();$("skillName").focus()}
 async function submitSkillRequest(event){event.preventDefault();const file=$("skillArchive").files[0];if(!file)return;$("skillRequestStatus").textContent="Uploading and validating…";try{const response=await fetch("/api/files/upload",{method:"POST",headers:{"Content-Type":"application/octet-stream","X-Prime-Dashboard":"1","X-Prime-CSRF":csrf(),"X-Prime-Filename":encodeURIComponent(file.name)},body:file}),uploaded=await response.json();if(!response.ok)throw Error(uploaded.error||"Skill upload failed");const lines=id=>$(id).value.split(/\r?\n/).map(value=>value.trim()).filter(Boolean),payload={name:$("skillName").value,description:$("skillDescription").value,sourceFileId:uploaded.file.id,projectId:$("skillProject").value||null,permissions:[...document.querySelectorAll('input[name="skillPermission"]:checked')].map(input=>input.value),dependencies:lines("skillDependencies"),systemTools:lines("skillSystemTools")};await request("/api/skills",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});$("skillRequestDialog").close();$("skillRequestForm").reset();await loadSkills()}catch(error){$("skillRequestStatus").textContent=error.message}}
 async function renderProjectSkills(selected=[]){ensureSkillUI();const box=$("projectSkillList"),search=$("projectSkillSearch");box.innerHTML='<p class="muted">Loading installed skills…</p>';search.value="";try{const data=await request("/api/skills");box.replaceChildren();for(const skill of data.available||[]){if(skill.scope==="project"&&skill.projectId!==editingProject?.id)continue;const label=document.createElement("label"),input=document.createElement("input"),span=document.createElement("span");input.type="checkbox";input.value=skill.id;input.checked=selected.includes(skill.id);span.textContent=`${skill.name} · ${skill.source||"Reviewed skill"} · ${skill.description||""}`;label.append(input,span);box.append(label)}search.oninput=()=>{const query=search.value.trim().toLowerCase();for(const label of box.querySelectorAll("label"))label.hidden=!!query&&!label.textContent.toLowerCase().includes(query)};if(!box.children.length)box.innerHTML='<p class="muted">No installed skills are available. Ask an administrator to install one.</p>'}catch(error){box.innerHTML='<p class="muted"></p>';box.firstChild.textContent=error.message}}

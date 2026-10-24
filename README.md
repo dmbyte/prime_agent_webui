@@ -656,6 +656,16 @@ registry and retained in a timestamped recovery directory during migration.
 
 The WebUI provides a governed **Skills & tools** workflow:
 
+Already-installed, reviewed distribution skills are searchable by **every user**
+in **Settings → Skills & tools**. Choose an owned project and **Add to project**;
+no ZIP upload or duplicate approval is required. The same list is available in
+Project settings. You can also ask for a skill by name in chat. The installer
+publishes five bundled skills plus the pinned 366-entry NVIDIA catalog; the
+runner copies this curated shared generation into each user's own task storage
+on their next launch. Personal skills are not shared or overwritten. NVIDIA
+entries remain lazy-loaded. Package availability does not grant network access,
+credentials, tools outside the selected profile or permission to mutate a BMC.
+
 1. A user opens **Settings → Skills & tools**, chooses **Request skill**, and
    uploads a ZIP containing exactly one `SKILL.md` at the archive root or inside
    one top-level directory. The request declares intended access, project
@@ -677,6 +687,12 @@ OpenShell HTTP rejects unsupported exceptions without fallback. It skips expiry,
 hostname and CA checks, not network permissions, and risks credential interception.
 See [certificate policy and connection renewal](docs/user-credentials.md).
 
+**Add reusable BMC target** saves a target/login once. Multiple reviewed tool
+connections can reference it, with independent project scope and permissions.
+Changing the shared login or certificate choice invalidates every referring
+connection; no passwords are duplicated per tool. Existing skill-specific entries
+are preserved and may be explicitly imported into a reusable target.
+
 This branch also adds **Settings → My credentials**, with per-user encrypted
 storage and fields declared by reviewed, enabled skills. Missing fields are
 shown automatically; users can save, replace or delete their own values without
@@ -684,9 +700,9 @@ putting them in chat. **Settings → My connections** adds an opt-in
 read-only pilot for GitHub repository summaries and Redfish system status. A
 connection references saved values, belongs to one user, and is granted to one
 project or explicitly to all that user's chats. The trusted local broker uses
-credentials without returning them to the model. Native OpenShell HTTP injection
-and separate private browser/KVM/IPMI/SOL adapters are now **implemented in source
-and staged, not activated on the reference Spark**. They do not add credentials
+credentials without returning them to the model. Private browser/KVM adapters
+are **enabled on the reference Spark**; native OpenShell HTTP injection and
+IPMI/SOL remain disabled. They do not add credentials
 to the arbitrary-code browser. Console opening/input have separate exact-action
 approvals; see [connection extensions](docs/connection-extensions.md) for the
 tested boundaries, installation flags and remaining live BMC validation. OAuth

@@ -64,6 +64,7 @@ sudo install -o root -g root -m 0644 \
   "$repo/deploy/spark/container/model_gateway.py" \
   "$repo/deploy/spark/container/inference_policy.py" \
   "$repo/deploy/spark/container/volume_provisioner.py" \
+  "$repo/deploy/spark/container/shared_skills.py" \
   "$repo/deploy/spark/container/runner_broker.py" \
   /usr/local/lib/prime-runner/
 sudo install -o root -g root -m 0644 "$repo/deploy/spark/prime/AGENTS.managed.md" /usr/local/lib/prime-runner/
@@ -95,7 +96,8 @@ install -d -m 0755 "${HOME}/prime-update" "${HOME}/.config/systemd/user"
 install -m 0644 "$repo/deploy/spark/systemd/prime-connection-broker.service" "${HOME}/.config/systemd/user/"
 # Copy only: never enable or start the opt-in connection runtime during updates.
 if sudo test -d "/var/lib/prime-runner/users/${USER}/prime/agent/skills"; then
-  # Refresh reviewed metadata only; do not rebuild images or install skill code.
+  # Refresh reviewed distribution packages/metadata, never personal skill code.
+  # Root-owned shared generations are copied to a user's storage on the next task.
   sudo python3 "$repo/deploy/spark/prime/install-managed-skills.py" \
     --owner "$USER" --bundled "$repo/deploy/spark/prime/skills" --inventory-only
 fi

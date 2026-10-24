@@ -963,6 +963,26 @@ for line in sys.stdin:
                 with self.assertRaisesRegex(ValueError, "unavailable"):
                     api.normalize_skill_ids(["nvidia:cuda"], "bob")
 
+    def test_explicit_shared_inventory_is_visible_to_both_users_without_personal_leak(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home=Path(directory); root=home/'.prime/agent'; root.mkdir(parents=True)
+            shared={'version':1,'scope':'global','generation':'a'*64,'skills':[
+                {'id':'managed:bmc-headless-browser','slug':'bmc-headless-browser','name':'Browser','description':'Shared'}]}
+            api.credential_declarations._write(root/'global-skill-inventory.json',json.dumps(shared).encode())
+            (root/'skill-inventory.json').write_text(json.dumps({'owner':'alice','skills':[
+                {'id':'managed:private','slug':'private','name':'Personal'}]}))
+            meta={'projects':{'p_'+'b'*24:{'owner':'bob','name':'Work','skillIds':[]}},'skills':{}}
+            with mock.patch.object(api.legacy,'HOME',home), mock.patch.object(api,'metadata',return_value=meta), mock.patch.object(api,'save_metadata'), mock.patch.object(api,'normalize_file_ids',return_value=[]):
+                rows=api.available_project_skills('bob')
+                self.assertEqual([r['id'] for r in rows],['managed:bmc-headless-browser'])
+                self.assertEqual(rows[0]['runtimePrefix'],'shared-skills/'+'a'*64+'/')
+                payload={'projectId':'p_'+'b'*24,'skillId':rows[0]['id']}
+                result=api.add_project_skill(payload,'bob')
+                self.assertEqual(result['skillIds'],[rows[0]['id']])
+                self.assertEqual(api.add_project_skill(payload,'bob')['skillIds'],[rows[0]['id']])
+                with self.assertRaises(ValueError): api.add_project_skill(payload,'alice')
+                with self.assertRaises(ValueError): api.add_project_skill(dict(payload,skillId='managed:private'),'bob')
+
 
 if __name__ == "__main__":
     unittest.main()

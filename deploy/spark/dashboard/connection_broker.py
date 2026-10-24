@@ -78,6 +78,7 @@ if __name__ == '__main__':
     if os.environ.get('PRIME_CONNECTIONS_ENABLED') != '1':
         raise SystemExit('Connection runtime is not enabled')
     manager = connections.Connections()
+    connections.console_adapters()  # Reject an invalid allowlist before serving.
     stopping = threading.Event()
     if os.environ.get('PRIME_CONNECTION_HTTP_TRANSPORT', 'direct') not in ('direct', 'openshell'):
         raise SystemExit('Unsupported connection HTTP transport')

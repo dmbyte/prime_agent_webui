@@ -26,8 +26,11 @@ class Browser:
             home = self.runtime.name
             env = {'PATH': '/usr/bin:/bin', 'HOME': home, 'XDG_CONFIG_HOME': home, 'XDG_CACHE_HOME': home}
             self.playwright = sync_playwright().start()
+            proxy = os.environ.get('HTTPS_PROXY') or os.environ.get('https_proxy')
+            proxy_options = {'proxy': {'server': proxy}} if proxy else {}
             self.browser = self.playwright.chromium.launch(executable_path='/usr/bin/chromium', headless=True, env=env,
-                args=['--disable-dev-shm-usage', '--disable-gpu', '--no-zygote', '--no-first-run', '--no-default-browser-check'], timeout=30000)
+                args=['--disable-dev-shm-usage', '--disable-gpu', '--no-zygote', '--no-first-run', '--no-default-browser-check'], timeout=30000,
+                **proxy_options)
             self.context = self.browser.new_context(ignore_https_errors=request.get('ignoreCertificateErrors') is True, accept_downloads=False,
                 service_workers='block', viewport={'width': 1280, 'height': 720})
             # Guard every navigation, subresource and WebSocket, including redirects

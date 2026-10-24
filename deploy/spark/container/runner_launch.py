@@ -9,6 +9,7 @@ import openshell_runner
 import task_common
 import hosting_auth
 import volume_provisioner
+import shared_skills
 
 ROOT=Path("/var/lib/prime-runner")
 OPENSHELL_COMMON = ["/usr/bin/openshell", "--gateway", "spark-local"]
@@ -70,6 +71,7 @@ def configure(owner):
     agent, workspace = task_common.prepare_user_storage(ROOT/"users", owner, workspace_root)
     for relative in ('agent/skills', 'cache/uv', 'cache/pip', 'cache/npm', 'tools/npm', 'tools/playwright'):
         (agent.parent / relative).mkdir(mode=0o700, parents=True, exist_ok=True)
+    shared_skills.provision(agent)
     for source in (ROOT/'kvm'/owner, ROOT/'hosting-access'/owner):
         source.mkdir(mode=0o700, parents=True, exist_ok=True)
     managed = Path('/usr/local/lib/prime-runner/AGENTS.managed.md')
