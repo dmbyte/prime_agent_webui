@@ -67,12 +67,22 @@ def _broker(request: dict) -> dict:
             ) from error
         except ConnectionRefusedError as error:
             raise RuntimeError("KVM control socket exists but its broker is not accepting connections") from error
-        with connection.makefile("rwb", buffering=0) as stream:
-            stream.write(json.dumps(request, separators=(",", ":")).encode() + b"\n")
+        payload = json.dumps(request, separators=(",", ":")).encode() + b"\n"
+        if len(payload) > 16_384:
+            raise ValueError("KVM request exceeds limit")
+        connection.sendall(payload)
+        with connection.makefile("rb") as stream:
             raw = stream.readline(3_500_001)
         if not raw or len(raw) > 3_500_000:
             raise RuntimeError("KVM broker returned no bounded response")
-        response = json.loads(raw)
+        if not raw.endswith(b"\n"):
+            raise RuntimeError("KVM broker returned an incomplete response; capture was not saved")
+        try:
+            response = json.loads(raw)
+        except (ValueError, UnicodeError) as error:
+            raise RuntimeError("KVM broker returned invalid JSON") from error
+        if not isinstance(response, dict):
+            raise RuntimeError("KVM broker returned an invalid response object")
         if not response.get("ok"):
             raise RuntimeError(str(response.get("error", "KVM broker failed")))
         return response.get("result") or {}
@@ -465,8 +475,9 @@ def server_main(socket_path: str) -> int:
                 continue
             with connection:
                 connection.settimeout(60)
-                raw = connection.makefile("rb").readline(16_385)
-                if not raw or len(raw) > 16_384:
+                with connection.makefile("rb") as stream:
+                    raw = stream.readline(16_385)
+                if not raw or len(raw) > 16_384 or not raw.endswith(b"\n"):
                     continue
                 process.stdin.write(raw.decode("utf-8"))
                 process.stdin.flush()
@@ -474,7 +485,7 @@ def server_main(socket_path: str) -> int:
                 if not ready:
                     break
                 answer = process.stdout.readline(3_500_001)
-                if not answer or len(answer) > 3_500_000:
+                if not answer or len(answer) > 3_500_000 or not answer.endswith("\n"):
                     break
                 connection.sendall(answer.encode("utf-8"))
                 if json.loads(raw).get("action") == "close":

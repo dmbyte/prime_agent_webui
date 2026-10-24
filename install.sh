@@ -64,14 +64,14 @@ if ((install_packages)); then
   case "$family" in
     debian)
       sudo apt-get update
-      sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nginx openssl python3 curl git
+      sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nginx openssl python3 python3-cryptography curl git
       ;;
     redhat)
       manager=dnf; command -v dnf >/dev/null || manager=yum
-      sudo "$manager" install -y nginx openssl python3 curl git policycoreutils-python-utils
+      sudo "$manager" install -y nginx openssl python3 python3-cryptography curl git policycoreutils-python-utils
       ;;
     suse)
-      sudo zypper --non-interactive install nginx openssl python3 curl git
+      sudo zypper --non-interactive install nginx openssl python3 python3-cryptography curl git
       ;;
   esac
 fi
@@ -79,6 +79,7 @@ fi
 for command_name in nginx openssl python3 curl git systemctl; do
   command -v "$command_name" >/dev/null || { echo "Missing required command: $command_name" >&2; exit 2; }
 done
+/usr/bin/python3 -c 'from cryptography.hazmat.primitives.ciphers.aead import AESGCM' || { echo 'Install python3-cryptography for the Python used by Prime Auth.' >&2; exit 2; }
 
 if ((install_prime)); then
   installer=$(mktemp)
@@ -134,6 +135,7 @@ Environment=PRIME_AUTH_CREDENTIAL=${HOME}/.config/prime-agent/web-auth.json
 Environment=PRIME_AUTH_SESSION_STORE=${HOME}/.config/prime-agent/web-sessions.json
 Environment=PRIME_AUTH_IDLE_SECONDS=2592000
 Environment=PRIME_AUTH_ABSOLUTE_SECONDS=15552000
+Environment=PRIME_CREDENTIALS_ENABLED=1
 ExecStart=/usr/bin/python3 ${dashboard}/auth.py
 Restart=on-failure
 RestartSec=3

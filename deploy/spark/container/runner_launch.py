@@ -7,6 +7,7 @@ sys.path.insert(0, "/usr/local/lib/prime-runner")
 import openshell_runner
 import task_common
 import hosting_auth
+import volume_provisioner
 
 ROOT=Path("/var/lib/prime-runner")
 OPENSHELL_COMMON = ["/usr/bin/openshell", "--gateway", "spark-local"]
@@ -21,12 +22,22 @@ def configure(owner):
     if not task_common.SAFE_USER.fullmatch(web_owner): raise SystemExit(2)
     workspace_root = Path(os.environ.get("PRIME_RUNNER_WORKSPACE_ROOT", f"/home/{web_owner}/prime-agent/tasks"))
     agent, workspace = task_common.prepare_user_storage(ROOT/"users", owner, workspace_root)
+    for relative in ('agent/skills', 'cache/uv', 'cache/pip', 'cache/npm', 'tools/npm', 'tools/playwright'):
+        (agent.parent / relative).mkdir(mode=0o700, parents=True, exist_ok=True)
+    for source in (ROOT/'kvm'/owner, ROOT/'hosting-access'/owner):
+        source.mkdir(mode=0o700, parents=True, exist_ok=True)
+    managed = Path('/usr/local/lib/prime-runner/AGENTS.managed.md')
+    policy = workspace/'AGENTS.md'
+    if managed.is_file() and not policy.exists():
+        with policy.open('x') as stream:
+            os.chmod(policy, 0o640)
+            stream.write(managed.read_text())
     sessions=agent/"sessions"; sessions.mkdir(mode=0o770,exist_ok=True); os.chmod(sessions,0o770)
     trash=agent/"trash"; trash.mkdir(mode=0o770,exist_ok=True); os.chmod(trash,0o770)
     project_sources=agent/"project-sources"; project_sources.mkdir(mode=0o770,exist_ok=True); os.chmod(project_sources,0o770)
     writable_acl = f"u:{web_owner}:rwx,d:u:{web_owner}:rwx,g:prime-web:rwx,d:g:prime-web:rwx,m::rwx,d:m::rwx,o::---,d:o::---"
     traverse_acl = f"u:{web_owner}:--x,g:prime-web:--x,m::--x"
-    for path, permissions in ((agent.parents[1], traverse_acl), (agent.parent, traverse_acl), (agent, traverse_acl), (sessions, writable_acl), (trash, writable_acl), (project_sources, writable_acl)):
+    for path, permissions in ((agent.parents[1], traverse_acl), (agent.parent, traverse_acl), (agent, traverse_acl), (sessions, writable_acl), (trash, writable_acl), (project_sources, writable_acl), (agent/'skills', writable_acl)):
         subprocess.run(["/usr/bin/setfacl", "-m", permissions, str(path)], check=True)
     # The OpenShell gateway runs as the installer/WebUI owner and validates
     # bind sources before asking Docker to mount them. Directory read/traverse
@@ -94,6 +105,8 @@ def main():
             if gateway.is_socket(): break
             time.sleep(0.1)
         else: raise SystemExit("Task gateway is unavailable")
+        stage("Registering user OpenShell storage")
+        volume_provisioner.provision(request['owner'])
         os.environ["HOME"] = str(ROOT)
         os.environ.setdefault("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
         # Path validation and argv construction can fail before OpenShell starts.

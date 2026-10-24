@@ -7,6 +7,8 @@ sudo install -o root -g root -m 0644 "$source_dir/index.html" "$source_dir/login
 sudo install -o root -g root -m 0644 "$source_dir/console-viewer.html" "$web_root/"
 sudo install -o root -g root -m 0644 "$source_dir/console-viewer.js" "$source_dir/console-viewer.css" "$web_root/assets/"
 sudo install -o root -g root -m 0644 "$source_dir/task-timer.js" "$source_dir/task-timer.css" "$web_root/assets/"
+sudo install -o root -g root -m 0644 "$source_dir/timeout-controls.js" "$web_root/assets/"
+sudo install -o root -g root -m 0644 "$source_dir/credentials.js" "$web_root/assets/"
 sudo install -o root -g root -m 0644 \
   "$source_dir/app-v2.js" "$source_dir/app-v2.css" \
   "$source_dir/enhancements.css" "$source_dir/skill-governance.css" "$source_dir/login.js" \

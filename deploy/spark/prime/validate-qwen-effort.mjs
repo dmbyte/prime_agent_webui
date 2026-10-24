@@ -15,7 +15,7 @@ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const model={...provider.models[0],provider:'spark-qwen',api:provider.api,compat:provider.compat,
   baseUrl:`http://127.0.0.1:${server.address().port}/v1`,cost:{input:0,output:0,cacheRead:0,cacheWrite:0}};
 try {
-  for (const [reasoning, expected] of [['low','low'],['high','xhigh'],['max','xhigh'],['minimal','low'],['off','none']]) {
+  for (const [reasoning, expected] of [['low','low'],['medium','medium'],['high','xhigh'],['max','xhigh'],['minimal','low'],['off','none']]) {
     captured=null;
     const stream=streamSimpleOpenAICompletions(model,{messages:[{role:'user',content:'Synthetic effort test',timestamp:Date.now()}]}, {apiKey:'fixture',reasoning,maxTokens:16});
     const result=await stream.result();

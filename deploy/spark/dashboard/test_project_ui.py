@@ -9,10 +9,12 @@ ROOT = Path(__file__).resolve().parent
 
 
 class ProjectUiTests(unittest.TestCase):
-    def test_admin_explains_qwen_code_policy_precedence(self):
+    def test_admin_explains_adaptive_effort_and_approved_cloud_routes(self):
         app = (ROOT / "app-v2.js").read_text()
-        self.assertIn("Qwen handles code generation in every profile", app)
-        self.assertIn("This takes precedence over the rules below", app)
+        self.assertIn("Auto starts low; the agent chooses subtask effort", app)
+        self.assertIn("unapproved cloud routes are blocked", app)
+        self.assertIn("Explicit effort is preserved", app)
+        self.assertIn("Auto · agent chooses", (ROOT / "index.html").read_text())
 
     def test_admin_uses_main_workspace_and_checks_openshell_sandboxes(self):
         index = (ROOT / "index.html").read_text()

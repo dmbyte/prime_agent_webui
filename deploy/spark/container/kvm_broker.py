@@ -113,14 +113,24 @@ def _worker_call(path: Path, action: str, timeout: int = 55, **values) -> dict:
     connection.settimeout(timeout)
     try:
         connection.connect(str(path))
-        with connection.makefile("rwb", buffering=0) as stream:
-            stream.write(json.dumps({"action": action, **values}, separators=(",", ":")).encode() + b"\n")
+        payload = json.dumps({"action": action, **values}, separators=(",", ":")).encode() + b"\n"
+        if len(payload) > 16_384:
+            raise ValueError("KVM request exceeds limit")
+        connection.sendall(payload)
+        with connection.makefile("rb") as stream:
             raw = stream.readline(3_500_001)
     finally:
         connection.close()
     if not raw or len(raw) > 3_500_000:
         raise RuntimeError("KVM worker disconnected or exceeded response bound")
-    response = json.loads(raw)
+    if not raw.endswith(b"\n"):
+        raise RuntimeError("KVM worker returned an incomplete response")
+    try:
+        response = json.loads(raw)
+    except (ValueError, UnicodeError) as error:
+        raise RuntimeError("KVM worker returned invalid JSON") from error
+    if not isinstance(response, dict):
+        raise RuntimeError("KVM worker returned an invalid response object")
     if not response.get("ok"):
         raise RuntimeError(str(response.get("error", "KVM worker failed"))[:400])
     return response.get("result") or {}
@@ -275,9 +285,9 @@ class KVMBroker:
     def _client(self, connection: socket.socket) -> None:
         try:
             connection.settimeout(65)
-            with connection.makefile("rwb", buffering=0) as stream:
+            with connection.makefile("rb") as stream:
                 raw = stream.readline(16_385)
-                if not raw or len(raw) > 16_384:
+                if not raw or len(raw) > 16_384 or not raw.endswith(b"\n"):
                     raise ValueError("KVM request exceeds limit")
                 request = json.loads(raw)
                 if not isinstance(request, dict):
@@ -287,7 +297,12 @@ class KVMBroker:
                     response = {"ok": True, "result": result}
                 except (KeyError, ValueError, PermissionError, LookupError, RuntimeError, TimeoutError) as error:
                     response = {"ok": False, "error": str(error)[:300]}
-                stream.write(json.dumps(response, separators=(",", ":")).encode() + b"\n")
+                payload = json.dumps(response, separators=(",", ":")).encode() + b"\n"
+                if len(payload) > 3_500_000:
+                    payload = b'{"ok":false,"error":"KVM response exceeds limit"}\n'
+                # SocketIO.write() may send only a prefix. Complete the bounded
+                # response before closing, including large base64 screenshots.
+                connection.sendall(payload)
         except (OSError, ValueError, json.JSONDecodeError):
             pass
         finally:

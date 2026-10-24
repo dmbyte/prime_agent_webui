@@ -6,7 +6,7 @@ model; Nemotron service/model artifacts are retained but disabled on migrated
 systems. A new installation needs only Qwen, not both engines.
 
 The active model API binds only to `127.0.0.1:30001`. Prime defaults to
-`spark-qwen/qwen3.8-flash-next` UD-IQ4_XS with automatic low/high effort in the
+`spark-qwen/qwen3.8-flash-next` UD-IQ4_XS with adaptive subtask effort in the
 WebUI. One Qwen slot has 262,144 total context tokens and Q8 K/V cache. The PLE
 table is read directly from NVMe on demand; shared-Q8 MTP drafts two tokens at
 a time. Its confidence cutoff remains disabled. See the
@@ -57,7 +57,7 @@ Launch the configured workspace with `prime-dgx`. Prime is pinned at the
 installed version until an update is deliberately reviewed and validated.
 
 WebUI tasks run as ephemeral NVIDIA OpenShell sandboxes through the local Docker
-driver. The deployment pins OpenShell `0.1.2`, applies hard Landlock
+driver. The deployment pins OpenShell `0.1.4`, applies hard Landlock
 enforcement, starts with an empty direct-network policy, and carries the chosen
 egress through the existing per-user Unix-socket broker. Prime state, workspace,
 and gateway directories are exposed through pre-provisioned local-driver Docker

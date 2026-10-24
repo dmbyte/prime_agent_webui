@@ -2,6 +2,7 @@
 import base64
 import hashlib
 import hmac
+import importlib.util
 import json
 import os
 import secrets
@@ -249,6 +250,7 @@ def manage_user(action, body, actor):
     elif action == "delete":
         if username == actor: raise ValueError("You cannot delete your own account")
         if username not in users: raise ValueError("User not found")
+        credential_module().Vault(credential_path().parent / 'skill-vault').delete_owner(username)
         del users[username]
     elif action == "revoke":
         if username not in users: raise ValueError("User not found")
@@ -266,6 +268,34 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "PrimeAuth"
     sys_version = ""
 
+    def credentials(self, write=False):
+        if os.environ.get('PRIME_CREDENTIALS_ENABLED') != '1':
+            self.json(503, {'error': 'Credential setup is not activated. An administrator must install the vault dependency and protect the shared host console first.'}); return
+        # Never accept X-Prime-User or an owner supplied in JSON for vault access.
+        row = session_for(self.headers.get('Cookie'))
+        account = (load_users() or {}).get('users', {}).get((row or {}).get('user'), {})
+        if not row or not account or not account.get('enabled', True):
+            self.json(401, {'error': 'Sign in to manage your credentials'}); return
+        if write and not csrf_valid(self.headers, row):
+            self.json(403, {'error': 'Request validation failed'}); return
+        try:
+            module = credential_module()
+            vault = module.Vault(credential_path().parent / 'skill-vault')
+            requirements = module.catalog(row['user'])
+            if write:
+                length = int(self.headers.get('Content-Length', '0'))
+                if not 2 <= length <= 70000 or self.headers.get_content_type() != 'application/json':
+                    raise ValueError('Invalid credential request')
+                payload = json.loads(self.rfile.read(length))
+                result = vault.change(row['user'], requirements, payload)
+                self.json(200, result)
+            else:
+                self.json(200, {'credentials': vault.view(row['user'], requirements)})
+        except ValueError as error:
+            self.json(400, {'error': str(error)})
+        except (OSError, ImportError, TypeError, KeyError, AttributeError):
+            self.json(503, {'error': 'Credential service unavailable; ask an administrator to check its installation'})
+
     def json(self, status, value, cookies_out=()):
         body = json.dumps(value, separators=(",", ":")).encode()
         self.send_response(status)
@@ -278,7 +308,14 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        if self.path == "/auth/check":
+        if self.path == '/auth/credentials':
+            self.credentials()
+        elif self.path == '/auth/check-admin':
+            row = session_for(self.headers.get('Cookie'))
+            account = (load_users() or {}).get('users', {}).get((row or {}).get('user'), {})
+            allowed = bool(row and account.get('enabled', True) and account.get('role') == 'admin')
+            self.json(200 if allowed else 403, {'allowed': True} if allowed else {'error': 'Administrator access required'})
+        elif self.path == "/auth/check":
             row = session_for(self.headers.get("Cookie"))
             if row:
                 self.send_response(204)
@@ -299,6 +336,9 @@ class Handler(BaseHTTPRequestHandler):
             self.json(404, {"error": "Not found"})
 
     def do_POST(self):
+        if self.path == '/auth/credentials':
+            self.credentials(write=True)
+            return
         if self.path == "/auth/logout":
             token = cookies(self.headers.get("Cookie")).get(SESSION_COOKIE, "")
             with LOCK:
@@ -359,6 +399,21 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, *args):
         return
+
+
+_credential_module = None
+
+
+def credential_module():
+    global _credential_module
+    # One module/lock per auth process, including when loaded from a test harness.
+    with LOCK:
+        if _credential_module is None:
+            spec = importlib.util.spec_from_file_location('prime_skill_credentials', Path(__file__).with_name('skill_credentials.py'))
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            _credential_module = module
+        return _credential_module
 
 
 if __name__ == "__main__":

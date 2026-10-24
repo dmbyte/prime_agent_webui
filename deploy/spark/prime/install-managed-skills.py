@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import pwd
@@ -19,6 +20,10 @@ NVIDIA_COMMIT = "fd9f1466ff8a39178e488981e8b5118709392949"
 NVIDIA_SKILL_COUNT = 366
 BUNDLED_SKILLS = ("bmc-headless-browser", "bmc-html5-kvm", "ipmi-redfish-bmc", "prime-nvidia-catalog", "lan-web-host")
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+
+_spec = importlib.util.spec_from_file_location('prime_skill_declarations', Path(__file__).parents[1] / 'dashboard/skill_credentials.py')
+credential_declarations = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(credential_declarations)
 
 
 def arguments() -> argparse.Namespace:
@@ -78,7 +83,9 @@ def validate_tree(root: Path, expected_count: int | None = None, include: tuple[
         if not files or len(files) > 200 or total > 20 * 1024 * 1024:
             raise ValueError(f"Skill exceeds file or size limits: {directory.name}")
         name, description = frontmatter(directory / "SKILL.md")
-        rows.append({"name": name, "directory": directory.name, "description": description, "sha256": digest.hexdigest()})
+        requirements = credential_declarations.read_manifest(directory / credential_declarations.MANIFEST)
+        rows.append({"name": name, "directory": directory.name, "description": description, "sha256": digest.hexdigest(),
+                     "credentialRequirements": requirements})
     if expected_count is not None and len(rows) != expected_count:
         raise ValueError(f"Expected {expected_count} skills, found {len(rows)}")
     if len({row["name"] for row in rows}) != len(rows):
@@ -100,6 +107,7 @@ def atomic_replace(source: Path, target: Path, recovery: Path) -> None:
 def publish_inventory(owner: str, state: Path, uid: int, gid: int) -> None:
     """Publish metadata only; the WebUI cannot traverse Prime's protected tree."""
     rows = []
+    defaults = json.loads(Path(__file__).with_name('managed-credential-requirements.json').read_text())
     for directory in sorted((state / "skills").iterdir()):
         skill_file = directory / "SKILL.md"
         if not directory.is_dir() or directory.is_symlink() or not NAME_RE.fullmatch(directory.name) or not skill_file.is_file() or skill_file.is_symlink():
@@ -108,8 +116,11 @@ def publish_inventory(owner: str, state: Path, uid: int, gid: int) -> None:
             name, description = frontmatter(skill_file)
         except (OSError, ValueError, UnicodeError):
             continue
+        requirements = credential_declarations.read_manifest(directory / credential_declarations.MANIFEST)
+        if not requirements:
+            requirements = credential_declarations.declarations({'version': 1, 'credentials': defaults.get(directory.name, [])})
         rows.append({"id": f"managed:{directory.name}", "name": name, "slug": directory.name,
-                     "description": description, "source": "Installed Prime skill"})
+                     "description": description, "source": "Installed Prime skill", 'credentialRequirements': requirements})
     catalog = state / "catalogs/nvidia/manifest.json"
     if catalog.is_file():
         manifest = json.loads(catalog.read_text(encoding="utf-8"))
@@ -117,7 +128,8 @@ def publish_inventory(owner: str, state: Path, uid: int, gid: int) -> None:
             name, directory = row.get("name", ""), row.get("directory", "")
             if NAME_RE.fullmatch(name) and NAME_RE.fullmatch(directory):
                 rows.append({"id": f"nvidia:{name}", "name": name, "slug": directory,
-                             "description": str(row.get("description", ""))[:1000], "source": "NVIDIA catalog"})
+                             "description": str(row.get("description", ""))[:1000], "source": "NVIDIA catalog",
+                             'credentialRequirements': row.get('credentialRequirements', [])})
     target = Path(pwd.getpwnam(owner).pw_dir) / ".prime/agent/skill-inventory.json"
     target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     descriptor, temporary = tempfile.mkstemp(prefix=".skill-inventory-", dir=target.parent)

@@ -29,17 +29,18 @@ skills belong outside the repository and are excluded from version control.
 The previous deployment split routine orchestration onto Nemotron 3.5 Lightning
 and implementation/visual work onto Qwen. Both engines competed for the Spark's
 shared memory. This branch uses the **same Qwen weights** for both roles:
-WebUI **Auto** chooses low effort for routine requests and high effort for
-detected coding or complex work. High effort maps to the server's `xhigh`;
-it is not a second model instance. See the [exact routing rules](docs/model-routing.md).
+WebUI **Auto · agent chooses** starts low, then lets Prime choose the effort and
+approved model for bounded subtasks. Coding no longer automatically means
+extra-high: medium is available. Qwen's native high aliases `xhigh`; this is not
+a second model instance. See [adaptive routing and cloud approval](docs/model-routing.md).
 
 | Area | Previous dual-model configuration | This Qwen-only configuration |
 |---|---|---|
 | Resident local inference engines | Nemotron and Qwen | Qwen only; Nemotron artifacts retained for rollback |
 | Qwen context budget | 98,304 tokens in one slot | 262,144 tokens in one slot: about 2.67× the budget |
 | Qwen K/V cache | Q4 | Q8; model weights remain IQ4_XS |
-| Routine vs complex work | Model selection and inter-model handoff | Low vs high effort on the same engine |
-| Nontrivial code | Must route away from Nemotron to Qwen | Qwen is already the default and remains mandatory for code |
+| Routine vs complex work | Model selection and inter-model handoff | Agent-selected low/medium/extra-high local effort; approved cloud delegation |
+| Nontrivial code | Must route away from Nemotron to Qwen | Qwen is the local default; approved external models may also implement code |
 | Local concurrency | Separate engines can execute different work concurrently | One model slot; requests share/queue for that slot |
 
 The practical advantages are:
@@ -59,7 +60,8 @@ The practical advantages are:
   routes and bounded high-effort child tasks remain available, but a second local
   engine no longer needs to be kept running for orchestration.
 - **Effort matched to the task.** Low effort can reduce time spent generating
-  reasoning on simple requests; high effort is selected for demanding work.
+  reasoning on simple requests; the agent selects medium or extra-high effort
+  for bounded work when justified by difficulty and verification needs.
   Effort is not a hard time/token cap or a guarantee of correctness.
 
 ### What the tests establish—and what they do not
@@ -81,7 +83,9 @@ context. Do not re-enable both at the enlarged settings without revalidating RAM
 
 ## What this branch includes
 
-- Qwen-only defaults, automatic low/high effort, 256K context and Q8 K/V cache.
+- Qwen local defaults, agent-selected subtask effort, 256K context and Q8 K/V cache.
+- Account-bound, expiring no-training approval for external Codex inference;
+  configured credentials alone do not permit private task routing.
 - A read-only console viewer for browser/KVM/SOL observations, and renewable
   task deadlines with an explicit **Extend 30 minutes** prompt.
 - Managed LAN ISO/file and application hosting with external-to-container URLs,
@@ -469,7 +473,7 @@ also uses `deploy/spark/container/kvm_broker.py` and
 
 | Setting | Deployed value |
 |---|---|
-| OpenShell package | `0.1.2-1` ARM64 `.deb`, SHA256 `14838b811b54148060da99fd2aabe78f05c777002c0a8fc39b106e0de0ddd796` |
+| OpenShell package | `0.1.4-1` ARM64 `.deb`, SHA256 `803939a059db6cc2a1ab38ff49e5c57e41b42549ac555130f13749d8ed6f46fb` |
 | Gateway name | `spark-local` |
 | Gateway | schema v2, Docker driver, loopback `127.0.0.1:17670`, mTLS, telemetry off |
 | Docker attachment policy | `allow_driver_config=true`, resource admission enabled, approved Prime volumes labeled attachable for workspace `default` |
@@ -491,8 +495,23 @@ The activity panel shows a short recent preview; **Complete output…** loads th
 full log separately. The output view refreshes every three seconds. Private
 reasoning and recognized credentials are hidden; events above the 262 KiB
 runtime safety limit are not retained. A silent tool call may still require
-waiting for the task deadline or explicitly stopping that task. Tasks start with
-a 30-minute deadline by default. Five minutes before expiry, the WebUI shows a
+waiting for the task deadline or explicitly stopping that task. **Task timeout**
+in the conversation header is saved per chat. New chats inherit their project's
+timeout; changing a chat's timeout does not change the project or other chats.
+Set project defaults in **Project settings → Task timeout**. Existing chats
+without a saved timeout and chats outside projects default to 30 minutes.
+Administrators can select durations from 30 minutes through **90 days**, including
+one/two/four/eight weeks. Standard users remain limited to 30 minutes and power
+users to 120 minutes. The API accepts whole minutes within the caller's role limit.
+The setting applies to **each new task**, not the total age of the conversation;
+editing it does not extend a task already running. Tasks can finish naturally
+before their deadline. Closing the browser does not stop an accepted task, but
+host/API/runtime restarts or failures still interrupt it: this is a longer runtime
+allowance, **not durable scheduling or automatic recovery**. Network/filesystem
+permissions, model context limits and per-operation timeouts are unchanged.
+KVM idle/session limits and hosted-service lifetimes are separate controls.
+
+Five minutes before expiry, the WebUI shows a
 nonmodal warning with **Extend 30 minutes** and **Keep deadline**. Each confirmed
 extension adds 30 minutes to the existing deadline without restarting the task;
 the warning returns five minutes before the new deadline. Without a response
@@ -500,10 +519,16 @@ the warning returns five minutes before the new deadline. Without a response
 Saved conversation/workspace/logs remain available; a follow-up starts a new task,
 not a resurrection of the expired process. Extensions are owner-only, protected
 by the normal login/CSRF checks, and duplicate requests add time only once.
-Existing role ceilings remain: standard users 30 minutes (no extension), power
-users 120 minutes total, administrators 240 minutes total. The sandbox retains an
+Role ceilings are: standard users 30 minutes (no extension), power
+users 120 minutes total, administrators 129,600 minutes (90 days) total. The sandbox retains an
 independent role-ceiling cutoff; the API enforces the shorter approved deadline.
 Install the WebUI and protected OpenShell runner together while tasks are idle.
+The install/update scripts include `timeout-controls.js`; deploy the matching
+`api_v2.py`, `task_policy.py`, `openshell_runner.py` and `hosting_auth.py` together.
+Task-scoped hosting capabilities now last through the role ceiling and are still
+revoked immediately when the task exits; hosted-service TTLs are unchanged.
+`deploy/spark/prime/validate-chat-timeout.py` exercises the real browser controls
+and isolated policy API without launching a model or touching real conversations.
 
 Each OpenShell sandbox is created with these important switches:
 
@@ -603,6 +628,15 @@ The local-path picker still rejects arbitrary `/home` paths. The controlled
 `~/prime-agent/tasks/USER/` workspace is the only home-backed writeable task
 mount in the default Spark recipe.
 
+New WebUI accounts are provisioned on first task launch. The runner prepares
+owner-specific directories, waits for its model gateway, then asks the protected
+`prime-volume-provisioner.service` to register the eight fixed per-user volumes.
+This closes the installer-only provisioning gap: adding an account no longer
+requires rerunning the installer. Existing conflicting mappings are rejected,
+never removed or repointed; tasks receive neither Docker access nor the provisioner
+socket. Shared local-input volumes remain installer-managed. See the
+[multi-user runtime checks](deploy/spark/openshell/README.md#new-users-and-storage-recovery).
+
 ### Skills and additional tools
 
 Installed skills live at `/home/prime/.prime/agent/skills` inside a task and in
@@ -627,6 +661,15 @@ The WebUI provides a governed **Skills & tools** workflow:
 4. An approved skill can be enabled for a project in **Project settings →
    Project skills**. New project chats receive that selection as shared context.
    Administrators can later disable, re-enable, deny, or recoverably remove it.
+
+This branch also adds **Settings → My credentials**, with per-user encrypted
+storage and fields declared by reviewed, enabled skills. Missing fields are
+shown automatically; users can save, replace or delete their own values without
+putting them in chat. **This is staged setup/storage only: runtime tool adapters
+are not connected yet.** Existing installations keep the feature disabled until
+an administrator installs the dependency and enforces administrator-only access
+to the shared Advanced console. See the [credential setup and activation guide](docs/user-credentials.md)
+for the declaration format, isolation limits and installation steps.
 
 Requests for operating-system tools enter the `Sandbox image change required`
 state. They must be added to a reviewed, rebuilt, digest-pinned OpenShell image;
@@ -673,6 +716,12 @@ are rejected as non-console targets. Inspect
 on-demand PNG/JPEG frames before sending confirmed keyboard, mouse, or form input.
 `capture('console.png')` saves below `/project`. `inspect()` lists visible controls,
 login-page presence, and frame indexes without exposing form values.
+Capture replies use complete, newline-framed socket writes, bounded to 3.5 MB
+of JSON and 2 MB per decoded image. An incomplete reply raises a transport error
+without overwriting an existing capture; do not infer the console state or send
+blind BIOS input when capture fails. Socket regressions cover large frames,
+slow readers, fragmentation and disconnects; `validate-kvm-broker.py` also checks
+large real Chromium JPEG/PNG captures and their read-only viewer feed.
 `inspect()['consoleSurfaces']` gives each visible canvas/video's `frameIndex` and
 `selector`. Embedded consoles use `select_frame(surface['frameIndex'])`; do not
 guess frame 0 or assume a second browser tab exists.
@@ -735,22 +784,19 @@ local-model/runner/IPython/KVM fixture test; it makes a synthetic test conversat
 and fails on unexpected tool errors, absent final reports, or missing fixture
 evidence. It uses the production routing decision and does not contact a real BMC.
 
-Code generation belongs to Qwen in **all six profiles**. The WebUI routes
-recognized coding/automation requests and Development/Network operations tasks
-to `spark-qwen/qwen3.8-flash-next`, retains that route on coding follow-ups, and
-shows the selected model and reason in the conversation controls. This policy
-takes precedence over model directives/custom keyword rules for code work;
-if Qwen is disabled, the task reports a blocker instead of using Nemotron.
-Ordinary non-code conversations now use Qwen at low effort in Auto mode;
-coding and complex operations use high effort. Nemotron is disabled, not removed.
-The managed workspace policy and per-task instructions require nontrivial work
-discovered during low-effort execution to be delegated with
-`rlm.spawn(..., model="spark-qwen/qwen3.8-flash-next", thinking="high")`.
-Intent routing is deterministic for the covered requests; delegation of newly
-discovered subtasks is an agent instruction, not a Python-level execution lock.
-No model choice expands permissions or authorizes BMC actions.
-See [model routing rules](docs/model-routing.md) for precedence, default trigger
-phrases, continuation behavior, and administrator configuration.
+Qwen is the local default in **all six profiles**; approved external models may
+also implement code. Nemotron remains disabled and cannot implement nontrivial
+code. Auto starts low and the agent chooses bounded child effort, such as
+`rlm.spawn(..., model="spark-qwen/qwen3.8-flash-next", thinking="medium")`.
+Manual effort settings persist; choose Auto to adopt agent selection. Delegation
+is prompt-guided, not a Python execution lock or a self-modifying parent effort.
+The protected gateway lists exact approved external IDs at `/routing-models`
+and rejects cloud requests without a current account/model approval. Installation
+does not create that approval. The existing external adapter is Codex OAuth;
+other providers need separate gateway support. No model choice expands tool
+permissions or authorizes BMC actions, posting or live trades.
+See [model routing rules](docs/model-routing.md) for precedence, adaptive effort,
+external approval requirements, and administrator configuration.
 
 `deploy/spark/prime/install-skills.sh` also validates and stores all 366 upstream
 NVIDIA skills unchanged in protected global Prime state. Prime advertises one
@@ -881,8 +927,19 @@ import-verifies every Python-backed skill bundled with the pinned Prime release,
 including agent messaging and observation. The WebUI updater resolves an
 immutable GitHub release tag.
 OpenShell appears in the same section and updates only from NVIDIA's latest
-stable ARM64 release with the published checksum file, while refusing to run if
-OpenShell sandboxes still exist. In-app release checks require an authenticated
+stable ARM64 release **matching Prime's reviewed installer pin**. A newer upstream
+release is not automatically approved: Settings shows **Requires Prime compatibility
+update** with the reason and disables installation until a matching reviewed Prime
+update is installed. The API independently checks the pin before starting the updater.
+The updater verifies both NVIDIA's published checksum and Prime's pinned package
+checksum, runs the candidate gateway's configuration preflight before installing,
+and checks for sandboxes again after downloading. OpenShell sandboxes—including
+hosting/KVM sandboxes—must be absent; they are never deleted automatically.
+After restart, bounded readiness checks verify both WebUI and task-runner
+connections; an already-installed retry also verifies them before reporting success.
+Failure messages name the failed phase. Existing 0.0.x installations still require
+the documented migration rather than a one-click upgrade.
+In-app release checks require an authenticated
 [GitHub CLI](https://cli.github.com/) installation because this repository is
 public, but the current updater uses authenticated GitHub CLI requests to avoid
 anonymous API limits; core chat operation does not require `gh`.

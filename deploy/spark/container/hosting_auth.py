@@ -22,8 +22,11 @@ def issue(owner, task_id, project_id, authorization, root=ROOT):
     directory = root / 'hosting-capabilities'
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     secret = secrets.token_hex(32)
+    # Match the independent runner ceiling, including allowed timer extensions.
+    # The launcher still revokes the capability immediately when its task exits.
+    ceiling = {'user': 30, 'power_user': 120, 'admin': 90 * 24 * 60}.get(authorization.get('role'), 240)
     claim = dict(owner=owner, taskId=task_id, projectId=project_id,
-                 expires=time.time() + 4 * 3600 + 120,
+                 expires=time.time() + ceiling * 60 + 120,
                  digest=hashlib.sha256(secret.encode()).hexdigest())
     path = directory / (task_id + '.json')
     with path.open('x') as stream:

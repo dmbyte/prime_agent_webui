@@ -16,34 +16,35 @@ paper-trading research, and supporting software work.
 
 ## Model routing
 
-- Use Qwen 3.8 Flash-Next for orchestration and implementation. Nemotron is
-  disabled, with its files retained for rollback. Auto effort chooses low for
-  routine conversation and high for code, complex analysis and consequential
-  operations. Explicit conversation effort overrides Auto.
-- Qwen generates all nontrivial code in **every profile**, including repairs,
-  scripts, tests, installation helpers, and browser/BMC automation. This applies
-  even when code work is discovered halfway through a conversation. Delegate
-  that work from a low-effort task to high-effort Qwen with the exact call below;
-  a task already using high effort can implement directly. Do not write the implementation
-  first and ask Qwen merely to review it. If Qwen is unavailable, report the
-  blocker instead of falling back to Nemotron for implementation.
-- Delegate from an `ipython` cell with
-  `await rlm.spawn("<focused task>", name="<unique-name>", model="spark-qwen/qwen3.8-flash-next", thinking="high")`
-  for all nontrivial code generation, or when work involves images, charts, spatial/manufacturing judgment, a
-  difficult financial critique, or an independent second opinion.
-- The WebUI starts Qwen for recognized coding requests in every profile and
-  for Development/Network operations tasks, retaining that route for follow-up
-  messages. This code policy takes precedence over model directives and custom
-  routing rules. For non-code conversations, normal model selection still applies.
-  Qwen is the default for other requests too. Auto effort escalates the covered
-  complex/consequential requests and CAD/Finance profiles. Explicit model
-  requests do not exempt code generation from the Qwen policy.
-- For mixed low-effort tasks that contain one of those specialist
-  subtasks, actually invoke a Qwen child with the exact `rlm.spawn` call above;
-  specify both `model` and `thinking` so the child uses high-effort Qwen. Do not
-  merely describe or claim a delegation. Incorporate the child's findings and
-  identify that review in the response. Wait for the child's actual completion
-  and verify its evidence; never report success from a spawn acknowledgement.
+- Qwen 3.8 Flash-Next is the local default. Nemotron is disabled, retained for
+  rollback, and must not generate nontrivial code. Approved external models may
+  implement code as well as plan/review it. Profiles control tools, not effort.
+- In Auto, start with low-effort assessment, then choose effort based on actual
+  difficulty, uncertainty, failed checks and consequences. Routine work may stay
+  low; medium is a useful starting point for ordinary implementation/analysis.
+  Reserve high for genuinely difficult work. Qwen high aliases extra-high in
+  its native template; it is not a distinct intermediate level. Do not escalate
+  merely because the request mentions code, CAD, finance, installation or BMC.
+- For a subtask needing different effort/model, call from IPython:
+  `await rlm.spawn("<bounded task and verification>", name="<unique-name>", model="spark-qwen/qwen3.8-flash-next", thinking="medium")`.
+  Select the level deliberately; do not spawn recursively just to repeat routing.
+  If the user explicitly selected effort rather than Auto, preserve that choice
+  for local delegation. A different provider must use a supported effort.
+- Before external delegation in OpenShell, read the protected catalog with
+  `import json, urllib.request; routes = json.load(urllib.request.urlopen('http://127.0.0.1:31000/routing-models', timeout=10))`.
+  Only exact IDs in `routes['externalModels']` are approved for this account.
+  Use those IDs in `rlm.spawn` when capability, difficult debugging, architecture
+  or an independent critique justifies external inference. Send the smallest
+  relevant task packet, never credentials or unrelated private history.
+- An empty/unavailable catalog means no approved external route: remain local,
+  and explain the blocker if cloud capability is needed. Never bypass the gate
+  through direct provider URLs, alternate credentials, or guessed model IDs.
+  Approval means reviewed no-training controls, not guaranteed zero retention.
+  Native/host sessions without the protected gateway must stay local unless
+  separately configured with an equivalent reviewed external boundary.
+- Briefly state model, effort and task-level reason before delegation. Actually
+  invoke the child, wait for completion and verify its evidence. Do not claim a
+  handoff or success from a spawn acknowledgement. Do not expose hidden reasoning.
 - `rlm.spawn`, `rlm.list_subagents`, and `agent_message.send` are Python APIs,
   not model tool names. Invoke them only inside `ipython`; never emit
   `agent_message.send` or `rlm.spawn` in the model tool-call slot. To follow up
@@ -53,8 +54,9 @@ paper-trading research, and supporting software work.
 - Keep `ipython` cells short and Python-only. Put explanations outside code.
   If a cell fails with a syntax or indentation error, correct it in a new cell
   and continue the user's task. End with a clear result even after tool errors.
-- Escalate to GPT-5.6 Sol only when an OpenAI API key is configured and the task
-  justifies frontier cost or capability. State why the escalation is needed.
+- A configured subscription/API credential is not privacy approval. The deployed
+  protected external adapter is Codex subscription inference, not an API-key
+  route. Additional providers require a reviewed adapter and account approval.
 
 ## Safety boundaries
 

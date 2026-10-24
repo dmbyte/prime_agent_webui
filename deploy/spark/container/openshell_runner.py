@@ -69,8 +69,8 @@ def task_spec(task_id, owner, authorization, provider, model, thinking,
     runtime = int(limits["runtimeMinutes"])
     # The WebUI enforces the renewable soft deadline. Keep an independent,
     # immutable role ceiling here so extensions cannot run indefinitely.
-    runtime_ceiling = {"user": 30, "power_user": 120, "admin": 240}.get(authorization.get("role"), runtime)
-    if not 1 <= runtime <= runtime_ceiling <= 240:
+    runtime_ceiling = {"user": 30, "power_user": 120, "admin": 90 * 24 * 60}.get(authorization.get("role"), runtime)
+    if not 1 <= runtime <= runtime_ceiling <= 90 * 24 * 60:
         raise ValueError("Invalid task runtime limit")
     image = image_for_profile(profile, image_manifest)
     sandbox = f"pt-{task_id[:16]}"

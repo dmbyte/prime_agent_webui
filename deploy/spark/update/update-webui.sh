@@ -38,6 +38,7 @@ else
   git -C "$repo" checkout --detach "$release_commit"
 fi
 
+/usr/bin/python3 -c 'from cryptography.hazmat.primitives.ciphers.aead import AESGCM' || { echo 'Install the distribution python3-cryptography package before updating.' >&2; exit 1; }
 python3 -m py_compile "$source_dir/api.py" "$source_dir/api_v2.py" "$source_dir/auth.py"
 python3 -m unittest discover -s "$source_dir" -p 'test*.py'
 
@@ -61,14 +62,23 @@ sudo install -o root -g root -m 0644 \
   "$repo/deploy/spark/container/hosting_auth.py" \
   "$repo/deploy/spark/container/openshell_runner.py" \
   "$repo/deploy/spark/container/model_gateway.py" \
+  "$repo/deploy/spark/container/inference_policy.py" \
+  "$repo/deploy/spark/container/volume_provisioner.py" \
   "$repo/deploy/spark/container/runner_broker.py" \
   /usr/local/lib/prime-runner/
+sudo install -o root -g root -m 0644 "$repo/deploy/spark/prime/AGENTS.managed.md" /usr/local/lib/prime-runner/
 sudo install -o root -g root -m 0755 "$repo/deploy/spark/container/runner_launch.py" /usr/local/libexec/prime-runner-launch
 sudo install -o root -g root -m 0755 "$repo/deploy/spark/container/runner_client.py" /usr/local/libexec/prime-runner-client
 sudo install -o root -g root -m 0755 "$repo/deploy/spark/container/runner_recover.py" /usr/local/libexec/prime-runner-recover
+sudo install -o root -g root -m 0755 "$repo/deploy/spark/container/approve-inference-route.py" /usr/local/libexec/prime-approve-inference-route
 if id prime-runner >/dev/null 2>&1; then
   runner_uid=$(id -u prime-runner)
   workspace_root="${PRIME_RUNNER_WORKSPACE_ROOT:-${HOME}/prime-agent/tasks}"
+  volume_unit=$(mktemp)
+  sed -e "s/@WEB_OWNER@/${USER}/g" "$repo/deploy/spark/systemd/prime-volume-provisioner.service" >"$volume_unit"
+  printf '\n[Service]\nEnvironment="PRIME_RUNNER_WORKSPACE_ROOT=%s"\n' "$workspace_root" >>"$volume_unit"
+  sudo install -o root -g root -m 0644 "$volume_unit" /etc/systemd/system/prime-volume-provisioner.service
+  rm -f "$volume_unit"
   install -d -m 0770 "${HOME}/prime-agent" "$workspace_root"
   setfacl -m "u:prime-runner:rwx,g:prime-web:rwx,m::rwx,d:u:prime-runner:rwx,d:g:prime-web:rwx,d:m::rwx" "${HOME}/prime-agent" "$workspace_root"
   broker_unit=$(mktemp)
@@ -76,6 +86,7 @@ if id prime-runner >/dev/null 2>&1; then
   sudo install -o root -g root -m 0644 "$broker_unit" /etc/systemd/system/prime-runner-broker.service
   rm -f "$broker_unit"
   sudo systemctl daemon-reload
+  sudo systemctl enable --now prime-volume-provisioner.service
   PRIME_RUNNER_WORKSPACE_ROOT="$workspace_root" "$repo/deploy/spark/openshell/provision-volumes.sh"
   sudo systemctl restart prime-runner-broker.service
 fi

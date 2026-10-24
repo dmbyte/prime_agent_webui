@@ -32,8 +32,15 @@ ROLE_DEFAULTS = {
 ROLE_MAXIMUMS = {
     "user": ResourceLimits(8, 4, 30),
     "power_user": ResourceLimits(16, 8, 120, temporary_gib=8),
-    "admin": ResourceLimits(24, 12, 240, temporary_gib=16),
+    "admin": ResourceLimits(24, 12, 90 * 24 * 60, temporary_gib=16),
 }
+
+
+def normalize_runtime(value, role):
+    # Reject booleans, fractional values and implicit string coercion at the API.
+    if type(value) is not int or not 1 <= value <= ROLE_MAXIMUMS[normalize_role(role)].runtime_minutes:
+        raise ValueError('Task timeout must be whole minutes within your role limit')
+    return value
 
 
 def normalize_role(value):
@@ -102,7 +109,7 @@ def authorize_task(payload, role, login_execution=False, task_execution_confirme
     limits = ResourceLimits(
         memory_gib=int(requested.get("memoryGiB", defaults.memory_gib)),
         cpus=int(requested.get("cpus", defaults.cpus)),
-        runtime_minutes=int(requested.get("runtimeMinutes", defaults.runtime_minutes)),
+        runtime_minutes=normalize_runtime(payload.get('runtimeMinutes', requested.get('runtimeMinutes', defaults.runtime_minutes)), role),
         pids=defaults.pids,
         open_files=defaults.open_files,
         temporary_gib=int(requested.get("temporaryGiB", defaults.temporary_gib)),

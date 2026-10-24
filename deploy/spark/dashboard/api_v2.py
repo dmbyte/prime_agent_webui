@@ -30,6 +30,10 @@ POLICY_SPEC = importlib.util.spec_from_file_location("prime_task_policy", Path(_
 task_policy = importlib.util.module_from_spec(POLICY_SPEC)
 POLICY_SPEC.loader.exec_module(task_policy)
 
+CREDENTIAL_SPEC = importlib.util.spec_from_file_location('prime_credential_declarations', Path(__file__).with_name('skill_credentials.py'))
+credential_declarations = importlib.util.module_from_spec(CREDENTIAL_SPEC)
+CREDENTIAL_SPEC.loader.exec_module(credential_declarations)
+
 TASK_COMMON_PATH = Path(__file__).with_name("task_common.py")
 if not TASK_COMMON_PATH.exists():
     TASK_COMMON_PATH = Path(__file__).parents[1] / "container" / "task_common.py"
@@ -279,8 +283,8 @@ def route_task(message, settings=None, profile=None, previous_route=None):
     selected = (settings["provider"], settings["model"])
     enabled = set(settings.get("enabledModels") or [])
     value = str(message).casefold()
-    # This owner policy is deliberately above configurable specialist rules:
-    # code generation must not silently fall back to Nemotron or a frontier model.
+    # Keep the legacy Nemotron safety restriction, but do not override a capable
+    # selected/explicit cloud model merely because the task involves code.
     coding = bool(re.search(
         r"\b(code|coding|programming|scripts?|python|javascript|typescript|ipython|sql|bash|powershell|"
         r"implement\w*|refactor\w*|debug\w*|automat\w*|unit tests?|test suite)\b|"
@@ -289,12 +293,13 @@ def route_task(message, settings=None, profile=None, previous_route=None):
         value, re.S))
     explicit = bool(re.search(r"(?<!\w)/(nemotron|qwen|codex|chatgpt)(?!\w)|\b(use|ask|route to) (nemotron|qwen|codex|chatgpt)\b", value))
     continuing_code = bool((previous_route or {}).get("codeGenerationRoute")) and not explicit
-    if coding or profile in {"development", "network-operations"} or continuing_code:
+    needs_code = coding or profile in {"development", "network-operations"} or continuing_code
+    if needs_code and selected == NEMOTRON_ROUTE and not explicit:
         if "/".join(QWEN_ROUTE) not in enabled:
             raise ValueError("Qwen must be enabled for code generation and automation; Nemotron is limited to orchestration and very simple scripts.")
         return {"provider": QWEN_ROUTE[0], "model": QWEN_ROUTE[1], "routingMode": "automatic",
                 "codeGenerationRoute": True,
-                "routeReason": "Code-generation policy: Qwen handles implementation and automation in every profile; Nemotron is limited to orchestration and very simple scripts."}
+                "routeReason": "Nemotron is limited to simple scripts; Qwen starts this task and may delegate to approved models."}
     directives = (("/nemotron", NEMOTRON_ROUTE), ("/qwen", QWEN_ROUTE),
                   ("/codex", CODEX_ROUTE), ("/chatgpt", CODEX_ROUTE))
     matches = [(match.start(), directive, target)
@@ -302,6 +307,11 @@ def route_task(message, settings=None, profile=None, previous_route=None):
                if (match := re.search(rf"(?<!\w){re.escape(directive)}(?!\w)", value))]
     if matches:
         _, directive, target = min(matches, key=lambda row: row[0])
+        if needs_code and target == NEMOTRON_ROUTE:
+            if "/".join(QWEN_ROUTE) not in enabled:
+                raise ValueError("Qwen must be enabled: Nemotron cannot implement nontrivial code.")
+            return {"provider": QWEN_ROUTE[0], "model": QWEN_ROUTE[1], "routingMode": "automatic",
+                    "codeGenerationRoute": True, "routeReason": "Nemotron cannot implement nontrivial code; using Qwen."}
         if "/".join(target) in enabled:
             return {"provider": target[0], "model": target[1], "routingMode": "explicit",
                     "routeReason": f"Explicit {directive} directive selected."}
@@ -313,6 +323,10 @@ def route_task(message, settings=None, profile=None, previous_route=None):
         if not any(re.search(rf"(?<!\w){re.escape(trigger)}(?!\w)", value) for trigger in rule["triggers"]):
             continue
         target = (rule["provider"], rule["model"])
+        if needs_code and target == NEMOTRON_ROUTE:
+            if "/".join(QWEN_ROUTE) not in enabled:
+                raise ValueError("Qwen must be enabled: Nemotron cannot implement nontrivial code.")
+            target = QWEN_ROUTE
         mode = "explicit" if rule["scope"] == "always" else "automatic"
         if "/".join(target) in enabled:
             return {"provider": target[0], "model": target[1], "routingMode": mode, "routeReason": f'Routing rule “{rule["name"]}” matched.'}
@@ -324,15 +338,7 @@ def resolve_effort(requested, message, route, profile=None):
     """Resolve UI auto mode before invoking Prime; never send 'auto' to its CLI."""
     if requested != "auto":
         return requested, "Explicit conversation effort."
-    complex_work = bool(route.get("codeGenerationRoute")) or profile in {
-        "development", "network-operations", "cad", "finance"
-    } or bool(re.search(
-        r"\b(architect\w*|design\w*|analy[sz]\w*|diagnos\w*|investigat\w*|"
-        r"troubleshoot\w*|security|review|portfolio|trading|valuation|bios|bmc|"
-        r"firmware|reboot|install\w*|migrat\w*|deploy\w*|cad|manufactur\w*)\b",
-        str(message), re.I))
-    effective = "high" if complex_work else "low"
-    return effective, f"Auto effort: {effective} for {'coding, complex or consequential work' if complex_work else 'routine work'}."
+    return "low", "Auto effort: low initial assessment; agent selects effort and approved model for bounded subtasks."
 
 
 def now_iso():
@@ -441,7 +447,14 @@ def request_skill(payload, user):
     source = upload_path(source_file_id, user)
     if not zipfile.is_zipfile(source):
         raise ValueError("Skills must be supplied as a ZIP archive")
-    inspect_skill_archive(source)
+    manifest_prefix = inspect_skill_archive(source)
+    credential_requirements = []
+    with zipfile.ZipFile(source) as archive:
+        manifest_name = (manifest_prefix / credential_declarations.MANIFEST).as_posix()
+        if manifest_name in archive.namelist():
+            if archive.getinfo(manifest_name).file_size > 32768:
+                raise ValueError('Credential manifest is too large')
+            credential_requirements = credential_declarations.declarations(json.loads(archive.read(manifest_name)))
     project_id = str(payload.get("projectId") or "")
     scope = "project" if project_id else "personal"
     if project_id:
@@ -449,6 +462,8 @@ def request_skill(payload, user):
     permissions = normalize_skill_list(payload.get("permissions"), "Permissions", 5)
     if not set(permissions).issubset(SKILL_PERMISSIONS):
         raise ValueError("Unsupported skill permission")
+    if credential_requirements and 'credentials' not in permissions:
+        permissions.append('credentials')
     dependencies = normalize_skill_list(payload.get("dependencies"), "Dependencies")
     system_tools = normalize_skill_list(payload.get("systemTools"), "System tools")
     skill_id = f"s_{uuid.uuid4().hex[:24]}"
@@ -458,6 +473,7 @@ def request_skill(payload, user):
         "sourceName": source.name.split("-", 1)[-1],
         "sourceHash": hashlib.sha256(source.read_bytes()).hexdigest(),
         "dependencies": dependencies, "permissions": permissions,
+        "credentialRequirements": credential_requirements,
         "systemTools": system_tools, "status": "pending", "enabled": False,
         "createdAt": now_iso(),
     }
@@ -502,6 +518,8 @@ def skill_install_root(user):
 
 def install_skill_archive(row):
     source = upload_path(row["sourceFileId"], row["owner"])
+    if hashlib.sha256(source.read_bytes()).hexdigest() != row['sourceHash']:
+        raise ValueError('Skill source changed after review request; submit it again')
     prefix = inspect_skill_archive(source)
     root = skill_install_root(row["owner"])
     root.mkdir(mode=0o755, parents=True, exist_ok=True)
@@ -1784,6 +1802,31 @@ def store_task_route(task):
         legacy.atomic_json(META, data)
 
 
+def task_start_runtime(payload, owner, role):
+    """Explicit timeout wins, otherwise inherit saved chat/project timeout."""
+    requested = payload.get('taskPolicy') or {}
+    preference = payload.get('conversationPolicy') or {}
+    if not isinstance(requested, dict) or not isinstance(preference, dict):
+        raise ValueError('Task and conversation policies must be objects')
+    session_id, project_id = payload.get('sessionId'), payload.get('projectId')
+    saved = {}
+    if session_id:
+        require_conversation_owner(session_id, owner)
+        row = metadata().get('conversations', {}).get(session_id, {})
+        saved = row.get('taskPolicy') or {}
+        project_id = row.get('projectId')
+    if project_id and not saved:
+        saved = require_project(project_id, owner).get('taskPolicy') or {}
+    limits = requested.get('limits') or {}
+    if not isinstance(limits, dict):
+        raise ValueError('Task limits must be an object')
+    value = requested.get('runtimeMinutes', limits.get('runtimeMinutes', preference.get('runtimeMinutes', saved.get('runtimeMinutes', 30))))
+    value = task_policy.normalize_runtime(value, role)
+    if 'runtimeMinutes' in preference and preference['runtimeMinutes'] != value:
+        raise ValueError('Task timeout must match the saved conversation preference')
+    return value
+
+
 def policy_preference(payload, role):
     payload = payload if isinstance(payload, dict) else {}
     role = task_policy.normalize_role(role)
@@ -1804,6 +1847,8 @@ def policy_preference(payload, role):
         result["approvalMode"] = approval
     if local_paths:
         result["localPaths"] = local_paths
+    if 'runtimeMinutes' in payload:
+        result['runtimeMinutes'] = task_policy.normalize_runtime(payload['runtimeMinutes'], role)
     return result
 
 
@@ -1825,21 +1870,34 @@ def persistent_confirmation_allowed(requested, session_id, project_id, user):
     if not isinstance(saved, dict) or saved.get("confirmationMode") != "always":
         return False
     keys = ("profile", "executionMode", "networkMode", "approvalMode", "confirmationMode", "localPaths")
+    if requested.get('runtimeMinutes', 30) != saved.get('runtimeMinutes', 30):
+        return False
     return all((requested.get(key) or ([] if key == "localPaths" else None)) ==
                (saved.get(key) or ([] if key == "localPaths" else None)) for key in keys)
 
 
-def runtime_context(authorization):
+def runtime_context(authorization, requested_thinking="auto"):
     if not container_mode():
         return ""
     code_policy = (
-        "Model policy for EVERY profile: Qwen (spark-qwen/qwen3.8-flash-next) generates all nontrivial code, scripts, tests, "
-        "browser automation, and implementation changes. The default deployment disables Nemotron but retains its files. "
-        "Qwen uses low effort for routine work and high effort for code, complex analysis and consequential operations. "
-        "If a low-effort task discovers complex implementation work, actually delegate in ipython with "
-        "await rlm.spawn('<bounded implementation task and verification>', name='<unique-name>', model='spark-qwen/qwen3.8-flash-next', thinking='high'). "
+        "Adaptive model policy for EVERY profile: Qwen (spark-qwen/qwen3.8-flash-next) is the local default. "
+        "Nemotron remains disabled and must not generate nontrivial code. Code does not automatically require maximum reasoning. "
+        + ("Auto starts at low for assessment. Choose the least effort adequate to the actual subtask: low for routine work, "
+           "medium for ordinary implementation/analysis, high only for difficult uncertainty, repeated failed checks or consequential review. "
+           "Qwen high is natively extra-high, not a distinct intermediate level. You may do simple work directly or delegate "
+           "a bounded subtask via ipython: await rlm.spawn('<task and verification>', name='<unique-name>', "
+           "model='spark-qwen/qwen3.8-flash-next', thinking='medium'). Set thinking to your chosen supported level. "
+           if requested_thinking == "auto" else
+           f"The user explicitly selected effort {requested_thinking}; preserve that effort for local delegation rather than overriding it with Auto. ")
+        + "For cloud routing first read the protected catalog using ipython: "
+        "import json, urllib.request; routes = json.load(urllib.request.urlopen('http://127.0.0.1:31000/routing-models', timeout=10)). "
+        "Only listed external model IDs are approved for this account. Choose them when difficult coding, architecture, "
+        "independent critique or capability limits justify the latency/cost. Use the exact listed model ID in rlm.spawn "
+        "with a supported effort and a minimal task packet, never unrelated history or secrets. "
+        "If no external model is listed, remain local and report the approval/configuration gap when escalation is needed. "
+        "Never bypass this catalog with a direct provider URL, alternate credentials or an unlisted model. "
+        "State the selected model, effort and a brief task-level reason before delegating; do not expose hidden reasoning. "
         "Wait for and inspect the child's real result before reporting completion. Do not claim delegation without a tool call. "
-        "If Qwen is unavailable, report that blocker rather than having Nemotron implement it. "
         "These model assignments do not expand task permissions or authorize external actions.\n"
     )
     bmc = (
@@ -1937,7 +1995,7 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITI
         store_task_route(task)
     try:
         prompt_message += project_context(project_id, owner)
-        prompt_message += runtime_context(authorization)
+        prompt_message += runtime_context(authorization, requested_thinking)
         process.stdin.write(json.dumps({"id": f"state-{task_id}", "type": "get_state"}, separators=(",", ":")) + "\n")
         process.stdin.write(json.dumps({"id": f"prompt-{task_id}", "type": "prompt", "message": prompt_message}, separators=(",", ":")) + "\n")
         process.stdin.flush()
@@ -2345,6 +2403,42 @@ def version_tuple(value):
     return tuple(map(int, match.groups())) if match else None
 
 
+def openshell_upgrade_blocker(installed, latest):
+    """Use the installer's reviewed pin, not upstream availability, as approval."""
+    current, target = version_tuple(installed), version_tuple(latest)
+    if not current or not target:
+        return 'Cannot verify the installed or requested OpenShell version.'
+    if target <= current:
+        return None
+    if current < (0, 1, 0) <= target:
+        return 'OpenShell requires a reviewed 0.0.x-to-0.1.x gateway migration before updating.'
+    repo = Path(os.environ.get('PRIME_WEBUI_REPO', legacy.HOME / 'prime_agent_webui'))
+    try:
+        source = (repo / 'deploy/spark/openshell/install.sh').read_text()
+    except OSError:
+        source = ''
+    match = re.search(r'^version=(\d+\.\d+\.\d+)$', source, re.M)
+    pin = match.group(1) if match else None
+    if version_tuple(pin) != target:
+        return (f'OpenShell {latest.lstrip("v")} is available upstream, but Prime is approved for '
+                f'{pin or "an unknown version"}. Install a Prime update that validates this OpenShell '
+                'release first. The gateway has not been changed.')
+    return None
+
+
+def openshell_update_preflight():
+    installed = subprocess.run(['openshell', '--version'], capture_output=True, text=True,
+                               timeout=5, check=True).stdout.strip().rsplit(' ', 1)[-1]
+    result = subprocess.run(['gh', 'api', 'repos/NVIDIA/OpenShell/releases/latest'],
+                            capture_output=True, text=True, timeout=15, check=True)
+    latest = json.loads(result.stdout).get('tag_name', '')
+    if not re.fullmatch(r'v\d+\.\d+\.\d+', str(latest)):
+        raise RuntimeError('Cannot verify the latest stable OpenShell release.')
+    reason = openshell_upgrade_blocker(installed, latest)
+    if reason:
+        raise RuntimeError(reason)
+
+
 def release_status():
     definitions = {
         "agent": ("PrimeIntellect-ai/prime-agent", "Prime Agent"),
@@ -2380,6 +2474,9 @@ def release_status():
                 available = current != resolved and not ancestor
                 installed = name if current == resolved else f"{name}+{current[:7]}" if ancestor else current[:7]
             rows[kind] = {"label": label, "repository": repository, "installed": installed, "latestName": name, "latestTag": tag, "publishedAt": release.get("published_at"), "url": url, "available": available, "checkedAt": now_iso()}
+            if kind == 'openshell':
+                reason = openshell_upgrade_blocker(installed, tag)
+                rows[kind].update(updateAllowed=available and not reason, blockedReason=reason)
         except (OSError, subprocess.SubprocessError, json.JSONDecodeError, ValueError, TypeError) as error:
             rows[kind] = {"label": label, "repository": repository, "available": False, "error": "Release check unavailable", "checkedAt": now_iso()}
     return rows
@@ -2398,6 +2495,7 @@ def start_update(kind, confirmation):
                                    capture_output=True, text=True, timeout=10, check=True).stdout.splitlines()
         if sandboxes:
             raise RuntimeError("OpenShell update blocked: a sandbox still exists. Finish its work and delete it after preserving needed data, then retry.")
+        openshell_update_preflight()
     subprocess.run(["systemctl", "--user", "reset-failed", unit], capture_output=True, timeout=5, check=False)
     result = subprocess.run(["systemctl", "--user", "start", "--no-block", unit], capture_output=True, timeout=5)
     if result.returncode:
@@ -2664,8 +2762,9 @@ class Handler(legacy.Handler):
                 self.require_admin()
                 self.send_json(200, {"skill": review_skill(payload, user)})
             elif path == "/api/tasks/start":
-                requested = payload.get("taskPolicy") or {}
-                preference = policy_preference(payload.get("conversationPolicy"), role)
+                minutes = task_start_runtime(payload, user, role)
+                requested = {**(payload.get("taskPolicy") or {}), 'runtimeMinutes': minutes}
+                preference = policy_preference({**(payload.get("conversationPolicy") or {}), 'runtimeMinutes': minutes}, role)
                 persistent_confirmation = persistent_confirmation_allowed(requested, payload.get("sessionId"), payload.get("projectId"), user)
                 authorization = task_policy.authorize_task(
                     requested,

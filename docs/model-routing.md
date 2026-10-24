@@ -1,120 +1,145 @@
-# Model routing and code ownership
+# Adaptive effort and protected external inference
 
-## Mandatory code policy
+## Default behavior
 
-Qwen 3.8 Flash-Next (`spark-qwen/qwen3.8-flash-next`) generates nontrivial code
-in **all six profiles**: General, Development, CAD/3D, Finance, Network operations,
-and Read-only review. Selecting a profile controls the sandbox, not code ownership.
-Qwen is also the default orchestrator. Nemotron 3.5 Lightning is stopped and
-disabled, not deleted: its provider definition, service, image and model files
-remain available for deliberate rollback. It is removed from enabled models.
+Qwen 3.8 Flash-Next (`spark-qwen/qwen3.8-flash-next`) remains the local default.
+Nemotron is disabled but retained for rollback; it must not implement nontrivial
+code. Approved external models may implement code as well as plan or review it.
+Profiles govern tool permissions, not a mandatory reasoning level.
 
-## Automatic effort
-
-The WebUI defaults to **Auto**: low for routine conversation/summarization;
-high for detected code work, coding follow-ups, Development/Network operations,
-CAD/Finance profiles, and architecture/design/analysis/diagnosis/security/review,
-BMC/BIOS/firmware/install/migration/deployment requests. This is deterministic
-phrase/profile routing, not a guarantee of semantic classification. Explicit
-effort choices override Auto and persist in that conversation. Existing saved
-manual effort choices are preserved; select Auto in a chat header to adopt it.
-
-Auto is resolved before Prime starts, and the route tooltip records the effective
-choice. Auto itself persists across conversation turns; native Prime never
-receives an unsupported `--thinking auto`. Native CLI defaults to low.
-The Qwen provider enables `supportsReasoningEffort` with `thinkingFormat=openai`:
-low/minimal → `low`, medium → `medium`, high/xhigh/max → `xhigh`, off → `none`.
-These are request fields, not separate model copies. Off disables reasoning;
-low still reasons. The server fallback is `--reasoning-effort low`.
-Effort is a model instruction, not a hard reasoning-token or time limit; the
-WebUI task timer remains a separate control.
-All modes share one 262,144-token slot and the same IQ4_XS weights/Q8 K/V cache.
-Higher effort can increase time spent reasoning; it does not guarantee accuracy
-or increase decode throughput. The context includes input and output; Prime
-keeps an 8,192-token response/compaction reserve.
-
-Routing order is:
-
-1. Coding requests, Development/Network operations tasks, and ongoing coding
-   conversations go to Qwen. This overrides model directives and custom rules.
-   If Qwen is disabled, the request fails with a clear explanation; there is no
-   silent Nemotron implementation fallback.
-2. Otherwise, the first explicit slash directive (`/nemotron`, `/qwen`,
-   `/codex`, `/chatgpt`) selects its enabled target.
-3. Otherwise, enabled phrase rules run in descending priority order. Rules with
-   the `nemotron-default` scope run only when Nemotron is the selected default.
-4. Otherwise, the configured default model handles the conversation.
-
-The code detector covers code/coding/programming, scripts, Python, JavaScript,
-TypeScript, IPython, SQL, Bash, PowerShell, implementation, refactoring, debugging,
-automation, unit tests/test suites, fixing bugs/errors/failures/tests, and
-building/creating/writing/developing an app, application, website, function,
-plugin, tool, skill, or installer. It is conservative phrase matching, not a
-semantic guarantee for every possible request.
-
-Coding follow-ups such as “continue” or “do it” keep Qwen through saved
-conversation metadata. Outside Development/Network operations, an explicit
-non-code model request such as `/nemotron summarize the findings` exits that
-coding route. A new conversation starts without another chat's coding-route flag.
-Project instructions and policy are inherited normally; coding ownership is
-global and does not have to be set separately for each project.
-
-If a low-effort task discovers complex implementation work, the managed policy
-and per-task instructions require a real high-effort Qwen delegation. A task
-already at high effort may implement directly:
+**Auto · agent chooses** starts the parent at low effort for assessment in every
+profile. It no longer matches coding/finance/CAD/BMC keywords to high effort.
+The agent may complete routine work directly, or delegate a bounded subtask at
+a selected effort/model:
 
 ```python
 await rlm.spawn(
-    "Implement the bounded task and run its checks; report evidence and blockers.",
-    name="implementation",
+    "Implement the bounded change, run its tests, and return evidence.",
+    name="implementation-1",
     model="spark-qwen/qwen3.8-flash-next",
-    thinking="high",
+    thinking="medium",
 )
 ```
 
-This is an IPython call, not a separate model tool name. Use a unique child name,
-wait for the actual result, and verify it before reporting success. Do not write
-the complex code first and merely ask the child to review it. Emerging-task
-delegation is an agent instruction, **not a Python execution lock**.
+This is a real Python API inside IPython, not a model tool name. Medium is a
+reasonable starting point for ordinary implementation/analysis; high is reserved
+for harder uncertainty, repeated failed checks, or consequential review. These
+are agent guidelines, not a deterministic classifier or a guarantee that the
+agent always chooses optimally. The parent stays at its initial effort; different
+effort is applied to the delegated child. Never spawn recursive routing chains
+merely to decide how to route.
 
-## Default phrase rules
+The running Qwen chat template supports **low, medium and xhigh** and itself
+aliases high to xhigh. Therefore the existing wire map remains:
+off -> none; minimal/low -> low; medium -> medium; high/xhigh/max -> xhigh.
+There is no independent native high tier. Do not pretend that changing the
+label introduces one. The server fallback remains low.
 
-These are the reset/default rules. Administrators may have changed the live list.
-Every match is case-insensitive with word boundaries. A disabled target produces
-a visible fallback to the selected model for ordinary rules, but **not** for the
-mandatory code policy above.
+Explicit chat/project effort choices persist and override Auto; the injected
+policy instructs local children to preserve that explicit choice. An external
+model must receive a supported effort. Existing saved manual high settings are
+not silently reset: choose Auto in the conversation header to adopt selection.
 
-| Priority | Rule | Scope | Target | Trigger phrases |
-|---|---|---|---|---|
-| 1000 | Explicit Nemotron | Always | Nemotron | `use nemotron`, `route to nemotron`, `/nemotron` |
-| 990 | Explicit Codex / ChatGPT | Always | `openai-codex/gpt-5.6-sol` | `use codex`, `ask codex`, `route to codex`, `delegate to codex`, `use chatgpt`, `ask chatgpt`, `/codex`, `/chatgpt` |
-| 980 | Explicit Qwen | Always | Qwen | `use qwen`, `ask qwen`, `route to qwen`, `delegate to qwen`, `/qwen` |
-| 700 | Codex architecture specialist | Nemotron default | `openai-codex/gpt-5.6-sol` | `software architecture`, `application architecture`, `system architecture`, `architecture recommendation`, `architect the`, `architecture plan` |
-| 600 | Qwen visual, CAD, finance, and engineering specialist | Nemotron default | Qwen | `image`, `photo`, `screenshot`, `diagram`, `chart`, `graph`, `png`, `jpeg`, `webp`, `pdf`, `3d print`, `cad`, `stl`, `step`, `mesh`, `slicer`, `printability`, `portfolio`, `stock`, `equity`, `earnings`, `valuation`, `day trading`, `trade setup`, `technical analysis`, `options`, `code review`, `security review`, `independent review`, `second opinion`, `refactor`, `debug` |
+Effort does not increase decode throughput or guarantee correctness. All local
+efforts use the same IQ4_XS weights and 262,144-token Q8 cache slot. Input and
+output share that context; the task deadline is a separate control.
 
-The source of truth is `route_task()` / `default_routing_rules()` in
-`deploy/spark/dashboard/api_v2.py`. The installable agent policy is
-`deploy/spark/prime/AGENTS.managed.md`.
+## Initial model routing
 
-## Installation and administration
+1. A coding task using the legacy Nemotron default is redirected to Qwen unless
+   an explicit model request is present. Nemotron never wins a code route.
+2. The first explicit slash directive selects its enabled target. Code requests
+   no longer override /codex or a capable selected external default.
+3. Existing enabled phrase rules apply in priority order. Legacy
+   nemotron-default rules only apply when that model is selected.
+4. Otherwise the selected default handles the task, then chooses bounded
+   delegations as appropriate.
 
-Install `deploy/spark/prime/models.json` and `settings.json` as described in the
-[Spark recipe](../README.md#dgx-spark-openshell-and-local-models). Qwen must be
-enabled and healthy; Nemotron is optional and disabled in this profile.
-`configure-qwen-only.py` backs up host model/settings files, preserves unrelated
-providers and chat/project overrides, and opts existing installations into these
-defaults. The protected runner generates the same Qwen context and effort map
-for isolated accounts at launch. Apply `deploy/spark/openshell/install.sh` to
-refresh managed workspace instructions and immutable runtime images. It backs
-up older managed policies; it does not overwrite unrelated custom policies.
+Enabled/configured is NOT synonymous with privacy-approved. Any external route
+must pass the protected gateway even if a directive or phrase rule selected it.
+A denied external request returns an actionable JSON error, not a silent transfer
+to another provider. Nemotron's code restriction survives custom phrase rules.
+Normal disabled-rule target fallback behavior remains visible.
 
-Use **Admin → Routing rules** for the current phrase rules. The page explains
-the higher-priority code policy. The conversation header shows the actual model;
-the Route label's hover text explains the decision. Route changes do not enable
-tools, widen network access, bypass confirmation, authorize BMC changes, or permit
-live trading. Frontier architecture routes require their provider to be configured
-and enabled; code implementation still belongs to Qwen.
+## Agent-selected external delegation
 
-Run `bash scripts/validate-release.sh` for routing and runtime regressions. The
-installed `validate-prime-kvm-task.py` additionally checks a Qwen-driven synthetic
-browser workflow through the real broker, OpenShell, IPython, and final response.
+Inside OpenShell the agent reads:
+
+```python
+import json, urllib.request
+routes = json.load(urllib.request.urlopen(
+    "http://127.0.0.1:31000/routing-models", timeout=10
+))
+```
+
+Only exact IDs in `externalModels` are available for external delegation. The
+agent chooses one when difficult implementation, architecture, capability limits
+or an independent critique justify cloud latency/cost, and passes it as the
+`model` argument to `rlm.spawn`. Supply the smallest relevant task packet,
+exclude credentials/unrelated history, state a short model/effort/reason update,
+and verify the actual result. No hidden reasoning should be displayed.
+
+The implemented adapter is **openai-codex via ChatGPT OAuth**, not the OpenAI
+API-key route. Additional configured providers are not automatically supported
+in OpenShell: they require a reviewed gateway adapter and separate approval.
+Do not invent IDs or bypass the gateway with direct URLs or copied credentials.
+
+## Protected no-training approval
+
+The root-managed `/etc/prime-agent/inference-policy.json` lists exact models per
+owner, bound to a SHA256 fingerprint of the installed Codex account ID. Approval
+requires an explicit no-training attestation, non-secret review evidence and an
+expiry. The gateway checks file ownership/permissions, account identity, model
+and expiry on each new cloud request, including after credential refresh.
+Missing/malformed/unsafe/expired approvals fail closed. A credential alone does
+not grant approval. Local inference is unaffected.
+
+After independently verifying the account/workspace and applicable no-training
+controls, an administrator may run:
+
+```bash
+sudo /usr/local/libexec/prime-approve-inference-route \
+  --owner USERNAME --model gpt-5.6-sol \
+  --review-days 30 --confirm-no-training \
+  --evidence "Describe the actual account policy/settings review; no secrets"
+```
+
+Repeat --model only for exact supported models intended for delegation. This
+command records an administrator's attestation; it does not inspect provider
+settings, verify legal compliance or create a no-training guarantee. Do not run
+it merely because login works. Account changes invalidate the previous approval.
+Review periods are 1-90 days. Revoke with:
+
+```bash
+sudo /usr/local/libexec/prime-approve-inference-route --owner USERNAME --revoke
+```
+
+Policy changes are read on new requests without restarting the gateway. They
+do not retract already-sent requests or cancel an existing stream. Previous
+approval files are retained root-only for recovery. No provider credentials are
+printed, copied to the policy or exposed in the catalog.
+
+**Limits:** no-training is not zero retention. This gate covers model requests
+through the protected OpenShell model socket; it is not general network DLP,
+perfect redaction, or enforcement of a provider's promises. Browser/search/upload
+destinations and native host sessions need their own controls. Auxiliary cloud
+model calls through this socket have the same checks. Task tools do not gain
+authority to publish, trade, reboot, widen networking or approve providers.
+
+## Installation and validation
+
+The OpenShell installer installs inference_policy.py and the administrator
+approval helper alongside the model gateway, but never creates approval or
+overwrites an existing policy. Install the updated gateway and dashboard
+together while agent tasks are idle; restart those services after the files are
+installed. Qwen does not require a restart or a model/image rebuild.
+
+Managed workspace instructions and both public policy templates must match.
+Do not overwrite unrelated project instructions. Existing chat/project manual
+settings and custom phrase rules are preserved.
+
+Run `bash scripts/validate-release.sh` for routing, UI syntax, gateway HTTP and
+policy regressions. Run `validate-qwen-effort.mjs` in the deployed runtime image
+to verify low/medium/high/off wire values without external inference. Run
+`validate-qwen-task.py` only while production tasks are idle for a real
+OpenShell smoke test. It uses synthetic prompts and no external account.

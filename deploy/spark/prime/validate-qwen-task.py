@@ -89,4 +89,4 @@ if __name__=='__main__':
         'Use ipython to implement a function that strips whitespace and lowercases strings, removes empty strings and duplicates while preserving first occurrence. '
         'Run assertions for empty input, [" A ", "a", "B", ""], and [" x", "Y ", "X"]. '
         'Use one short cell with no file writes. Return PRIME_QWEN_CODE_PASS only after all assertions pass.',
-        'development','PRIME_QWEN_CODE_PASS','high',True)
+        'development','PRIME_QWEN_CODE_PASS','low',True)

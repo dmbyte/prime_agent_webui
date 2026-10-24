@@ -21,15 +21,17 @@ from console_feed import snapshots, watch
 PAGE = b"""<!doctype html><title>Fixture login</title>
 <input id='password' type='password'><button id='open' onclick="window.open('/framed?view=kvm#screen','_blank')">Open console</button>"""
 CONSOLE = b"""<!doctype html><title>Fixture console</title>
-<canvas id='screen' width='800' height='500' tabindex='0' style='background:navy'></canvas>
+<canvas id='screen' width='1000' height='600' tabindex='0' style='background:navy'></canvas>
 <script>const c=document.querySelector('canvas');
+const ctx=c.getContext('2d'),pixels=ctx.createImageData(c.width,c.height);let seed=123456;
+for(let i=0;i<pixels.data.length;i+=4){for(let j=0;j<3;j++){seed=(Math.imul(seed,1664525)+1013904223)>>>0;pixels.data[i+j]=seed>>>24}pixels.data[i+3]=255}ctx.putImageData(pixels,0,0);
 c.addEventListener('click',()=>{c.focus();document.title='Focused console'});
 window.addEventListener('keydown',e=>parent.document.title='Key '+e.key);</script>"""
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
-        body = (CONSOLE if self.path == "/console" else b'<title>Framed console</title><iframe src="/console" width="900" height="600"></iframe>' if self.path.startswith('/framed') else PAGE)
+        body = (CONSOLE if self.path == "/console" else b'<title>Framed console</title><iframe src="/console" width="1100" height="700"></iframe>' if self.path.startswith('/framed') else PAGE)
         self.send_response(200)
         self.send_header("Content-Type", "text/html")
         self.send_header("Content-Length", str(len(body)))
@@ -94,8 +96,18 @@ def main() -> None:
         with tempfile.TemporaryDirectory() as directory:
             os.environ["PRIME_WORKSPACE"] = directory
             frame = kvm.capture(str(Path(directory) / "frame.jpg"))
-            assert frame.stat().st_size > 100
-            assert kvm.capture(str(Path(directory)/'frame.png')).read_bytes().startswith(b'\x89PNG\r\n\x1a\n')
+            jpeg_size=frame.stat().st_size
+            assert jpeg_size > 200_000, jpeg_size
+            png=kvm.capture(str(Path(directory)/'frame.png')).read_bytes()
+            assert png.startswith(b'\x89PNG\r\n\x1a\n') and len(png)>1_000_000, len(png)
+            print(f'Large captures complete: JPEG {jpeg_size} bytes; PNG {len(png)} bytes',flush=True)
+            for _ in range(20):
+                watch(feed_root)
+                viewer=api('/api/consoles/frame?id='+session_id)['session']
+                if viewer and len(viewer.get('image') or '') > 250_000:
+                    break
+                time.sleep(.5)
+            assert viewer and len(viewer.get('image') or '') > 250_000, 'Large viewer frame missing'
         kvm.focus_console("#screen", confirm=True)
         kvm.key("F9", confirm=True)
         assert any(row["title"] == "Key F9" for row in kvm.pages())

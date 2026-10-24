@@ -29,8 +29,15 @@ class UpdateScriptTests(unittest.TestCase):
 
     def test_webui_update_installs_privileged_runner_dependencies(self):
         script = (ROOT / "deploy/spark/update/update-webui.sh").read_text()
-        for helper in ("task_common.py", "openshell_runner.py", "model_gateway.py", "runner_broker.py"):
+        for helper in ("task_common.py", "openshell_runner.py", "model_gateway.py", "inference_policy.py", "runner_broker.py"):
             self.assertIn(f"deploy/spark/container/{helper}", script)
+        self.assertIn('/usr/local/libexec/prime-approve-inference-route', script)
+
+    def test_installer_adds_policy_helper_without_approving_routes(self):
+        script = (ROOT / "deploy/spark/openshell/install.sh").read_text()
+        self.assertIn('deploy/spark/container/inference_policy.py', script)
+        self.assertIn('/usr/local/libexec/prime-approve-inference-route', script)
+        self.assertNotIn('--confirm-no-training', script)
 
     def test_webui_update_activates_release_pinned_openshell_images(self):
         script = (ROOT / "deploy/spark/update/update-webui.sh").read_text()
@@ -59,11 +66,12 @@ class UpdateScriptTests(unittest.TestCase):
         self.assertIn("source_expiry > target_expiry", script)
         self.assertIn("Retained the gateway Codex credential", script)
 
-    def test_openshell_012_install_and_volume_admission_are_pinned(self):
+    def test_openshell_install_and_volume_admission_are_pinned(self):
         installer = (ROOT / "deploy/spark/openshell/install.sh").read_text()
         config = (ROOT / "deploy/spark/openshell/gateway.toml").read_text()
         volumes = (ROOT / "deploy/spark/openshell/provision-volumes.sh").read_text()
-        self.assertIn("version=0.1.2", installer)
+        self.assertIn("version=0.1.4", installer)
+        self.assertIn("803939a059db6cc2a1ab38ff49e5c57e41b42549ac555130f13749d8ed6f46fb", installer)
         self.assertIn("openshell-gateway config preflight", installer)
         self.assertIn("version = 2", config)
         self.assertIn('compute_driver = "docker"', config)

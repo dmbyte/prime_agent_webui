@@ -3,6 +3,7 @@
 
 import os
 import re
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -14,15 +15,36 @@ WRITABLE_DIRS = ("sessions", "trash", "project-sources", "skills")
 
 
 def set_acl(arguments, path):
-    subprocess.run(["/usr/bin/setfacl", *arguments, str(path)], check=True)
+    set_acls(arguments, [path])
+
+
+def set_acls(arguments, paths):
+    # The WebUI creates recovered transcripts/uploads as its own UID. Their
+    # existing inherited ACL remains authoritative; prime-runner cannot chmod
+    # them. Never let such a file prevent every user's broker from starting.
+    owned = []
+    for path in paths:
+        info = path.lstat()
+        if info.st_uid == os.geteuid() and (stat.S_ISREG(info.st_mode) or stat.S_ISDIR(info.st_mode)):
+            owned.append(str(path))
+        if len(owned) == 128:
+            subprocess.run(["/usr/bin/setfacl", *arguments, '--', *owned], check=True)
+            owned = []
+    if owned:
+        subprocess.run(["/usr/bin/setfacl", *arguments, '--', *owned], check=True)
 
 
 def restore_tree(path, web_owner):
-    if not path.is_dir():
+    if path.is_symlink() or not path.is_dir():
         return
-    set_acl(["-Rm", f"u:{web_owner}:rwX,g:prime-web:rwX,m::rwX,o::---"], path)
-    for directory, _, _ in os.walk(path):
-        set_acl(["-m", f"d:u:{web_owner}:rwx,d:g:prime-web:rwx,d:m::rwx,d:o::---"], Path(directory))
+    access = ["-m", f"u:{web_owner}:rwX,g:prime-web:rwX,m::rwX,o::---"]
+    entries, defaults = [], []
+    for directory, directories, files in os.walk(path, followlinks=False):
+        directories[:] = [name for name in directories if not (Path(directory)/name).is_symlink()]
+        entries.append(Path(directory)); defaults.append(Path(directory))
+        entries.extend(Path(directory)/name for name in files)
+    set_acls(access, entries)
+    set_acls(["-m", f"d:u:{web_owner}:rwx,d:g:prime-web:rwx,d:m::rwx,d:o::---"], defaults)
 
 
 def main():

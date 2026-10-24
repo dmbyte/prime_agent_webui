@@ -15,12 +15,22 @@ class EffortRoutingTests(unittest.TestCase):
         for text in ('Hello', 'Summarize these notes', 'What is 21 times 2?'):
             self.assertEqual(api.resolve_effort('auto', text, {})[0], 'low')
 
-    def test_complex_auto_is_high(self):
+    def test_auto_leaves_complexity_to_agent_not_keywords(self):
         for text in ('Design the architecture', 'Investigate this failure', 'Update the BIOS', 'Review this plan'):
-            self.assertEqual(api.resolve_effort('auto', text, {})[0], 'high')
+            self.assertEqual(api.resolve_effort('auto', text, {})[0], 'low')
         for profile in ('development', 'network-operations', 'cad', 'finance'):
-            self.assertEqual(api.resolve_effort('auto', 'continue', {}, profile)[0], 'high')
-        self.assertEqual(api.resolve_effort('auto', 'continue', {'codeGenerationRoute': True})[0], 'high')
+            self.assertEqual(api.resolve_effort('auto', 'continue', {}, profile)[0], 'low')
+        self.assertEqual(api.resolve_effort('auto', 'continue', {'codeGenerationRoute': True})[0], 'low')
+
+    def test_runtime_policy_exposes_agent_choice_and_preserves_manual_effort(self):
+        with mock.patch.object(api, 'container_mode', return_value=True):
+            automatic = api.runtime_context({'profile': 'development'}, 'auto')
+            self.assertIn("thinking='medium'", automatic)
+            self.assertIn('/routing-models', automatic)
+            self.assertNotIn('generates all nontrivial code', automatic)
+            manual = api.runtime_context({'profile': 'development'}, 'low')
+            self.assertIn('explicitly selected effort low', manual)
+            self.assertNotIn('Auto starts at low', manual)
 
     def test_manual_effort_is_preserved(self):
         for level in api.legacy.THINKING - {'auto'}:

@@ -3,8 +3,8 @@ set -euo pipefail
 
 test "${EUID}" -ne 0 || { echo "Run as the Docker/WebUI owner, not root." >&2; exit 2; }
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
-version=0.1.2
-deb_sha256=14838b811b54148060da99fd2aabe78f05c777002c0a8fc39b106e0de0ddd796
+version=0.1.4
+deb_sha256=803939a059db6cc2a1ab38ff49e5c57e41b42549ac555130f13749d8ed6f46fb
 installed_openshell=$(openshell --version 2>/dev/null | awk 'NR == 1 {print $2}' || true)
 if [[ -n "$installed_openshell" ]] && dpkg --compare-versions "$installed_openshell" lt 0.1.0; then
   echo "OpenShell ${installed_openshell} requires the reviewed 0.0.x-to-0.1.x migration before running this installer; do not upgrade it in place." >&2
@@ -119,6 +119,18 @@ sudo find "$owner_agent/sessions" "$owner_agent/trash" "$owner_agent/project-sou
 
 sudo install -d -o root -g root -m 0755 /usr/local/lib/prime-runner /usr/local/libexec
 sudo install -o root -g root -m 0644 "$repo/deploy/spark/container/task_common.py" "$repo/deploy/spark/container/model_gateway.py" "$repo/deploy/spark/container/openshell_runner.py" "$repo/deploy/spark/container/kvm_broker.py" /usr/local/lib/prime-runner/
+sudo install -o root -g root -m 0644 "$repo/deploy/spark/container/inference_policy.py" /usr/local/lib/prime-runner/
+sudo install -o root -g root -m 0644 "$repo/deploy/spark/container/volume_provisioner.py" "$repo/deploy/spark/prime/AGENTS.managed.md" /usr/local/lib/prime-runner/
+volume_unit=$(mktemp)
+sed -e "s/@WEB_OWNER@/${USER}/g" "$repo/deploy/spark/systemd/prime-volume-provisioner.service" >"$volume_unit"
+printf '\n[Service]\nEnvironment="PRIME_RUNNER_WORKSPACE_ROOT=%s"\n' "$workspace_root" >>"$volume_unit"
+sudo install -o root -g root -m 0644 "$volume_unit" /etc/systemd/system/prime-volume-provisioner.service
+rm -f "$volume_unit"
+sudo systemctl daemon-reload
+sudo systemctl enable --now prime-volume-provisioner.service
+sudo install -o root -g root -m 0755 "$repo/deploy/spark/container/approve-inference-route.py" /usr/local/libexec/prime-approve-inference-route
+# Missing/expired policy denies external inference. Never auto-attest provider
+# training controls during installation or replace an existing approval file.
 install -m 0644 "$repo/deploy/spark/container/task_common.py" "${HOME}/prime-dgx-dashboard/task_common.py"
 install -m 0644 "$repo/deploy/spark/container/console_feed.py" "${HOME}/prime-dgx-dashboard/console_feed.py"
 sudo install -o root -g root -m 0644 "$repo/deploy/spark/container/console_feed.py" /usr/local/lib/prime-runner/console_feed.py

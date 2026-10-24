@@ -36,7 +36,7 @@ window.PrimeTaskTimer = (() => {
             const result = await request("/api/tasks/extend", {method: "POST", headers: {"Content-Type": "application/json"},
               body: JSON.stringify({id: task.id, timerRevision: card.task.timerRevision})});
             Object.assign(card.task, result);
-            status.textContent = `Extended by 30 minutes. New deadline: ${new Date(result.deadlineEpoch * 1000).toLocaleTimeString()}.`;
+            status.textContent = `Extended by 30 minutes. New deadline: ${new Date(result.deadlineEpoch * 1000).toLocaleString()}.`;
             // Suppress another click until the next normal task poll.
             card.pending = true;
           } catch (error) { status.textContent = error.message; card.pending = false; extend.disabled = false; }
@@ -48,7 +48,7 @@ window.PrimeTaskTimer = (() => {
       }
       card.task = task;
       const seconds = Math.max(0, Math.ceil(task.remainingSeconds || 0));
-      card.detail.textContent = `${task.topic || "Task"} — ${Math.floor(seconds / 60)}m ${seconds % 60}s remaining. Without an extension, it will stop at ${new Date(task.deadlineEpoch * 1000).toLocaleTimeString()}.`;
+      card.detail.textContent = `${task.topic || "Task"} — ${Math.floor(seconds / 60)}m ${seconds % 60}s remaining. Without an extension, it will stop at ${new Date(task.deadlineEpoch * 1000).toLocaleString()}.`;
       card.extend.disabled = card.pending || !task.timerExtendable;
       card.keep.hidden = card.keptRevision === task.timerRevision || !task.timerExtendable;
       if (!task.timerExtendable && !card.pending) card.status.textContent = "The runtime ceiling has been reached; this task cannot be extended further.";

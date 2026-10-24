@@ -81,6 +81,12 @@ fractions of the element's bounding box, not host-screen pixels. iLO may close
 an idle remote console independently. If it disconnects, report that state;
 do not silently refresh a virtual-media installation.
 
+An incomplete-response or JSON decode error during capture is a transport
+failure, not a usable screenshot. If metadata requests still work but capture
+keeps failing, report the capture-channel error rather than repeatedly recreating
+sessions or continuing BIOS input blind. No SSH response by itself identifies
+the current boot screen.
+
 ```python
 from bmc_html5_kvm import KVMClient
 

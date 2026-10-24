@@ -4,14 +4,25 @@ The DGX Spark release runs WebUI tasks inside NVIDIA OpenShell sandboxes through
 the local Docker driver. OpenShell replaces the earlier task-container runtime
 for production use.
 
-The reviewed package is NVIDIA OpenShell `0.1.2-1` for ARM64, with SHA256
-`14838b811b54148060da99fd2aabe78f05c777002c0a8fc39b106e0de0ddd796`.
+The reviewed package is NVIDIA OpenShell `0.1.4-1` for ARM64, with SHA256
+`803939a059db6cc2a1ab38ff49e5c57e41b42549ac555130f13749d8ed6f46fb`.
 The loopback `spark-local` gateway uses schema v2, Docker, mTLS, a 256-process
 per-sandbox cap, and disabled telemetry. It enables caller driver config only
 with resource admission enabled; Prime's pre-provisioned bind-backed Docker
 volumes carry `openshell.ai/sandbox-attachable=true` and
 `openshell.ai/sandbox-attachable-workspace=default`. The host paths themselves
 are not removed when an unlabeled Docker volume definition is recreated.
+
+Settings distinguishes an upstream release from a Prime-approved upgrade. If the
+latest release differs from this installer pin, the button shows **Requires Prime
+compatibility update** and explains the blocker. Both API and updater enforce it.
+The updater checks published and pinned SHA256 values, validates the current
+configuration with the candidate gateway, and rechecks sandbox absence just before
+installation. Finish existing tasks/hosting/KVM work first; no sandbox is removed
+automatically. Do not bypass the reviewed pin merely to enable a newer release.
+Gateway restart is followed by bounded readiness checks for both client identities,
+not a single immediate connection attempt. Retrying an already-installed version
+also checks readiness before reporting success.
 
 ## Prerequisites
 
@@ -23,6 +34,62 @@ Run on Ubuntu 24.04 ARM64 DGX Spark as the non-root WebUI/Docker owner.
 - No active OpenShell sandboxes during install or update.
 - Stop managed hosting services explicitly before upgrading; the installer
   refuses to interrupt existing ISO/app hosting.
+
+## Adaptive effort and protected external inference
+
+WebUI Auto starts the parent at low effort. Prime may select medium or high for
+bounded child tasks and use an exact external model listed by the protected
+gateway at `http://127.0.0.1:31000/routing-models` inside the sandbox. Local Qwen
+high is natively extra-high; routine coding need not jump to that level.
+Explicit chat/project effort remains authoritative for local children.
+
+The installer adds the policy module and the root-only
+`/usr/local/libexec/prime-approve-inference-route` administration helper. It does
+**not** approve cloud use. The only implemented external inference adapter is
+ChatGPT/Codex OAuth (`openai-codex`); each owner, account, exact model and expiry
+needs an administrator's independently verified no-training approval. Existing
+credentials alone do not qualify. Unapproved requests fail closed. This controls
+the model gateway, not general network traffic or native-host execution.
+See [model routing](../../../docs/model-routing.md) for approval, revocation,
+retention limitations, and activation without interrupting active tasks.
+
+## New users and storage recovery
+
+The installer registers existing users' volumes; first task launch now handles
+new accounts too. `runner_launch.py` prepares the protected owner directories,
+initializes missing managed instructions and cache/tool folders, waits for the
+model gateway, and calls `prime-volume-provisioner.service` before sandbox creation.
+The eight definitions are Prime state, workspace, four network gateways, KVM and
+hosting access. Registration alone does not grant network, hosting or KVM authority.
+
+The small root-managed provisioner accepts only the prime-runner Unix peer UID
+and a validated owner identifier on a host-only abstract Unix socket. It accepts
+no path or Docker command from its caller. Sources must be runner-owned private
+directories without symlinks. Existing driver/options/admission labels must match
+exactly; conflicting volumes fail closed without removal. Tasks have no Docker
+socket/group access and cannot reach the provisioning socket in their namespace.
+
+Startup ACL recovery changes only runner-owned regular files and directories,
+in bounded batches. WebUI-owned recovered transcripts retain their inherited ACLs;
+the runner cannot change their permissions and must not fail startup trying.
+Symlinks are not traversed. Recovery does not delete conversations or prompts.
+
+Both installer and updater install the provisioner module/unit and the runner's
+dependency. For an existing installation, activate matching files while tasks
+are idle, preserve a rollback backup, and restart the broker. Check:
+
+```bash
+sudo systemctl status prime-volume-provisioner prime-model-gateway prime-runner-broker
+python3 deploy/spark/prime/validate-user-runtime.py --owner TEST_USER
+python3 deploy/spark/prime/validate-user-runtime.py --owner TEST_USER --tool
+```
+
+Run the canary on the Spark as the trusted WebUI host account. It exercises the
+real local dashboard task API, OpenShell, Qwen and optionally IPython, using only
+synthetic prompts. It does not validate browser login and does not use existing
+conversations/files or external providers. Successful test chats move to recoverable
+trash; failures remain available. `--role admin --effort medium` can test an actual
+administrator account's explicit effort. Never use a higher role than the account.
 
 ## Managed LAN hosting
 
@@ -96,11 +163,20 @@ this model-driven test.
 Task timers now have a renewable API deadline and an independent sandbox hard
 ceiling. Install `openshell_runner.py` with the matching API/UI: leaving an old
 runner in place would still stop a task at the original 30-minute cutoff after
-the WebUI accepted an extension. New launches retain role ceilings of 30/120/240
-minutes for user/power-user/admin. The authenticated owner can add 30 minutes
+the WebUI accepted an extension. New launches have role ceilings of 30/120/129600
+minutes for user/power-user/admin (administrators: 90 days). The conversation-header
+**Task timeout** is persisted per chat, inherited from project settings for new
+chats, and defaults to 30 minutes when not saved. It applies to each new task;
+changing it does not extend a running task. The authenticated owner can add 30 minutes
 before expiry, within the ceiling, from the five-minute warning. No response
 means stop at the approved deadline. Broker disconnection still cleans up the
 sandbox. No filesystem or network permission is changed by extending time.
+Long durations do not provide restart recovery or keep a naturally completed task
+alive. CLI `sandbox exec` has no additional timeout by default; the protected
+runner supplies the role-ceiling cutoff and the API enforces the selected deadline.
+Install matching API, policy, runner, hosting authorization helper and static UI
+assets together. Hosting capabilities remain task-scoped/revoked at task exit but
+cover the longer runner lifetime. KVM and hosted-service lifetimes are unchanged.
 
 The Console viewer popout uses bounded owner-workspace snapshots from the
 `console_feed.py` helper installed in every task image, the dashboard, and the
@@ -114,6 +190,13 @@ alongside `api_v2.py`. The KVM broker receives the configured
 Run `validate-console-viewer.py` in the network-operations image against the
 dashboard source for the offline live-frame, rendering, and authentication test;
 the KVM broker validator also checks that viewer frames arrive and clear on close.
+It exercises large real Chromium JPEG/PNG captures. Broker/client socket replies
+must be complete and newline-framed, with the existing 3.5 MB JSON / 2 MB decoded
+image limits retained. Incomplete replies fail explicitly without replacing an
+existing screenshot. `test_kvm_transport.py` covers slow readers, fragmentation,
+disconnects and bounds. Deploy the matching broker, managed skill and rebuilt
+image manifest together; restart the broker only after checking for active KVM
+sessions, since its sessions do not survive a restart.
 
 The installed `AGENTS.managed.md` and per-task runtime context assign all
 nontrivial code generation to Qwen across all profiles. The WebUI additionally

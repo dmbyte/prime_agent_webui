@@ -1,0 +1,136 @@
+# Per-user skill credential setup
+
+This branch adds **Settings → My credentials**. It is a staged storage/setup
+feature, not automatic runtime credential injection. Existing tools do not yet
+consume these saved values; the UI explicitly says **tool integration pending**.
+Do not claim a connection is tested or operational merely because it is Saved.
+
+## User workflow
+
+When an installed/enabled skill declares credentials, its reviewed fields appear
+for the signed-in user. Project-only skills appear when selected in an owned
+project. Enter the required values and save. Blank fields preserve existing
+values; nonblank entries replace them. Saved values are never displayed or sent
+back to the browser. Delete removes the local record, not the credential at the
+remote service. Rotate/revoke a compromised credential at that service too.
+
+Disabling/removing a skill removes its active requirements. Existing saved entries
+remain as inactive, delete-only records so users can clean them up. Changes to a
+declaration create a new requirement rather than silently reusing old secrets.
+Deleting a WebUI account removes its vault record before its username can be
+reused. Disabling an account blocks access but retains its encrypted record.
+
+Each user has independent values, even for the same skill/project requirement.
+Neither project metadata, chat exports, skill ZIPs nor browser storage hold these
+values. Do not paste credentials into chat or put them in a skill declaration.
+There is no administrator web API for revealing another user's values.
+
+## Declare a requirement
+
+An uploaded skill ZIP can contain `credential-requirements.json` beside SKILL.md:
+
+```json
+{
+  "version": 1,
+  "credentials": [{
+    "id": "service-login",
+    "label": "Service account",
+    "description": "A token for this service; use minimum required permissions.",
+    "fields": [
+      {"id": "username", "label": "Username", "required": true},
+      {"id": "token", "label": "Access token", "required": true}
+    ]
+  }]
+}
+```
+
+All fields are treated as secrets. No defaults, environment-variable destinations,
+scripts, arbitrary URLs for fetching secrets, or automatic grants are accepted.
+Limits: 16 credential groups per skill, 8 fields per group, 8192 UTF-8 bytes per
+value and a 70,000-byte save request. IDs are lowercase identifiers, not paths.
+
+Requirements are captured when the archive is submitted, displayed in the
+administrator's review queue and enabled only after approval. The archive hash
+is rechecked before installation. The auth service reads reviewed metadata,
+never live task-writable skill files. The managed skill installer publishes
+requirements in its metadata inventory; NVIDIA catalog manifests can carry the
+same schema. Built-in BMC setup declarations are supplied separately in
+`deploy/spark/prime/managed-credential-requirements.json`, without changing pinned
+task images. These are setup declarations only, not working BMC credential adapters.
+
+Inventories are owner-scoped. The current single-owner installer publishes the
+legacy `.prime/agent/skill-inventory.json`. A multi-user provisioner can publish
+individual snapshots in `.prime/agent/skill-inventories/USERNAME.json` under the
+WebUI service account's home; each file must identify that owner. Do not read
+another user's inventory as a fallback. Uploaded, reviewed skills already use
+the owner-scoped shared metadata catalog. A tool needs a reviewed skill/package
+declaration; credentials are not inferred from free-form model text or all tools
+on PATH. Automatic multi-user global-inventory provisioning remains follow-up work.
+
+## Storage and security boundary
+
+The auth service, not the general dashboard API, handles `/auth/credentials`.
+Every operation validates the actual login cookie and enabled user record; writes
+also require that session's CSRF token. Forwarded user/role headers and JSON owner
+overrides cannot select a vault. Responses expose only field/status metadata.
+The feature fails closed unless `PRIME_CREDENTIALS_ENABLED=1` is explicitly set.
+
+Files live in `skill-vault/` beside `web-auth.json`, normally
+`~/.config/prime-agent/skill-vault/`. AES-256-GCM encrypts each user's payload with
+a fresh random nonce and user-bound authenticated data. The directory is 0700;
+master key and encrypted files are 0600. Symlinks, wrong ownership, unsafe modes,
+corruption and missing keys fail closed. Writes are atomic and serialized within
+the single auth service. Do not run multiple auth writers on the same vault.
+
+Back up the key and encrypted records together into protected backup storage.
+Never regenerate a missing key over existing data. Encryption does not protect
+against root or the compromised host service account: that account holds the
+key. This is not an external KMS, HSM, or protection from trusted host admins.
+Deleting records does not erase old backups or revoke provider credentials.
+
+The Advanced console is the shared host account, so both `/terminal/` and
+`/terminal/ws` must enforce `/auth/check-admin` through the internal Nginx admin
+check. Hiding a button is not sufficient. Ordinary users cannot be given this
+host console while claiming cross-user credential isolation. Native/host agents
+running as the service account are also trusted, unlike isolated OpenShell tasks.
+
+## Installation / activation
+
+No production deployment is performed by this change. Keep active work running.
+For a new installation, the root installer adds the distribution's
+`python3-cryptography`, installs the protected console routes, and enables the
+feature in the generated auth unit. With `--skip-packages`, install the dependency
+for the service's `/usr/bin/python3` first; preflight checks it.
+
+For an existing installation, schedule an idle maintenance window:
+
+1. Preserve existing auth configuration, Nginx configuration and protected vault
+   if present. Never copy real credentials into the repository.
+2. Install the updated dashboard/auth Python modules and credentials.js asset.
+   The normal WebUI updater copies them and requires cryptography, but does not
+   automatically enable the feature or rewrite a customized Nginx configuration.
+3. Merge the internal `/_auth_admin_check` location and both terminal guards from
+   the reviewed Nginx template. Check `nginx -t`, reload, and verify a normal user
+   is denied both the terminal page and WebSocket while an administrator succeeds.
+4. Publish reviewed skill requirements with the managed installer or the normal
+   upload/review flow. Do not execute unreviewed packages to discover credentials.
+5. Only then set `PRIME_CREDENTIALS_ENABLED=1` in a prime-auth.service drop-in,
+   reload the user service configuration and restart the auth service. Confirm
+   persistence across reload and isolation with two test accounts.
+
+Existing model-provider credentials and OAuth sessions are not migrated or
+changed. This feature does not approve cloud inference or replace the independent
+no-training approval policy. OAuth login/refresh, named multi-device connections,
+credential sharing and trusted runtime adapters are follow-up work.
+
+## Verification
+
+`bash scripts/validate-release.sh` includes vault/auth/manifest regressions and
+JavaScript syntax checks. Use a virtual environment with cryptography if the
+developer machine lacks the service dependency.
+
+`python deploy/spark/dashboard/validate-credentials-ui.py` runs a real browser,
+real HTTP auth handler and encrypted store against synthetic users on localhost.
+It requires Playwright; `PRIME_TEST_CHROME` optionally selects a Chromium binary.
+It uses a temporary browser profile and never logs in to production or calls a
+model/BMC. Test credentials are synthetic and the temporary store is removed.

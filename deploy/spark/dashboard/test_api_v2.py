@@ -25,7 +25,7 @@ class DashboardV2Tests(unittest.TestCase):
                 self.assertIn(fragment, text)
             general = api.runtime_context({"profile": "general"})
             self.assertIn("Qwen", general)
-            self.assertIn("all nontrivial code", general)
+            self.assertIn("must not generate nontrivial code", general)
             self.assertNotIn("KVM screenshot", general)
             for profile in ("general", "development", "cad", "finance", "review", "network-operations"):
                 self.assertIn("model='spark-qwen/qwen3.8-flash-next'", api.runtime_context({"profile": profile}))
@@ -357,7 +357,7 @@ for line in sys.stdin:
         def fake_run(args, **kwargs):
             calls.append(args)
             return mock.Mock(returncode=0, stdout="")
-        with mock.patch.object(api, "update_status", return_value={"openshell": {"active": False}}), mock.patch.object(api.subprocess, "run", side_effect=fake_run), mock.patch.object(api.legacy, "audit"):
+        with mock.patch.object(api, "openshell_update_preflight"), mock.patch.object(api, "update_status", return_value={"openshell": {"active": False}}), mock.patch.object(api.subprocess, "run", side_effect=fake_run), mock.patch.object(api.legacy, "audit"):
             result = api.start_update("openshell", "update-openshell")
         self.assertEqual(result["unit"], "prime-update-openshell.service")
         self.assertIn(["systemctl", "--user", "start", "--no-block", "prime-update-openshell.service"], calls)
@@ -768,11 +768,17 @@ for line in sys.stdin:
                 self.assertEqual((route["provider"], route["model"]), api.QWEN_ROUTE)
                 self.assertTrue(route["codeGenerationRoute"])
 
-    def test_code_policy_overrides_directives_and_custom_rules(self):
+    def test_code_policy_only_excludes_nemotron_not_external_models(self):
         with mock.patch.object(api, "routing_rules", return_value=[{"enabled": True, "scope": "always", "triggers": ["write"], "provider": "spark-nemotron", "model": "nemotron-3.5-lightning", "name": "custom"}]):
-            for directive in ("/nemotron", "Use Nemotron", "/codex", ""):
+            for directive in ("/nemotron", "Use Nemotron", ""):
                 route = api.route_task(directive + " write a script", self.settings(codex=True))
                 self.assertEqual((route["provider"], route["model"]), api.QWEN_ROUTE)
+            route = api.route_task('/codex write a script', self.settings(codex=True))
+            self.assertEqual((route['provider'], route['model']), api.CODEX_ROUTE)
+
+    def test_selected_external_model_can_implement_code(self):
+        route = api.route_task('Write a Python script', self.settings(*api.CODEX_ROUTE, codex=True), profile='development')
+        self.assertEqual((route['provider'], route['model']), api.CODEX_ROUTE)
 
     def test_automation_profiles_do_not_need_coding_keywords(self):
         for profile in ("network-operations", "development"):
@@ -877,6 +883,8 @@ for line in sys.stdin:
             with zipfile.ZipFile(archive_path, "w") as archive:
                 archive.writestr("sample/SKILL.md", "# Sample\n")
                 archive.writestr("sample/reference.txt", "reviewed")
+                archive.writestr("sample/credential-requirements.json", json.dumps({'version': 1, 'credentials': [
+                    {'id': 'service', 'label': 'Service', 'fields': [{'id': 'token', 'label': 'Token'}]}]}))
             relative = archive_path.relative_to(uploads).as_posix()
             file_id = base64.urlsafe_b64encode(relative.encode()).decode().rstrip("=")
             meta_path = root / "metadata.json"
@@ -884,12 +892,24 @@ for line in sys.stdin:
             with mock.patch.object(api, "META", meta_path), mock.patch.object(api.legacy, "UPLOADS", uploads), mock.patch.object(api.legacy, "audit"), mock.patch.dict(api.os.environ, {"PRIME_RUNNER_WORKSPACE_ROOT": str(root / "tasks")}):
                 requested = api.request_skill({"name": "Sample Skill", "description": "Does useful work", "sourceFileId": file_id, "permissions": ["instructions"], "dependencies": ["httpx"]}, "alice")
                 self.assertEqual(requested["status"], "pending")
+                self.assertEqual(requested['credentialRequirements'][0]['id'], 'service')
                 self.assertEqual(api.skill_catalog("bob"), [])
                 approved = api.review_skill({"id": requested["id"], "action": "approve"}, "admin")
                 installed = root / "tasks/alice/.prime/agent/skills/sample-skill"
                 self.assertEqual(approved["status"], "installed")
+                self.assertEqual(approved['credentialRequirements'], requested['credentialRequirements'])
                 self.assertEqual((installed / "SKILL.md").read_text(), "# Sample\n")
                 self.assertFalse((root / "tasks/alice/.venv").exists())
+
+    def test_changed_skill_archive_cannot_install_reviewed_credentials(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'skill.zip'
+            with zipfile.ZipFile(path, 'w') as archive:
+                archive.writestr('SKILL.md', '# Changed after request')
+            with mock.patch.object(api, 'upload_path', return_value=path), mock.patch.object(api, 'skill_install_root') as install_root:
+                with self.assertRaisesRegex(ValueError, 'changed after review'):
+                    api.install_skill_archive({'sourceFileId': 'fixture', 'owner': 'alice', 'sourceHash': '0' * 64})
+                install_root.assert_not_called()
 
     def test_skill_archive_traversal_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:

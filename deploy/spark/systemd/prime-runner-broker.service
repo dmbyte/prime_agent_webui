@@ -1,7 +1,7 @@
 [Unit]
 Description=Prime OpenShell task runner broker
-After=prime-model-gateway.service
-Requires=prime-model-gateway.service
+After=prime-model-gateway.service prime-volume-provisioner.service
+Requires=prime-model-gateway.service prime-volume-provisioner.service
 
 [Service]
 Type=simple

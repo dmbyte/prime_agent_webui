@@ -45,9 +45,10 @@ class TaskTimerTests(unittest.TestCase):
 
     def test_role_and_hard_ceiling_are_enforced(self):
         with self.assertRaises(ValueError): self.extend(role='user')
-        for revision in range(7): self.extend(revision)
+        self.task['_hardDeadlineMonotonic'] = self.task['_deadlineMonotonic'] + 1800
+        self.extend()
         self.assertFalse(api.task_timer_view(self.task)['timerExtendable'])
-        with self.assertRaises(ValueError): self.extend(7)
+        with self.assertRaises(ValueError): self.extend(1)
 
     def test_expired_stopped_and_old_tasks_cannot_be_extended(self):
         with mock.patch.object(api.time,'monotonic',return_value=self.task['_deadlineMonotonic']+1):

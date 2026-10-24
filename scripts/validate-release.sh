@@ -12,8 +12,12 @@ required=(
   deploy/spark/dashboard/api_v2.py
   deploy/spark/dashboard/app-v2.js
   deploy/spark/dashboard/task-timer.js
+  deploy/spark/dashboard/timeout-controls.js
   deploy/spark/dashboard/task-timer.css
   deploy/spark/dashboard/auth.py
+  deploy/spark/dashboard/skill_credentials.py
+  deploy/spark/dashboard/credentials.js
+  deploy/spark/prime/managed-credential-requirements.json
   deploy/spark/dashboard/index.html
   deploy/spark/dashboard/skill-governance.css
   deploy/spark/nginx/prime-agent.conf
@@ -25,6 +29,8 @@ required=(
   deploy/spark/container/install-user-codex-credential.sh
   deploy/spark/container/task_common.py
   deploy/spark/container/model_gateway.py
+  deploy/spark/container/inference_policy.py
+  deploy/spark/container/approve-inference-route.py
   deploy/spark/container/gateway_relay.py
   deploy/spark/container/console_feed.py
   deploy/spark/dashboard/console-viewer.html
@@ -39,6 +45,8 @@ required=(
   deploy/spark/prime/skills/lan-web-host/SKILL.md
   deploy/spark/container/openshell_runner.py
   deploy/spark/container/runner_broker.py
+  deploy/spark/container/volume_provisioner.py
+  deploy/spark/systemd/prime-volume-provisioner.service
   deploy/spark/container/runner_client.py
   deploy/spark/container/runner_launch.py
   deploy/spark/container/runner_recover.py
@@ -68,6 +76,7 @@ required=(
   deploy/spark/prime/validate-qwen-context.py
   deploy/spark/prime/validate-qwen-effort.mjs
   deploy/spark/prime/validate-qwen-task.py
+  deploy/spark/prime/validate-user-runtime.py
   deploy/spark/vllm-nemotron35/README.md
   deploy/spark/llama-qwen38/README.md
   deploy/spark/llama-qwen38/build-image.sh
@@ -75,6 +84,8 @@ required=(
   deploy/spark/llama-qwen38/start.sh
   deploy/spark/systemd/llama-qwen38.service
   docs/model-routing.md
+  docs/user-credentials.md
+  deploy/spark/dashboard/validate-credentials-ui.py
   docs/releases/v0.5.47.md
 )
 for path in "${required[@]}"; do
@@ -87,13 +98,16 @@ bash -n install.sh deploy/spark/update/update-prime-agent.sh deploy/spark/update
   deploy/spark/openshell/install.sh deploy/spark/openshell/install-hosting.sh deploy/spark/openshell/provision-volumes.sh \
   deploy/spark/container/prime-container-entrypoint.sh
 python3 -m compileall -q deploy/spark/dashboard deploy/spark/container deploy/spark/prime
+python3 -c 'from cryptography.hazmat.primitives.ciphers.aead import AESGCM'
 python3 -m unittest discover -s deploy/spark/dashboard -p 'test*.py'
 python3 -m unittest discover -s deploy/spark/prime -p 'test_*skill*.py'
 
 if command -v node >/dev/null; then
   node --check deploy/spark/dashboard/app-v2.js
+  node --check deploy/spark/dashboard/credentials.js
   node --check deploy/spark/dashboard/console-viewer.js
   node --check deploy/spark/dashboard/task-timer.js
+  node --check deploy/spark/dashboard/timeout-controls.js
 else
   echo "Note: Node.js unavailable; JavaScript syntax check skipped." >&2
 fi

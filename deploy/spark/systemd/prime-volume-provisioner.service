@@ -1,0 +1,27 @@
+[Unit]
+Description=Prime bounded per-user OpenShell volume registration
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=root
+Environment=PRIME_WEB_OWNER=@WEB_OWNER@
+Environment=PRIME_RUNNER_WORKSPACE_ROOT=/home/@WEB_OWNER@/prime-agent/tasks
+ExecStart=/usr/bin/python3 /usr/local/lib/prime-runner/volume_provisioner.py
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+CapabilityBoundingSet=CAP_DAC_READ_SEARCH
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

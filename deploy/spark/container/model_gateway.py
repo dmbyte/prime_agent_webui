@@ -3,6 +3,7 @@
 import http.client, ipaddress, json, os, select, socket, socketserver, stat, sys, threading, time, urllib.parse
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
+import inference_policy
 
 ROOT = Path(os.environ.get("PRIME_GATEWAY_ROOT", "/var/lib/prime-runner"))
 CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
@@ -36,10 +37,22 @@ def credential_lock(user):
     with _credential_locks_guard:
         return _credential_locks.setdefault(user, threading.Lock())
 
+def credential_path(user):
+    personal = ROOT / "credentials/users" / user / "auth.json"
+    return personal if personal.exists() else ROOT / "credentials/global/auth.json"
+
+def external_models(user):
+    if not inference_policy.approvals(user).get("openai-codex"):
+        return []
+    try:
+        account = (secure_json(credential_path(user)).get("openai-codex") or {}).get("accountId")
+        return inference_policy.approved_models(user, "openai-codex", account)
+    except (OSError, ValueError, RuntimeError, AttributeError):
+        return []
+
 def credential(user, force_refresh=False):
     with credential_lock(user):
-        personal = ROOT / "credentials/users" / user / "auth.json"
-        path = personal if personal.exists() else ROOT / "credentials/global/auth.json"
+        path = credential_path(user)
         data = secure_json(path)
         row = data.get("openai-codex") or {}
         if not all(row.get(key) for key in ("access", "refresh", "accountId")):
@@ -68,6 +81,15 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self): self.safe_proxy()
     def do_GET(self): self.safe_proxy()
     def log_message(self, *_): pass
+    def send_json(self, status, value):
+        body = json.dumps(value).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.wfile.write(body)
+        self.close_connection = True
     def safe_proxy(self):
         try:
             self.proxy()
@@ -87,26 +109,44 @@ class Handler(BaseHTTPRequestHandler):
             self.close_connection = True
     def proxy(self):
         user = self.server.prime_user
+        if self.command == "GET" and self.path == "/routing-models":
+            return self.send_json(200, {"externalModels": ["openai-codex/" + m for m in external_models(user)],
+                "localModel": "spark-qwen/qwen3.8-flash-next",
+                "localEfforts": ["low", "medium", "high"],
+                "note": "Qwen high aliases xhigh. External approvals are account-bound, expire, and do not guarantee zero retention."})
         parts = self.path.lstrip("/").split("/", 1)
         if len(parts) != 2 or parts[0] not in {*TARGETS, "openai-codex"}: return self.send_error(404)
         provider, path = parts
         length = int(self.headers.get("Content-Length", "0"))
-        if length > 32 * 1024 * 1024: return self.send_error(413)
+        if length < 0 or length > 32 * 1024 * 1024: return self.send_error(413)
         body = self.rfile.read(length) if length else None
         headers = {k:v for k,v in self.headers.items() if k.lower() not in HOP}
         if provider == "openai-codex":
-            auth = credential(user); scheme, host, port = "https", "chatgpt.com", 443
+            try:
+                payload = json.loads(body or b'{}')
+            except (ValueError, UnicodeDecodeError):
+                return self.send_json(400, {"error": {"message": "Invalid model request JSON"}})
+            if (self.command != "POST" or path.removeprefix("codex/") != "responses" or
+                    not isinstance(payload, dict) or payload.get("model") not in external_models(user)):
+                return self.send_json(403, {"error": {"message": "External inference is not approved for this account/model. Review no-training controls and the protected inference policy; use local Qwen meanwhile."}})
+            auth = credential(user)
+            # Recheck the actual credential used, including after refresh/rotation.
+            if payload["model"] not in inference_policy.approved_models(user, provider, auth["accountId"]):
+                return self.send_json(403, {"error": {"message": "External account changed; privacy approval must be renewed."}})
+            scheme, host, port = "https", "chatgpt.com", 443
             path = "/backend-api/codex/" + path.removeprefix("codex/")
             headers.update({"Authorization":f"Bearer {auth['access']}","chatgpt-account-id":auth["accountId"],"originator":"pi","OpenAI-Beta":"responses=experimental"})
         else: scheme, host, port = TARGETS[provider]
         conn = (http.client.HTTPSConnection if scheme == "https" else http.client.HTTPConnection)(host, port, timeout=300)
-        conn.request(self.command, "/" + path, body, headers); response = conn.getresponse()
+        conn.request(self.command, "/" + path.lstrip("/"), body, headers); response = conn.getresponse()
         if provider == "openai-codex" and response.status == 401:
             response.read(1024 * 1024); conn.close()
             auth = credential(user, force_refresh=True)
+            if payload["model"] not in inference_policy.approved_models(user, provider, auth["accountId"]):
+                return self.send_json(403, {"error": {"message": "External account changed; privacy approval must be renewed."}})
             headers.update({"Authorization":f"Bearer {auth['access']}","chatgpt-account-id":auth["accountId"]})
             conn = http.client.HTTPSConnection(host, port, timeout=300)
-            conn.request(self.command, "/" + path, body, headers); response = conn.getresponse()
+            conn.request(self.command, "/" + path.lstrip("/"), body, headers); response = conn.getresponse()
         self.send_response(response.status)
         for key,value in response.getheaders():
             if key.lower() not in HOP: self.send_header(key,value)
