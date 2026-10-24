@@ -93,11 +93,18 @@ def main():
                     alice.locator('#connectionSettings summary').first.click()
                     alice.get_by_label('Connection name', exact=True).fill('Fixture connection')
                     alice.get_by_label('Allow use in', exact=True).select_option(project_id)
+                    alice.get_by_label('HTTP credential transport', exact=True).select_option('direct')
                     alice.get_by_role('button', name='Add connection', exact=True).click()
                     alice.get_by_text('Fixture connection', exact=True).wait_for()
                     connection_data = alice.evaluate("async()=>await (await fetch('/auth/connections')).json()")
                     assert len(connection_data['connections']) == 1
                     assert connection_data['connections'][0]['projectId'] == project_id
+                    assert connection_data['connections'][0]['httpTransport'] == 'direct'
+                    alice.get_by_text('Fixture connection', exact=True).click()
+                    assert alice.get_by_label('HTTP credential transport', exact=True).first.input_value() == 'direct'
+                    alice.get_by_label('HTTP credential transport', exact=True).first.select_option('openshell')
+                    alice.get_by_role('button', name='Save connection changes', exact=True).click()
+                    alice.wait_for_function("async()=> (await (await fetch('/auth/connections')).json()).connections[0].httpTransport === 'openshell'")
                     assert not connection_data['runtimeEnabled']
                     assert 'SYNTHETIC_BROWSER_SECRET' not in json.dumps(connection_data)
                     bob_data = bob.evaluate("async()=>await (await fetch('/auth/connections')).json()")
@@ -165,9 +172,12 @@ def main():
                     bob_data = bob.evaluate("async()=>await (await fetch('/auth/connections')).json()")
                     assert not bob_data['credentials'] and not bob_data['connections']
                     target = alice.locator('.credential-card').filter(has=alice.get_by_text('Saved target · Reusable fixture', exact=True))
+                    assert target.get_by_label('IPMI cipher suite', exact=True).input_value() == '17'
+                    target.get_by_label('IPMI cipher suite', exact=True).select_option('3')
                     target.get_by_label('Ignore certificate errors', exact=True).check()
                     target.get_by_role('button', name='Save credentials', exact=True).click()
                     alice.get_by_text('Saved target · Reusable fixture', exact=True).wait_for()
+                    assert target.get_by_label('IPMI cipher suite', exact=True).input_value() == '3'
                     data = alice.evaluate("async()=>await (await fetch('/auth/connections')).json()")
                     assert all(r['status'] == 'unavailable' for r in data['connections'])
                     print('PASS: one saved target, two project-scoped tool grants, shared TLS setting, rotation revokes both, no secret readback or cross-user access')

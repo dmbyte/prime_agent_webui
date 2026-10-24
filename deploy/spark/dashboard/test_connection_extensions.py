@@ -9,6 +9,7 @@ from unittest import mock
 import connection_approvals
 import connection_browser_worker
 import connection_browser
+import connection_http_worker
 import connection_native
 import connection_sessions
 import connection_sol
@@ -18,6 +19,19 @@ import test_connections as fixtures
 
 
 class NativeTests(unittest.TestCase):
+    def test_updater_restarts_only_an_already_active_connection_broker(self):
+        import subprocess
+        source = (Path(__file__).parents[1]/'update/update-webui.sh').read_text()
+        block = 'if systemctl --user is-active --quiet prime-connection-broker.service; then'
+        block += source.split(block, 1)[1].split('\nfi', 1)[0]+'\nfi\n'
+        for active, restart_code in ((0, 0), (3, 0), (0, 42)):
+            with self.subTest(active=active, restart_code=restart_code):
+                stub = ('set -e\nsystemctl() { if [ "$2" = is-active ]; then return '+str(active)
+                    +'; fi; printf "%s\\n" "$*"; return '+str(restart_code)+'; }\n')
+                result = subprocess.run(['bash', '-c', stub+block], capture_output=True, text=True)
+                self.assertEqual(result.stdout, '--user restart prime-connection-broker.service\n' if active == 0 else '')
+                self.assertEqual(result.returncode, restart_code if active == 0 else 0)
+
     def test_browser_policy_uses_ip_pinned_connect_not_dns_only_tcp(self):
         runtime=mock.Mock()
         with tempfile.TemporaryDirectory() as directory:
@@ -123,6 +137,35 @@ class ConsoleTests(unittest.TestCase):
     setUp = fixtures.ConnectionTests.setUp
     save_meta = fixtures.ConnectionTests.save_meta
     save_credential = fixtures.ConnectionTests.save_credential
+
+    def test_explicit_direct_choice_preserves_tls_policy_without_native_fallback(self):
+        self.manager.native = mock.Mock()
+        self.manager.change('alice', dict(self.body, id=self.key, httpTransport='direct'))
+        self.manager.change('alice', dict(self.body, id=self.key))  # Older client must preserve the explicit choice.
+        self.assertEqual(self.manager.store._load('alice')[self.key]['httpTransport'], 'direct')
+        self.manager.revoke(fixtures.TASK)
+        self.token = self.manager.issue('alice', fixtures.TASK, fixtures.PROJECT, fixtures.POLICY)
+        request = {'action':'call','token':self.token,'connection':self.key,'operation':'github.repository','arguments':{'repository':'fixture/repo'}}
+        with mock.patch.object(connections,'get_json',return_value={'private':True}) as direct:
+            self.assertEqual(self.manager.dispatch(request,'alice'), {'repository':'fixture/repo','private':True})
+            self.assertIs(direct.call_args.kwargs['ignore_certificate_errors'], False)
+        self.manager.native.lease.assert_not_called()
+
+    def test_explicit_native_unavailable_cannot_fall_back_or_be_task_selected(self):
+        self.manager.change('alice', dict(self.body, id=self.key, httpTransport='openshell'))
+        self.manager.revoke(fixtures.TASK)
+        token = self.manager.issue('alice', fixtures.TASK, fixtures.PROJECT, fixtures.POLICY)
+        request = {'action':'call','token':token,'connection':self.key,'operation':'github.repository','arguments':{'repository':'fixture/repo'}}
+        with mock.patch.object(connections,'get_json') as direct:
+            with self.assertRaises(PermissionError): self.manager.dispatch(request,'alice')
+            with self.assertRaises(ValueError): self.manager.dispatch(dict(request,httpTransport='direct'),'alice')
+            direct.assert_not_called()
+
+    def test_transport_validation_and_console_do_not_accept_http_override(self):
+        for invalid in ('auto', True, [], None):
+            with self.assertRaises(ValueError): self.manager.change('alice',dict(self.body,httpTransport=invalid))
+        self.configure('bmc-browser')
+        with self.assertRaises(ValueError): self.manager.change('alice',dict(self.body,httpTransport='direct'))
 
     def test_native_failure_never_falls_back_to_direct_transport(self):
         self.manager.native = mock.Mock()
@@ -273,11 +316,99 @@ class ConsoleTests(unittest.TestCase):
 
 
 class ConsoleBoundaryTests(unittest.TestCase):
+    def test_native_worker_allows_only_exact_redfish_slash_canonicalization(self):
+        from urllib.request import Request
+        handler = connection_http_worker.NoRedirect()
+        source = Request('https://192.168.1.4/redfish/v1/Systems',headers={'Authorization':'Basic placeholder'})
+        result = handler.redirect_request(source,None,308,'',{},source.full_url+'/')
+        self.assertEqual(result.full_url,source.full_url+'/')
+        self.assertEqual(result.get_header('Authorization'),'Basic placeholder')
+        for url in ('https://evil.example/redfish/v1/Systems/','http://192.168.1.4/redfish/v1/Systems/',source.full_url+'/?x=1',source.full_url+'/other'):
+            self.assertIsNone(handler.redirect_request(source,None,308,'',{},url))
+        source = Request('https://api.github.com/repos/a/b')
+        self.assertIsNone(handler.redirect_request(source,None,308,'',{},source.full_url+'/'))
+
+    def test_direct_transport_canonical_redirect_is_bounded_and_origin_pinned(self):
+        import io
+        def response(status, location=None):
+            item = mock.Mock(status=status)
+            item.getheader.side_effect = lambda name, default=None: {'Location':location,'Content-Type':'application/json','Content-Encoding':'identity'}.get(name, default)
+            item.read1.side_effect = io.BytesIO(b'{"Members":[]}').read
+            return item
+        with mock.patch.object(connections.http.client,'HTTPSConnection') as factory:
+            first, second = mock.Mock(), mock.Mock()
+            first.getresponse.return_value=response(308,'/redfish/v1/Systems/')
+            second.getresponse.return_value=response(200)
+            factory.side_effect=[first,second]
+            self.assertEqual(connections.get_json('https://192.168.1.4','/redfish/v1/Systems',{}),{'Members':[]})
+            self.assertEqual(second.request.call_args.args[:2],('GET','/redfish/v1/Systems/'))
+        for location in ('https://evil.example/redfish/v1/Systems/','/redfish/v1/Systems/other','//evil.example/'):
+            with mock.patch.object(connections.http.client,'HTTPSConnection') as factory:
+                factory.return_value.getresponse.return_value=response(308,location)
+                with self.assertRaises(ValueError): connections.get_json('https://192.168.1.4','/redfish/v1/Systems',{})
+                self.assertEqual(factory.call_count,1)
+
+    def test_ipmi_diagnostics_are_fixed_and_never_echo_upstream(self):
+        for message, expected in ((b'no matching cipher suite SECRET', 'cipher 17'),
+                                  (b'RAKP 2 HMAC is invalid SECRET', 'authentication'),
+                                  (b'privilege level error SECRET', 'privilege'),
+                                  (b'unknown SECRET', 'Secure IPMI')):
+            result = connection_sol.status_failure(message)
+            self.assertIn(expected, result)
+            self.assertNotIn('SECRET', result)
+
+    def test_sol_does_not_accept_keys_before_verified_activation(self):
+        sol = connection_sol.SOL.__new__(connection_sol.SOL)
+        sol.master, sol.connected = 1, False
+        sol.process = mock.Mock(); sol.process.poll.return_value = None
+        with mock.patch.object(connection_sol.os, 'write') as write:
+            with self.assertRaises(ValueError): sol.send({'sessionId':'test','requestId':'a'*32,'key':'enter'})
+            write.assert_not_called()
+
+    def test_sol_activation_acknowledgement_survives_split_reads(self):
+        import codecs
+        sol = connection_sol.SOL.__new__(connection_sol.SOL)
+        sol.master, sol.password, sol.connected = 42, 'ab', False
+        sol.tail = sol.screen = sol.handshake_tail = ''
+        sol.decoder = codecs.getincrementaldecoder('utf8')('replace')
+        sol.process = mock.Mock(); sol.process.poll.return_value = None
+        for chunk, connected in ((b'[SOL Session oper', False), (b'ational. Use ~? for help]', True)):
+            with mock.patch.object(connection_sol.select, 'select', side_effect=[([42],[],[]),([],[],[])]), mock.patch.object(connection_sol.os, 'read', return_value=chunk):
+                self.assertEqual(sol.read()['connected'], connected)
+
+    def test_login_frame_requires_one_same_origin_unambiguous_form(self):
+        browser = connection_browser_worker.Browser.__new__(connection_browser_worker.Browser)
+        browser.origin = 'https://192.168.1.4'
+        frame = mock.Mock(url=browser.origin+'/login.html')
+        frame.locator.return_value.count.return_value = 1
+        other = mock.Mock(url='https://evil.example/login')
+        browser.page = mock.Mock(frames=[other,frame])
+        self.assertIs(browser.login_frame(), frame)
+        other.locator.assert_not_called()
+        browser.page.frames = [frame,frame]
+        with self.assertRaises(ValueError): browser.login_frame()
+        browser.page.frames = [frame]
+        frame.locator.return_value.count.return_value = 2
+        with self.assertRaises(ValueError): browser.login_frame()
+
+    def test_login_waits_for_username_field_during_frame_load(self):
+        browser = connection_browser_worker.Browser.__new__(connection_browser_worker.Browser)
+        browser.origin = 'https://192.168.1.4'
+        frame = mock.Mock(url=browser.origin+'/login.html')
+        frame.locator.return_value.count.side_effect = [1, 0, 1, 1]
+        browser.page = mock.Mock(frames=[frame])
+        self.assertIs(browser.login_frame(), frame)
+        browser.page.wait_for_timeout.assert_called_once_with(100)
+
     def test_password_not_in_ipmi_argv_and_fixed_cipher(self):
         values = {'endpoint': 'https://192.168.1.4', 'username': 'fixture', 'password': 'fixture-password'}
         args = connection_sol.command(values, 'sol', 'activate')
         self.assertNotIn(values['password'], args)
         self.assertEqual(args[args.index('-C')+1], '17')
+        legacy = connection_sol.command(dict(values, ipmiCipherSuite=3), 'chassis', 'power', 'status')
+        self.assertEqual(legacy[legacy.index('-C')+1], '3')
+        for invalid in (0, 1, True, '3', None):
+            with self.assertRaises(ValueError): connection_sol.command(dict(values, ipmiCipherSuite=invalid), 'sol', 'activate')
         self.assertEqual(connection_sol.environment(values)['IPMI_PASSWORD'], values['password'])
         for password in ('x'*21, 'bad\x00value'):
             with self.assertRaises(ValueError): connection_sol.command(dict(values, password=password), 'sol', 'activate')
@@ -307,9 +438,20 @@ class ConsoleBoundaryTests(unittest.TestCase):
         frame = mock.Mock(url='https://192.168.1.4/home')
         page = mock.Mock(frames=[frame])
         browser.context = mock.Mock(pages=[page])
-        browser.console_frames_before = {(page, frame.url)}
+        prior = mock.Mock()
+        browser.console_canvases_before = {frame: [prior]}
+        node = mock.Mock()
+        node.evaluate.return_value = True
+        nodes = mock.Mock()
+        nodes.count.return_value = 1
+        nodes.nth.return_value = node
+        frame.locator.side_effect = lambda selector: mock.Mock(count=lambda: 0) if selector.startswith('input') else nodes
         self.assertEqual(browser.canvases(), [])
-        frame.locator.assert_not_called()
+        node.bounding_box.assert_not_called()
+        # A newly inserted canvas in that very same frame is a valid candidate.
+        node.evaluate.return_value = False
+        node.bounding_box.return_value = {'width': 800, 'height': 600}
+        self.assertEqual(browser.canvases(), [node])
 
 
 if __name__ == '__main__':

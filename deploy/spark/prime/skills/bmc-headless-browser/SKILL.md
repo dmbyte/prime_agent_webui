@@ -5,6 +5,28 @@ description: Inspect and operate JavaScript-based BMC web interfaces through the
 
 # BMC Headless Browser
 
+## Saved credentials in Prime WebUI (preferred)
+
+When the owner has saved a target login, use the private saved-connection
+interface described in the runtime context, not `BMCBrowser` with a password.
+List connections through `POST http://127.0.0.1:31000/connections` using the
+in-memory `PRIME_CONNECTION_TOKEN`; never print it or search for raw credentials.
+Use only a listed connection offering `browser.open`, `browser.capture` and
+`browser.close`. Open with `arguments={'requestId': uuid.uuid4().hex}`; retain
+the returned `sessionId` and pass it to capture/close. If no grant exists, ask
+the owner to bind their saved target in Settings → My connections.
+
+The trusted isolated worker performs login. Captures return bounded PNG base64;
+decode and display as an image instead of printing base64. No cookie, storage,
+arbitrary script, selector, navigation or management-control API is exposed.
+The saved certificate choice belongs to the owner; a task cannot override it.
+Private sessions expire with the task, one-hour lifetime or five minutes idle.
+Close when finished. A login-page failure is not successful BMC access; do not
+fall back to copying credentials into the legacy arbitrary-code browser.
+These private captures return to the task, not the legacy popout below.
+
+## Legacy browser without saved-credential injection
+
 The WebUI's **Console viewer ↗** opens a read-only view of this browser's current
 viewport. Frames refresh about once per second while the viewer is visible,
 including while the agent waits between operations. Long blocking browser calls

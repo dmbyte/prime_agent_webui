@@ -12,7 +12,7 @@ class TargetCredentialTests(ConnectionTests):
     def setUp(self):
         super().setUp()
         self.fields = [{'id': name, 'label': name} for name in ('endpoint', 'username', 'password')]
-        for adapter in ('redfish-readonly', 'bmc-browser', 'bmc-kvm'):
+        for adapter in ('redfish-readonly', 'bmc-browser', 'bmc-kvm', 'ipmi-sol'):
             self.meta['skills']['s_'+adapter] = dict(owner='alice', status='installed', enabled=True,
                 credentialRequirements=[dict(id='bmc', label=adapter, adapter=adapter, fields=self.fields)])
         self.save_meta()
@@ -90,6 +90,42 @@ class TargetCredentialTests(ConnectionTests):
                 self.manager.vault.change('alice', self.requirements,
                     dict(dict(action='save-target', name='Test', values=self.target_values), **changes))
         self.assertFalse(self.manager.vault._load('alice')[self.target]['ignoreCertificateErrors'])
+
+    def test_ipmi_cipher_is_owner_scoped_typed_and_preserved_for_old_clients(self):
+        self.assertEqual(self.manager.vault._load('alice')[self.target]['ipmiCipherSuite'], 17)
+        body = dict(action='save-target', key=self.target, name='Test target', values={})
+        for cipher in (True, '3', 0, 1, 18, None, []):
+            with self.subTest(cipher=cipher), self.assertRaises(ValueError):
+                self.manager.vault.change('alice', [], dict(body, ipmiCipherSuite=cipher))
+        with self.assertRaises(ValueError): self.manager.vault.change('bob', [], dict(body, ipmiCipherSuite=3))
+        self.manager.vault.change('alice', [], dict(body, ipmiCipherSuite=3))
+        self.manager.vault.change('alice', [], body)
+        record = self.manager.vault._load('alice')[self.target]
+        self.assertEqual(record['ipmiCipherSuite'], 3)
+        self.assertFalse(record['ignoreCertificateErrors'])
+        self.assertEqual(record['values'], self.target_values)
+        self.assertEqual(self.manager.vault.view('bob', []), [])
+
+    def test_ipmi_uses_saved_target_cipher_revokes_grants_and_rejects_task_override(self):
+        import connection_sessions, connection_sol
+        with mock.patch.dict(os.environ, {'PRIME_CONNECTION_CONSOLES_ENABLED': '1'}):
+            key = self.bind('ipmi-sol')
+            self.manager.revoke(TASK)
+            token = self.manager.issue('alice', TASK, PROJECT, POLICY)
+            self.manager.sessions = connection_sessions.Sessions(self.manager, mock.Mock())
+            request = dict(action='call', token=token, connection=key, operation='ipmi.status', arguments={})
+            with mock.patch.object(connection_sol, 'status', return_value={'powerState':'On'}) as status:
+                self.manager.dispatch(request, 'alice')
+                self.assertEqual(status.call_args.args[0]['ipmiCipherSuite'], 17)
+                self.manager.vault.change('alice', [], dict(action='save-target', key=self.target,
+                    name='Test target', values={}, ipmiCipherSuite=3))
+                with self.assertRaises(PermissionError): self.manager.dispatch(request, 'alice')
+                self.bind('ipmi-sol', id=key)
+                self.manager.revoke(TASK)
+                request['token'] = self.manager.issue('alice', TASK, PROJECT, POLICY)
+                self.manager.dispatch(request, 'alice')
+                self.assertEqual(status.call_args.args[0]['ipmiCipherSuite'], 3)
+                with self.assertRaises(ValueError): self.manager.dispatch(dict(request, arguments={'ipmiCipherSuite':17}), 'alice')
 
 
 # Do not collect imported base tests twice; inherited cases exercise backward compatibility.

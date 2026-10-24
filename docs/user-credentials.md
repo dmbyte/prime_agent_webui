@@ -25,14 +25,22 @@ back to legacy entries. Nothing is migrated automatically by the installer.
 This is per-user reuse, not credential sharing between accounts. Target name and
 address are visible to the owner; usernames/passwords are never returned.
 
+Reusable targets also have an **IPMI cipher suite** setting: 17 (SHA-256/AES) by
+default, or an explicit legacy 3 (SHA-1/AES) compatibility choice. Use 3 only for
+known older hardware on a controlled network; there is no automatic downgrade.
+This is separate from TLS verification and cannot be set by a task. Changing it
+revokes all referring grants; renew connections before starting a new task.
+Existing skill-specific records stay at cipher 17 unless explicitly imported into
+a reusable target and then changed by its owner.
+
 ## Skill-specific requirements
 
 This branch adds **Settings → My credentials**. Saving is not automatic runtime
 credential injection. A separately gated **My connections** pilot can consume
 reviewed GitHub/Redfish requirements through bounded local read-only operations.
-The read-only pilot and isolated browser/KVM adapters are activated on the
-reference Spark. IPMI/SOL and native OpenShell HTTP paths remain disabled;
-see [connection extensions](connection-extensions.md). Other tools still show
+The read-only pilot, native OpenShell HTTP and isolated browser/KVM/IPMI/SOL
+adapters are activated on the reference Spark; actual device compatibility varies.
+See [connection extensions](connection-extensions.md). Other tools still show
 **tool integration pending**. See [connections](connections.md).
 Do not claim a connection is tested or operational merely because it is Saved.
 
@@ -66,7 +74,9 @@ setting is automatically enabled by an update.
 Prime's native OpenShell HTTP adapter does not implement this exception: it
 rejects the request clearly before creating a provider and never silently falls
 back to direct transport. The inspected proxy verifies upstream TLS independently
-of its worker. IPMI/SOL does not use TLS, so this setting does not affect it.
+of its worker. Select **Direct trusted broker** under the connection's **HTTP
+credential transport** explicitly when the saved exception is needed. IPMI/SOL
+does not use TLS, so this setting does not affect its independently selected cipher.
 Tools not integrated with saved credentials are not changed by this setting.
 
 Disabling/removing a skill removes its active requirements. Existing saved entries

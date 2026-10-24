@@ -56,7 +56,9 @@ class BrowserSession:
                 raw += chunk
         data = json.loads(raw)
         if data.get('ok') is not True or not isinstance(data.get('result'), dict):
-            raise RuntimeError('Private browser failed; login form, TLS or console not supported')
+            stages = {'launch','navigation','login-form','login-submit','console-launch','console-surface','operation'}
+            stage = data.get('stage') if data.get('stage') in stages else 'operation'
+            raise RuntimeError('Private browser failed at '+stage+'; check TLS, login or console compatibility')
         return data['result']
 
     def read(self):

@@ -1,8 +1,9 @@
 # Read-only local connections — opt-in pilot
 
-This page describes the deployed direct read-only path. Private browser/KVM
-adapters are also enabled on the reference Spark; native HTTP substitution and
-IPMI/SOL remain disabled. See [connection extensions](connection-extensions.md).
+This page describes the read-only operations and credential boundary. The
+reference Spark defaults to native HTTP substitution, with explicit per-connection
+direct transport available; private browser/KVM/IPMI/SOL adapters are enabled.
+See [connection extensions](connection-extensions.md) for live validation limits.
 One [saved target](user-credentials.md#reusable-target-logins) may supply several
 independently scoped reviewed tool connections without copying its password.
 
@@ -11,7 +12,9 @@ It was **activated on the reference Spark on October 24, 2026**, after checking
 that all users' task lists, OpenShell sandboxes and shared terminal were idle.
 Live synthetic tests passed terminal restrictions, two-user/project isolation,
 the pinned sandbox capability handoff, in-flight revocation and task-end cleanup.
-No real GitHub/BMC credential or upstream authentication test was performed.
+Later live iLO 4 Redfish/login/KVM capture tests passed. Read-only IPMI power
+status and SOL open/close passed with the separately approved target-only legacy
+cipher 3 option; no console input was sent. Real GitHub authentication is unverified.
 Do not run the normal updater/installer against
 an active installation merely to copy this feature: those workflows restart
 services and may rebuild images. Prepare and test a separate staging directory.
@@ -39,8 +42,10 @@ credentials or users; native OpenShell transport rejects unsupported exceptions
 without fallback. Read the [risk and lifecycle details](user-credentials.md).
 DNS targets and nonstandard ports remain unsupported. Prefer valid certificates.
 
-The broker does not use environment proxies, follow redirects, store cookies or
+The direct broker does not use environment proxies, store cookies or
 return arbitrary upstream strings, headers, serial numbers or OEM payloads.
+Both HTTP transports allow only one exact same-origin Redfish trailing-slash
+canonical redirect; all other redirects are denied.
 Each HTTP response is capped at 1 MiB, each connection has a 10-second socket
 timeout, response reads have a bounded elapsed budget and a whole operation has
 a 90-second pre-request deadline. One request already in progress may finish
@@ -54,6 +59,8 @@ requests run concurrently. Failures return fixed messages without upstream text.
 3. Under **My connections**, choose that requirement, a name, an owned project
    (or explicitly all personal chats), and an expiry from 1 through 90 days.
    Redfish additionally requires confirming the exact saved BMC origin.
+   Choose HTTP credential transport explicitly when needed: **Direct trusted
+   broker** honors a saved certificate exception; native HTTP requires valid TLS.
 4. After runtime activation, a **new** eligible task receives references to the
    connections granted at its launch. An existing task never gains newly added
    connections automatically.
@@ -137,8 +144,9 @@ loopback broker on port 8767. That port is not published through Nginx or Docker
 Credentials are resolved only inside the local broker. Permission and connection
 revision checks run again before returning a result after a network request.
 
-The new path does **not** alter model routing or native OpenShell network policy.
-It is a trusted local operation adapter, not OpenShell's native placeholder proxy.
+The direct path does **not** alter model routing or native OpenShell network policy.
+The separately enabled native transport uses the native placeholder proxy inside
+dedicated operation sandboxes, not the general task's sandbox.
 The model gateway's capability-based exception retains the task's original
 network/profile gates in the broker; Restricted and no-tools tasks get no grant.
 

@@ -27,7 +27,7 @@ class DashboardV2Tests(unittest.TestCase):
     def test_bmc_runtime_guidance_is_scoped_and_does_not_grant_actions(self):
         with mock.patch.object(api, "container_mode", return_value=True):
             text = api.runtime_context({"profile": "network-operations"})
-            for fragment in ("top-level await", "list_sessions()", "does not carry IPMI/SOL UDP", "No reset"):
+            for fragment in ("top-level await", "list_sessions()", "does not carry IPMI/SOL UDP", "trusted host broker when listed", "No reset"):
                 self.assertIn(fragment, text)
             general = api.runtime_context({"profile": "general"})
             self.assertIn("Qwen", general)

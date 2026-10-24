@@ -5,6 +5,41 @@ description: Read BMC health and inventory through Redfish/IPMI, and interact wi
 
 # IPMI and Redfish BMC
 
+## Saved credentials in Prime WebUI (preferred)
+
+Use the task's saved-connection interface before the direct libraries below.
+Read `PRIME_CONNECTION_TOKEN` only into memory; never print it. From IPython,
+POST to `http://127.0.0.1:31000/connections` with `requests`, `timeout=180`,
+`proxies={'http': None, 'https': None}` and JSON `{'token': token, 'action': 'list'}`.
+If no token exists, ask the owner to configure My connections; do not search
+files, history or another user's vault for a password. Use only listed IDs and
+operations. To call, send `action='call', connection=id, operation=operation,
+arguments=arguments` with the same token. Do not print request headers or bodies.
+
+`redfish.systems` and `ipmi.status` take `{}` and return bounded status.
+The trusted host adapter can perform IPMI/SOL even though the task's own UDP
+transport is unavailable. `sol.open` takes a fresh `requestId=uuid.uuid4().hex`
+and requires owner approval in Settings → My connections → Console action
+approvals. Retry the identical request only after approval; never self-approve.
+Retain `sessionId`; `sol.read`/`sol.close` take only that ID. Read before input;
+check `connected` and `active`, not just the presence of a session ID. Opening
+does not configure serial redirection or prove the server has a text console.
+`sol.input` requires the session ID, a fresh request ID and one supported `key`
+or printable `text`; each exact input needs separate approval. Never send a
+password through console text. Close only your own session when finished.
+
+The connection uses the owner's reusable target login without exposing it to
+the model. TLS exceptions, HTTP transport and IPMI cipher choice are saved owner
+settings, not task arguments. Cipher 17 is the default; an owner may explicitly
+choose legacy encrypted cipher 3 for a reusable target. Never request a cipher
+override in a tool call or automatically downgrade after a failure. There is no
+reset, boot override, arbitrary HTTP or global SOL deactivation API.
+Private saved sessions last at most one hour, five minutes idle and no longer
+than their task/grant. Private captures currently return to the task; the legacy
+console viewer described below is a separate path.
+
+## Legacy direct-library environment
+
 When used in a supported direct-IPMI environment with the managed console feed,
 each SOL `read()` publishes the rendered screen to the WebUI's **Console viewer ↗**.
 It is the agent's last read, not a second SOL connection or a new transport.

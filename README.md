@@ -701,15 +701,20 @@ read-only pilot for GitHub repository summaries and Redfish system status. A
 connection references saved values, belongs to one user, and is granted to one
 project or explicitly to all that user's chats. The trusted local broker uses
 credentials without returning them to the model. Private browser/KVM adapters
-are **enabled on the reference Spark**; native OpenShell HTTP injection and
-IPMI/SOL remain disabled. They do not add credentials
+and IPMI/SOL are **enabled on the reference Spark**, alongside native OpenShell
+HTTP injection. HTTP defaults to native; **My connections → HTTP credential
+transport** allows explicit direct trusted-broker access for targets whose saved
+certificate exception is required. There is no automatic fallback. They do not add credentials
 to the arbitrary-code browser. Console opening/input have separate exact-action
 approvals; see [connection extensions](docs/connection-extensions.md) for the
-tested boundaries, installation flags and remaining live BMC validation. OAuth
+tested boundaries, exact installation flags and device compatibility limits. OAuth
 refresh and MCP serving remain later work.
 **The pilot is activated on the reference Spark as of October 24, 2026.** Live
 synthetic tests passed user/project isolation, OpenShell task handoff and revocation.
-This is not a successful authentication test against your GitHub or BMC account.
+Real iLO 4 Redfish, browser login and KVM capture also pass. The tested BMC rejects
+IPMI cipher 17; the owner's explicit saved-target cipher 3 exception passed
+read-only power status and SOL open/close without input. New targets default to
+17; no automatic cipher downgrade is allowed. Real GitHub authentication is unverified.
 Do not restart active work to enable it elsewhere. Existing installations keep credential setup disabled until
 an administrator installs the dependency and enforces administrator-only access
 to the shared Advanced console. See the [credential setup and activation guide](docs/user-credentials.md)
@@ -808,7 +813,11 @@ not in chat logs or Git. Treat visible console contents as sensitive.
 The package also contains an interactive IPMI Serial-over-LAN adapter, but
 **direct IPMI/SOL is not available through the deployed OpenShell HTTP(S)
 gateway**, including Full mode. It now fails fast with that explanation;
-use Redfish or HTML5 KVM instead. In a separately authorized environment with
+use the saved-credential **trusted host IPMI/SOL adapter** described in
+[connection extensions](docs/connection-extensions.md), or Redfish/HTML5 KVM.
+It defaults to cipher 17 (an owner-selected reusable target may use legacy encrypted
+cipher 3) and requires explicit approval to open SOL and for each input.
+In a separately authorized environment with
 direct IPMI transport, the adapter uses `lanplus`, a private pseudo-terminal,
 and a bounded ANSI/VT100 screen renderer for BIOS and boot text. Inspect
 `sol_info()` first; then use `with bmc.sol_session() as sol:` to read the screen.

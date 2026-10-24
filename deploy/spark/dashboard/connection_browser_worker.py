@@ -13,6 +13,8 @@ import tempfile
 import time
 from urllib.parse import urlsplit
 
+STAGES = {'launch', 'navigation', 'login-form', 'login-submit', 'console-launch', 'console-surface'}
+
 
 class Browser:
     def __init__(self, request):
@@ -21,7 +23,9 @@ class Browser:
         self.playwright = self.browser = self.context = None
         self.origin = request['endpoint']
         self.kvm = request['kind'] == 'kvm'
-        self.console_frames_before = set()
+        self.console_canvases_before = {}
+        self.authenticated = False
+        stage = 'launch'
         try:
             home = self.runtime.name
             env = {'PATH': '/usr/bin:/bin', 'HOME': home, 'XDG_CONFIG_HOME': home, 'XDG_CACHE_HOME': home}
@@ -44,36 +48,39 @@ class Browser:
             self.context.route_web_socket('**/*', websocket)
             self.page = self.context.new_page()
             self.page.set_default_timeout(12000)
+            stage = 'navigation'
             self.page.goto(self.origin, wait_until='domcontentloaded', timeout=20000)
-            password = self.page.locator('input[type=password]:visible')
-            username = self.page.locator('input[type=text]:visible')
-            if password.count() != 1 or username.count() != 1:
-                raise ValueError('Unsupported login form')
-            username.fill(request['username'])
-            password.fill(request['password'])
-            submit = self.page.get_by_role('button', name=re.compile(r'^(log\s*in|sign\s*in)$', re.I))
+            stage = 'login-form'
+            frame = self.login_frame()
+            password = frame.locator('input[type=password]:visible')
+            username = frame.locator('input[type=text]:visible, input[type=email]:visible')
+            submit = frame.get_by_role('button', name=re.compile(r'^(log\s*in|sign\s*in)$', re.I))
             if submit.count() != 1:
                 raise ValueError('Unsupported login control')
+            username.fill(request['username'])
+            password.fill(request['password'])
+            stage = 'login-submit'
             submit.click()
             password.wait_for(state='hidden', timeout=15000)
             if not self.allowed(self.page.url):
                 raise ValueError('Login left approved BMC')
+            self.authenticated = True
             if self.kvm:
-                self.console_frames_before = {(page, frame.url) for page in self.context.pages for frame in page.frames}
-                controls = self.page.get_by_role('link', name=re.compile(r'^HTML5( Remote)? Console$', re.I))
-                if controls.count() != 1:
-                    controls = self.page.get_by_role('button', name=re.compile(r'^HTML5( Remote)? Console$', re.I))
-                if controls.count() != 1:
-                    raise ValueError('Unsupported HTML5 console launcher')
+                stage = 'console-launch'
+                controls = self.console_launcher()
+                self.console_canvases_before = {frame: frame.locator('canvas:visible').element_handles()
+                    for page in self.context.pages[:8] for frame in page.frames[:16] if self.allowed(frame.url)}
                 controls.click()
+                stage = 'console-surface'
                 deadline = time.monotonic()+15
                 while time.monotonic() < deadline:
                     if self.canvases():
                         break
                     self.page.wait_for_timeout(100)
                 self.surface()
-        except BaseException:
+        except BaseException as error:
             self.close()
+            error.prime_stage = stage
             raise
         finally:
             request.clear()  # Never retain the login payload in the request loop.
@@ -83,16 +90,60 @@ class Browser:
         return (value.scheme == ('wss' if websocket else 'https') and value.hostname == target.hostname
                 and (value.port or 443) == (target.port or 443) and value.username is None and value.password is None)
 
+    def login_frame(self):
+        deadline = time.monotonic()+12
+        while time.monotonic() < deadline:
+            candidates = []
+            for frame in self.page.frames[:16]:
+                if not self.allowed(frame.url):
+                    continue
+                passwords = frame.locator('input[type=password]:visible').count()
+                if passwords:
+                    usernames = frame.locator('input[type=text]:visible, input[type=email]:visible').count()
+                    if passwords != 1 or usernames > 1:
+                        raise ValueError('Ambiguous login form')
+                    if usernames == 1:
+                        candidates.append(frame)
+            if len(candidates) > 1:
+                raise ValueError('Ambiguous login frames')
+            if candidates:
+                return candidates[0]
+            self.page.wait_for_timeout(100)
+        raise ValueError('Supported login form not found')
+
+    def console_launcher(self):
+        deadline = time.monotonic()+15
+        while time.monotonic() < deadline:
+            candidates = []
+            for frame in self.page.frames[:16]:
+                if not self.allowed(frame.url): continue
+                # Observed iLO 4 overview uses a short HTML5 label. Never apply
+                # that ambiguous shortcut to arbitrary pages or management charts.
+                pattern = r'^HTML5( Remote)? Console$'
+                if urlsplit(frame.url).path == '/html/summary.html':
+                    pattern = r'^(HTML5|HTML5( Remote)? Console)$'
+                for role in ('link', 'button'):
+                    controls = frame.get_by_role(role, name=re.compile(pattern, re.I))
+                    candidates.extend(controls.all())
+            if len(candidates) > 1: raise ValueError('Ambiguous HTML5 console launcher')
+            if candidates: return candidates[0]
+            self.page.wait_for_timeout(100)
+        raise ValueError('Unsupported HTML5 console launcher')
+
     def canvases(self):
         found = []
         for page in self.context.pages[:8]:
             for frame in page.frames[:16]:
-                if self.kvm and (page, frame.url) in self.console_frames_before:
-                    continue  # A pre-existing management chart is not a console.
                 if self.allowed(frame.url) and frame.locator('input[type=password]:visible').count() == 0:
                     nodes = frame.locator('canvas:visible')
                     for index in range(min(nodes.count(), 8)):
                         node = nodes.nth(index)
+                        # iLO 4 inserts a new console into an existing frame.
+                        # Exclude pre-launch visible elements, not the entire frame;
+                        # a management chart must never receive console input.
+                        if self.kvm and any(node.evaluate('(node, before) => node === before', before)
+                                for before in self.console_canvases_before.get(frame, [])):
+                            continue
                         box = node.bounding_box()
                         if box and box['width'] >= 320 and box['height'] >= 200:
                             found.append(node)
@@ -114,7 +165,8 @@ class Browser:
             if self.kvm:
                 png = self.surface().screenshot(type='png', timeout=10000)
             else:
-                png = self.page.screenshot(type='png', full_page=False, mask=[self.page.locator('input,textarea')], timeout=10000)
+                png = self.page.screenshot(type='png', full_page=False,
+                    mask=[frame.locator('input,textarea') for frame in self.page.frames[:16] if self.allowed(frame.url)], timeout=10000)
             if len(png) > 700000:
                 raise ValueError()
             return {'mimeType': 'image/png', 'image': base64.b64encode(png).decode()}
@@ -136,6 +188,19 @@ class Browser:
 
     def close(self):
         try:
+            if self.authenticated:
+                # Best effort logout of this private browser's session only.
+                # Never call an account-wide session deletion/deactivation API.
+                try:
+                    controls = []
+                    for frame in self.page.frames[:16]:
+                        if not self.allowed(frame.url): continue
+                        for role in ('link', 'button'):
+                            controls.extend(frame.get_by_role(role, name=re.compile(r'^(sign\s*out|log\s*out)$', re.I)).all())
+                    if len(controls) == 1: controls[0].click(timeout=2000)
+                except Exception:
+                    pass
+                self.authenticated = False
             if self.context:
                 self.context.close()
             if self.browser:
@@ -166,8 +231,9 @@ def main():
                 else:
                     raise ValueError()
                 print(json.dumps({'ok': True, 'result': result}), flush=True)
-            except Exception:
-                print('{"ok":false}', flush=True)
+            except Exception as error:
+                stage = getattr(error, 'prime_stage', '')
+                print(json.dumps({'ok':False, 'stage':stage if stage in STAGES else 'operation'}), flush=True)
                 break
     finally:
         if browser:

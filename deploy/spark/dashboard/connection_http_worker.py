@@ -9,7 +9,12 @@ import urllib.request
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, *args, **kwargs):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        from urllib.parse import urlsplit
+        path = urlsplit(req.full_url).path
+        if (code in (301, 307, 308) and newurl == req.full_url+'/' and
+                re.fullmatch(r'/redfish/v1/Systems(?:/[A-Za-z0-9_-]{1,80})?', path)):
+            return urllib.request.Request(newurl, headers=dict(req.headers), method='GET')
         return None
 
 

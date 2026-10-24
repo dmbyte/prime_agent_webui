@@ -109,4 +109,9 @@ systemctl --user daemon-reload
 
 "$live/install-static.sh" "$live"
 systemctl --user restart prime-auth.service prime-dashboard-api.service
+# Keep an already activated broker on the same schema/runtime as auth and API.
+# Never start or enable it on installations that have not opted in.
+if systemctl --user is-active --quiet prime-connection-broker.service; then
+  systemctl --user restart prime-connection-broker.service
+fi
 echo "Prime WebUI now contains release ${release_tag} at $(git -C "$repo" rev-parse --short HEAD)."

@@ -43,11 +43,18 @@
     box.append(el('strong', `${row.skillName} · ${row.label}`));
     box.append(el('p', row.description || '', 'muted'));
     if (row.endpoint) box.append(el('p', row.endpoint, 'muted'));
-    let targetName;
+    let targetName, cipher;
     if (row.kind === 'bmc-target') {
       const label = el('label', 'Target name'); targetName = document.createElement('input');
       targetName.value = row.label; targetName.maxLength = 80; targetName.setAttribute('aria-label', 'Target name');
       label.append(targetName); box.append(label);
+      const cipherLabel = el('label', 'IPMI cipher suite'); cipher = document.createElement('select');
+      cipher.setAttribute('aria-label', 'IPMI cipher suite');
+      for (const [value, title] of [[17, '17 — SHA-256 / AES (default)'], [3, '3 — legacy SHA-1 / AES (compatibility exception)']]) {
+        const option = el('option', title); option.value = String(value); cipher.append(option);
+      }
+      cipher.value = String(row.ipmiCipherSuite ?? 17); cipherLabel.append(cipher); box.append(cipherLabel);
+      box.append(el('p', 'Only this saved target. Cipher 3 uses older SHA-1 authentication but retains AES encryption. No automatic fallback. Independent of certificate verification. Changing it revokes all connections using this target; renew them before starting a new task.', 'muted'));
     }
     const status = el('p', row.status === 'saved' ? (row.adapter || row.kind === 'bmc-target' ? 'Saved · configure access in My connections' : 'Saved · tool integration pending') : row.status === 'inactive' ? 'Inactive requirement · delete stored values if no longer needed' : 'Required values missing');
     status.setAttribute('role', 'status'); box.append(status);
@@ -79,7 +86,7 @@
       try {
         await request({action: action === 'save' && row.kind === 'bmc-target' ? 'save-target' : action, key: row.key,
           ...(action === 'save' ? {values, ignoreCertificateErrors: certificate.checked,
-            ...(targetName ? {name: targetName.value} : {})} : {})});
+            ...(targetName ? {name: targetName.value, ipmiCipherSuite: Number(cipher.value)} : {})} : {})});
         await load();
       } catch (error) {status.textContent = error.message;}
       finally {for (const key of Object.keys(values)) values[key] = ''; save.disabled = remove.disabled = false;}
@@ -149,12 +156,15 @@
     const source = select('Saved target or credential', sources.map(r => [r.key, `${r.label}${r.endpoint ? ' · '+r.endpoint : ''}`]), current.credentialKey);
     const req = select('Reviewed credential requirement', [], '');
     const project = select('Allow use in', [['', 'All my chats (explicit user-wide grant)'], ...data.projects.map(p => [p.id, p.name])], current.projectId);
+    const httpTransport = select('HTTP credential transport', [['default', `System default (${data.defaultHttpTransport || 'direct'})`],
+      ['openshell', 'Native OpenShell — verified TLS required'], ['direct', 'Direct trusted broker — honors saved certificate choice']], current.httpTransport || 'default');
     const target = input('Approved BMC HTTPS IPv4 origin', 'text', current.adapter && current.adapter !== 'github-readonly' ? current.endpoint : '');
     target.placeholder = 'https://192.168.1.20';
     const expiry = input('Grant expires (1–90 days from now; saving renews)', 'number', '30'); expiry.min = '1'; expiry.max = '90'; expiry.required = true;
     const enabled = input('Enable this connection', 'checkbox', ''); enabled.checked = current.enabled !== false;
     const refreshFields = () => {
       const requirement = data.requirements.find(r => r.key === req.value);
+      httpTransport.parentElement.hidden = !requirement || ['bmc-browser', 'bmc-kvm', 'ipmi-sol'].includes(requirement.adapter);
       const credential = sources.find(r => r.key === source.value);
       if (credential?.kind === 'bmc-target') target.value = credential.endpoint;
       target.readOnly = credential?.kind === 'bmc-target';
@@ -183,6 +193,7 @@
       try {
         await request({action: 'save', ...(current.id ? {id: current.id} : {}), name: name.value, credentialKey: source.value, requirementKey: req.value,
           projectId: project.value || null, endpoint: target.value, enabled: enabled.checked,
+          httpTransport: httpTransport.parentElement.hidden ? 'default' : httpTransport.value,
           expiresAt: Math.floor(Date.now()/1000) + Number(expiry.value)*86400}, '/auth/connections');
         await loadConnections();
       } catch (error) {status.textContent = error.message; save.disabled = false;}
@@ -199,7 +210,7 @@
     const body = group.querySelector('.collapsible-body');
     try {
       const data = await request(null, '/auth/connections'); body.replaceChildren();
-      body.append(el('p', data.runtimeEnabled ? `Read-only runtime enabled. Private adapters: ${data.consoleAdapters?.length ? data.consoleAdapters.join(', ') : 'staged/disabled'}. Connections are scoped to your account and project. Saved does not mean tested.` : 'Staged setup: runtime access is disabled. Saving here does not activate services or interrupt tasks.', 'muted'));
+      body.append(el('p', data.runtimeEnabled ? `Read-only runtime enabled; default HTTP transport: ${data.defaultHttpTransport || 'direct'}. Private adapters: ${data.consoleAdapters?.length ? data.consoleAdapters.join(', ') : 'staged/disabled'}. Connections are scoped to your account and project. Saved does not mean tested.` : 'Staged setup: runtime access is disabled. Saving here does not activate services or interrupt tasks.', 'muted'));
       const refresh = el('button', 'Refresh connections'); refresh.type = 'button'; refresh.onclick = loadConnections; body.append(refresh);
       const approvals = el('div'); approvals.id = 'connectionApprovals'; body.append(approvals);
       renderApprovals(data.consoleApprovals || []);

@@ -46,6 +46,7 @@ def main():
         (root/'key.pem').write_bytes(key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
         (root/'cert.pem').write_bytes(cert.public_bytes(serialization.Encoding.PEM))
         events = []
+        inline_console = False
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *_): pass
             def answer(self, code, body, content_type='text/html', cookie=False):
@@ -56,11 +57,17 @@ def main():
             def do_GET(self):
                 if self.path == '/data':
                     self.answer(200, '{"fixture":true}', 'application/json')
-                elif self.path == '/':
+                elif self.path == '/' and inline_console:
+                    self.answer(200, '<iframe src="/login-form" width="1000" height="600"></iframe>')
+                elif self.path in ('/', '/login-form'):
                     self.answer(200, '''<input type=text><input type=password><button onclick="fetch('/login',{method:'POST',body:JSON.stringify({username:document.querySelector('input[type=text]').value,password:document.querySelector('input[type=password]').value})}).then(r=>{if(r.ok)location='/home'})">Log In</button>''')
                 elif self.path in ('/home', '/console') and 'session=synthetic-private-cookie' in self.headers.get('Cookie', ''):
-                    canvas = '''<canvas width=640 height=360 tabindex=0></canvas><script>const c=document.querySelector('canvas'); c.getContext('2d').fillText('Synthetic boot screen',20,40); c.addEventListener('keydown',e=>fetch('/event',{method:'POST',body:JSON.stringify({key:e.key})}));</script>'''
-                    self.answer(200, ('<a href="/console">HTML5 Console</a>' if self.path == '/home' else canvas)+f'<img src="https://localhost:{self.server.server_port}/escape">')
+                    canvas = '''<canvas id=console width=640 height=360 tabindex=0></canvas><script>const c=document.querySelector('#console'); c.getContext('2d').fillText('Synthetic boot screen',20,40); c.addEventListener('keydown',e=>fetch('/event',{method:'POST',body:JSON.stringify({key:e.key})}));</script>'''
+                    content = '<a href="/console">HTML5 Console</a>' if self.path == '/home' else canvas
+                    if inline_console and self.path == '/home':
+                        content = ('<canvas id=chart width=640 height=360></canvas><button onclick="document.querySelector(\'#console\').style.display=\'block\'">HTML5 Console</button>'
+                            +canvas.replace('id=console ', 'id=console style="display:none" '))
+                    self.answer(200, content+f'<img src="https://localhost:{self.server.server_port}/escape">')
                 else:
                     events.append('unexpected-request:'+self.path); self.answer(404, '')
             def do_POST(self):
@@ -98,7 +105,9 @@ def main():
                     assert 'ERR_CERT' in str(error), 'Strict browser failed for a non-certificate reason'
                 else:
                     strict.close(); raise AssertionError('Strict browser accepted invalid certificate')
-                for kind in ('browser', 'kvm'):
+                for variant in ('browser', 'kvm', 'kvm-inline'):
+                    inline_console = variant == 'kvm-inline'
+                    kind = 'kvm' if inline_console else variant
                     payload = {'kind': kind, 'endpoint': f'https://127.0.0.1:{server.server_port}', 'username': 'fixture', 'password': SECRET, 'ignoreCertificateErrors': True}
                     browser = Browser(payload)
                     try:
@@ -125,14 +134,14 @@ def main():
         print('PASS: direct/browser strict TLS rejection and per-credential exception, login/capture, isolated cookie, KVM input, cross-origin denial and login-screen withholding')
 
     # An actual PTY process replaces ipmitool only inside this synthetic test.
-    child = "import os,sys,time; print('boot '+os.environ['IPMI_PASSWORD']+' ready',flush=True); v=sys.stdin.buffer.read(1); print('key accepted',flush=True); time.sleep(30)"
+    child = "import os,sys,time; print('[SOL Session operational. Use ~? for help]'); print('boot '+os.environ['IPMI_PASSWORD']+' ready',flush=True); v=sys.stdin.buffer.read(1); print('key accepted',flush=True); time.sleep(30)"
     values = {'endpoint': 'https://192.168.1.4', 'username': 'fixture', 'password': SECRET}
     with mock.patch.object(connection_sol, 'command', return_value=[sys.executable, '-u', '-c', child]):
         sol = connection_sol.SOL(values)
         process = sol.process
         try:
             time.sleep(.3)
-            result = sol.read(); assert SECRET not in result['text']
+            result = sol.read(); assert SECRET not in result['text'] and result['connected'] and result['active']
             sol.send({'sessionId': 'fixture', 'requestId': 'a'*32, 'key': 'enter'})
             time.sleep(.3); result = sol.read()
             assert '[credential withheld]' in result['text'] and SECRET not in result['text']

@@ -15,6 +15,21 @@ KEYS = {'enter': b'\r', 'escape': b'\x1b', 'tab': b'\t', 'backspace': b'\x7f',
         'f1': b'\x1bOP', 'f2': b'\x1bOQ', 'f9': b'\x1b[20~', 'f10': b'\x1b[21~', 'f11': b'\x1b[23~', 'f12': b'\x1b[24~'}
 
 
+class IPMIUnavailable(RuntimeError):
+    """Public fixed diagnostic, never an upstream message or credential."""
+
+
+def status_failure(stderr, cipher=17):
+    text = stderr.decode('utf8', 'replace').lower()
+    if any(marker in text for marker in ('no matching cipher', 'invalid cipher', 'invalid integrity', 'no matching authentication', 'no matching integrity')):
+        return 'BMC does not accept selected IPMI cipher '+str(cipher)+'; no fallback attempted'
+    if 'unauthorized' in text or 'rakp 2 hmac is invalid' in text or 'invalid user' in text:
+        return 'BMC rejected IPMI authentication; verify the saved login and IPMI privileges'
+    if 'privilege' in text:
+        return 'BMC rejected the requested IPMI privilege level'
+    return 'Secure IPMI session unavailable; check UDP 623, selected cipher and BMC account access'
+
+
 def filter_stream(text, secret):
     boundary = max(0, len(text)-len(secret)+1)
     start = text.find(secret)
@@ -38,11 +53,14 @@ def validate_input(arguments):
 
 def command(values, *operation):
     username, password = values.get('username'), values.get('password')
+    cipher = values.get('ipmiCipherSuite', 17)
+    if type(cipher) is not int or cipher not in (17, 3):
+        raise ValueError('Unsupported saved IPMI cipher')
     if (not isinstance(username, str) or not 1 <= len(username) <= 16 or any(ord(c) < 33 or ord(c) > 126 for c in username)
             or not isinstance(password, str) or not 1 <= len(password.encode()) <= 20 or '\x00' in password):
         raise ValueError('IPMI username/password exceeds supported protocol bounds')
     # Username is visible to trusted host admins in argv; password never is.
-    return ['/usr/bin/ipmitool', '-I', 'lanplus', '-C', '17', '-H', urlsplit(values['endpoint']).hostname,
+    return ['/usr/bin/ipmitool', '-I', 'lanplus', '-C', str(cipher), '-H', urlsplit(values['endpoint']).hostname,
             '-U', username, '-E', '-N', '2', '-R', '1', *operation]
 
 
@@ -56,13 +74,15 @@ def status(values):
         result = subprocess.run(command(values, 'chassis', 'power', 'status'), env=environment(values),
                                 capture_output=True, timeout=15)
         if result.returncode:
-            raise ValueError()
+            raise IPMIUnavailable(status_failure(result.stderr, values.get('ipmiCipherSuite', 17)))
         text = result.stdout.decode().strip().lower()
         if text not in ('chassis power is on', 'chassis power is off'):
             raise ValueError()
         return {'powerState': 'On' if text.endswith(' on') else 'Off'}
+    except IPMIUnavailable:
+        raise
     except Exception:
-        raise RuntimeError('IPMI status unavailable; check access and LAN transport') from None
+        raise IPMIUnavailable('IPMI status unavailable; check access and LAN transport') from None
 
 
 class SOL:
@@ -71,6 +91,8 @@ class SOL:
         self.master = None
         self.password = values['password']
         self.tail, self.screen = '', ''
+        self.connected = False
+        self.handshake_tail = ''
         self.decoder = codecs.getincrementaldecoder('utf8')('replace')
         argv = command(values, 'sol', 'activate')
         master, slave = pty.openpty()
@@ -98,17 +120,24 @@ class SOL:
                 break
             collected += chunk
         # Hold the longest possible split secret suffix until the next read.
-        text = self.tail+self.decoder.decode(collected)
+        decoded = self.decoder.decode(collected)
+        self.handshake_tail = (self.handshake_tail+decoded)[-128:] if not self.connected else ''
+        if '[SOL Session operational.' in self.handshake_tail:
+            self.connected = True
+            self.handshake_tail = ''
+        text = self.tail+decoded
         safe, self.tail = filter_stream(text, self.password)
         safe = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', safe)
         safe = ''.join(c for c in safe if ord(c) >= 32 or c in '\n\r\t')
         self.screen = (self.screen+safe)[-32768:]
-        return {'text': self.screen, 'active': self.process.poll() is None}
+        # A spawned ipmitool process is not proof that the SOL handshake worked.
+        active = self.process.poll() is None
+        return {'text': self.screen, 'active': active, 'connected': active and self.connected}
 
     def send(self, arguments):
         data = validate_input(arguments)
-        if self.master is None or self.process.poll() is not None:
-            raise ValueError('SOL not active')
+        if self.master is None or self.process.poll() is not None or not self.connected:
+            raise ValueError('SOL is not connected; read and verify activation before input')
         while data:
             data = data[os.write(self.master, data):]
         return {'sent': True}
@@ -127,4 +156,5 @@ class SOL:
         finally:
             os.close(self.master)
             self.master, self.password, self.tail, self.screen = None, '', '', ''
+            self.handshake_tail = ''
         # Never issue global `sol deactivate`: that can evict another viewer.

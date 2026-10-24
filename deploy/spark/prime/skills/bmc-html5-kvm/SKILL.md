@@ -5,6 +5,31 @@ description: Maintain a bounded, reconnectable HTML5 BMC KVM session across Prim
 
 # Long-running HTML5 BMC KVM
 
+## Saved credentials in Prime WebUI (preferred)
+
+For a saved target login, use the task's private connection capability from the
+runtime context. Never retrieve/copy the password into `KVMClient`, tool code or
+chat. List authorized connections through `POST http://127.0.0.1:31000/connections`
+using the in-memory `PRIME_CONNECTION_TOKEN`, and select one offering `kvm.open`.
+Open with a fresh `requestId`; retain `sessionId`. `kvm.capture` and `kvm.close`
+take only that session ID. Decode PNG base64 to an image; never print the payload.
+The broker identifies the login and HTML5 canvas conservatively; an unsupported
+launcher is a compatibility failure, not permission to guess or expose a secret.
+
+`kvm.input` takes the session ID, fresh request ID and one named `key` or printable
+`text`. If `approvalRequired`, the owner must approve the exact action under
+Settings → My connections → Console action approvals; then retry the same
+request unchanged. Never self-approve, send blind keys or enter a password as
+console input. The broker enforces account, project, target, expiry and revision.
+
+Private saved sessions are task-bound, at most one hour with five minutes idle.
+They do not inherit the longer lifetime or popout of the legacy broker below.
+Private captures return to the requesting task. Never claim a boot/installer
+outcome without inspecting a current console image. Close your session when done;
+do not close another user's viewer or change virtual media to test the adapter.
+
+## Legacy persistent KVM without saved-credential injection
+
 The WebUI's **Console viewer ↗** opens a read-only popout of the selected KVM
 page. It samples about once per second while the viewer is visible, without
 sending input or extending the session's idle lifetime. Closing the viewer does

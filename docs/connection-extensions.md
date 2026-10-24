@@ -1,24 +1,32 @@
 # Native HTTP and private console connections
 
-The reference Spark enables the trusted local read-only service and private
-**browser/KVM** adapters. Native OpenShell HTTP substitution and **IPMI/SOL remain
-disabled**. Existing GitHub/Redfish reads use direct host transport. Browser/KVM
-activation was performed while all users and sandboxes were idle, restarting only
-auth, dashboard API and the connection broker. No model, gateway or task-runner
-restart, password migration, new task grant or automatic TLS exception occurred.
+The reference Spark enables native OpenShell HTTP substitution and private
+**browser/KVM/IPMI/SOL** adapters. HTTP defaults to native substitution; an owner
+can explicitly choose direct trusted-broker HTTP per connection. Activation was
+performed while all users and sandboxes were idle, restarting only auth,
+dashboard API and the connection broker. No model, gateway or task-runner restart,
+password migration, new task grant or automatic TLS exception occurred.
 
 A reusable saved target can supply multiple reviewed tool connections without
 duplicating passwords. Each connection retains its own project scope, operations
 and expiry. See [reusable targets](user-credentials.md#reusable-target-logins).
 Synthetic private sandbox login/capture, owner isolation, strict TLS rejection,
 saved exception, rotation revocation and cleanup passed under the hardened unit.
-Actual BMC firmware/login compatibility remains unverified.
+Real iLO 4 browser login, HTML5 KVM capture and direct Redfish status now pass.
+That target rejects cipher 17's integrity algorithm. After separate owner approval,
+an explicit target-only cipher 3 choice passed read-only IPMI power status and
+brief SOL activation/close. No reboot, boot change or console input was performed.
 
 ## Native OpenShell HTTP transport
 
 `PRIME_CONNECTION_HTTP_TRANSPORT=openshell` on the connection broker selects
 native substitution for the existing GitHub/Redfish operations. The default is
-`direct`; there is **no automatic fallback** after a native failure.
+`direct` in an unconfigured installation; the reference deployment sets
+`openshell`. There is **no automatic fallback** after a native failure.
+**Settings → My connections → HTTP credential transport** selects `default`,
+`openshell`, or `direct` for each HTTP connection. Saving changes its revision and
+revokes old task grants. Explicit native requests fail if native is disabled.
+This choice is not available to task code or console-adapter request arguments.
 
 For each bounded operation the trusted broker creates an ephemeral provider
 profile, provider and empty sandbox. Reviewed policy allows only the fixed host,
@@ -31,10 +39,15 @@ The provider is populated through the CLI's environment lookup, never a secret
 in argv or a profile file. The worker receives an opaque placeholder. For Basic
 authentication the provider holds the encoded username/password pair, and the
 proxy substitutes it in the Authorization header. TLS verification remains on;
-redirects, cookies, arbitrary methods/URLs and raw error returns are disallowed.
+cookies, arbitrary methods/URLs and raw error returns are disallowed. The sole
+redirect exception is one 301/307/308 that appends exactly one trailing slash to
+the same-origin Redfish Systems collection/member path. This supports iLO's
+canonical URLs; all other redirects, including GitHub redirects, are denied.
 Prime's native adapter rejects a saved **Ignore certificate errors** policy before
 creating any provider; it does not silently switch transport or disable proxy
-inspection. Direct host transport supports this owner-selected exception.
+inspection. Select **Direct trusted broker** explicitly for a connection whose
+saved target requires that certificate exception. Browser/KVM use their separate
+isolated transport and do not use this HTTP selector.
 The same bounded summary filters remain at the host broker. Grants are checked
 before every read and again before returning results.
 
@@ -57,8 +70,9 @@ isolation-first, not a low-latency pooled transport.
 All require Network operations, LAN/Full access, tools enabled, the original
 task's owner/project/revision-bound capability, and the separate
 `PRIME_CONNECTION_CONSOLES_ENABLED=1` activation gate.
-Set `PRIME_CONNECTION_CONSOLE_ADAPTERS=bmc-browser,bmc-kvm` on auth, API and broker
-to enable only those adapters. Without the allowlist, the legacy gate includes
+Set `PRIME_CONNECTION_CONSOLE_ADAPTERS=bmc-browser,bmc-kvm,ipmi-sol` on auth, API and
+broker for the reference configuration. Use a subset to enable only those
+adapters. Without the allowlist, the legacy gate includes
 all console adapters; use an explicit list for a partial rollout.
 
 | Reviewed adapter | Operations | Additional human approval |
@@ -70,7 +84,13 @@ all console adapters; use an explicit list for a partial rollout.
 Declarations require exactly `endpoint`, `username`, `password`. An endpoint is
 an explicit HTTPS private IPv4 origin on port 443; for IPMI it identifies the
 target host, **not a claim that IPMI uses HTTPS**. IPMI uses UDP 623, lanplus and
-cipher suite 17; there is no weak-cipher or unencrypted fallback. Use a minimally
+cipher suite 17 by default. A reusable target's owner can explicitly select
+**IPMI cipher suite → 3 — legacy SHA-1 / AES** in My credentials for older hardware.
+This retains AES encryption but accepts older SHA-1 authentication; prefer 17.
+It is independent of the certificate exception, changes the target revision and
+revokes all referring grants. Older clients preserve the saved selection. Tasks
+cannot select a cipher; all legacy skill-specific credentials retain 17. There is
+no automatic fallback, cipher 0 or unencrypted option. Use a minimally
 privileged BMC account. IPMI username is at most 16 ASCII characters; password
 at most 20 UTF-8 bytes. A protocol/account mismatch fails closed.
 
@@ -101,12 +121,14 @@ Native TCP rules reject IP literals. Chromium is explicitly configured to use
 OpenShell's injected HTTPS proxy; omitting this breaks sandbox egress. The real
 private-worker canary, not only a direct browser fixture, covers this boundary.
 
-The initial conservative login adapter recognizes one visible username text
-field, one password field and an unambiguous Log In/Sign In button. KVM additionally
-requires an HTML5 (Remote) Console link/button and one visible canvas at least
-320×200 in a newly opened/navigated page or frame; existing management charts are
-excluded. **This has been tested against a synthetic compatible UI, not yet against
-the user's iLO 5 firmware.** Ambiguous/missing controls are an unsupported layout,
+The conservative login adapter recognizes one visible username text/email field,
+one password field and an unambiguous Log In/Sign In button, including same-origin
+frames. KVM requires an HTML5 (Remote) Console link/button (or the short HTML5
+link on iLO 4's exact `/html/summary.html` page) and one visible canvas at least
+320×200. Newly shown/inserted canvases in existing frames are supported;
+pre-launch visible management charts are excluded by element identity.
+**Live iLO 4 login/capture and synthetic framed/inline-console tests pass; iLO 5
+has not been tested.** Ambiguous/missing controls are an unsupported layout,
 not permission to guess selectors, weaken TLS or inject a secret into task code.
 
 Login screens are withheld; browser captures mask inputs/textareas. KVM captures
@@ -127,6 +149,10 @@ Closing terminates only the child started for that session, not another viewer.
 The BMC may take time to release a disconnected SOL payload; the adapter does not
 forcefully clear it. Read returns bounded text, with exact password filtering
 across chunk boundaries, not a full VT100 renderer or general redaction engine.
+`active` means the child is alive; `connected` additionally requires the actual
+ipmitool SOL activation acknowledgement. Input is denied until that acknowledgement.
+Fixed diagnostics distinguish cipher/authentication/privilege failures without
+returning raw IPMI error text or credentials. A TLS exception never relaxes IPMI.
 
 ### Action approvals and session lifecycle
 
@@ -164,7 +190,8 @@ returns captures to the requesting task, not the older shared console feed.
 
 Normal installers/updaters copy the Python modules, UI and declarations, but
 **do not enable these extension flags or restart anything to activate them**.
-Normal full updates still perform their documented service restarts; do not use
+Normal full updates restart an already-active connection broker along with auth/API
+to keep their versions matched; they never start an inactive broker. Do not use
 one to stage files while users are working. Work from a separate source export.
 
 1. Retain all existing [credential and terminal guards](user-credentials.md) and
@@ -188,9 +215,9 @@ one to stage files while users are working. Work from a separate source export.
 
    ```ini
    [Service]
-   Environment=PRIME_CONNECTION_HTTP_TRANSPORT=direct
+   Environment=PRIME_CONNECTION_HTTP_TRANSPORT=openshell
    Environment=PRIME_CONNECTION_CONSOLES_ENABLED=1
-   Environment=PRIME_CONNECTION_CONSOLE_ADAPTERS=bmc-browser,bmc-kvm
+   Environment=PRIME_CONNECTION_CONSOLE_ADAPTERS=bmc-browser,bmc-kvm,ipmi-sol
    Environment=PRIME_CONNECTION_IMAGE_MANIFEST=/absolute/protected/connection-images.json
    ReadWritePaths=%h/.config/prime-agent/connection-runtime
    ReadWritePaths=%h/.config/prime-agent/connection-approvals
@@ -200,15 +227,15 @@ one to stage files while users are working. Work from a separate source export.
    ```
 
    These are the reference deployment choices. Select `openshell` only after
-   separately validating/approving native HTTP; leave consoles at `0` to disable.
+   validating native HTTP in your environment; leave consoles at `0` to disable.
    The OpenShell client directory exception is required because the CLI writes
    and removes its `last_sandbox` selection. Do not make the vault writable by
    this service. Preserve `ProtectHome=read-only`, `ProtectSystem=strict`,
    `NoNewPrivileges=yes` and `KillMode=control-group`. Verify the exact client
    write paths under the hardened unit in staging before activating it.
-6. Console activation also requires `PRIME_CONNECTION_CONSOLES_ENABLED=1` on
-   **auth and dashboard API** so Settings and new-task grant issuance agree with
-   the broker. Existing tasks never gain new connections. The gateway and runner
+6. Set the same transport, console-enabled and adapter-allowlist environment
+   values on **auth and dashboard API** so Settings and new-task grant issuance
+   agree with the broker. Existing tasks never gain new connections. The gateway and runner
    capability channel is unchanged. Publish reviewed managed declarations only
    when ready; changed browser/KVM requirement IDs require explicit new grants.
    Users can select one reusable target instead of saving values per requirement.
@@ -229,7 +256,7 @@ delete sandboxes or roll back OpenShell just to disable these adapters.
 
 - `scripts/validate-release.sh`: authorization, no-fallback, lifecycle, closed
   command/operation schemas, redaction and approval replay unit regressions.
-  All 393 tests pass locally and in clean Spark export, including saved certificate
+  All 406 tests pass locally and in the isolated Spark export, including saved certificate
   policy owner/default/revision/transport/session coverage.
 - `validate-credentials-ui.py`: real browser/HTTP, two-user separation, project
   settings, CSRF, human action approval and repeated-decision rejection.

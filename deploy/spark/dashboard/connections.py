@@ -148,6 +148,7 @@ class Connections:
                 'runtimeEnabled': os.environ.get('PRIME_CONNECTIONS_ENABLED') == '1',
                 'consoleRuntimeEnabled': os.environ.get('PRIME_CONNECTION_CONSOLES_ENABLED') == '1',
                 'consoleAdapters': sorted(console_adapters()),
+                'defaultHttpTransport': os.environ.get('PRIME_CONNECTION_HTTP_TRANSPORT', 'direct'),
                 'consoleApprovals': [dict(pending, endpoint=rows.get(pending['connection'], {}).get('endpoint'),
                                          name=rows.get(pending['connection'], {}).get('name'))
                                      for pending in Approvals(self.root).pending(owner)]}
@@ -158,7 +159,7 @@ class Connections:
             if set(body) != {'action', 'id', 'approve'}:
                 raise ValueError('Invalid console approval')
             return Approvals(self.root).decide(owner, body['id'], body['approve'], self)
-        if not isinstance(body, dict) or set(body) - {'action', 'id', 'name', 'credentialKey', 'requirementKey', 'projectId', 'endpoint', 'expiresAt', 'enabled'}:
+        if not isinstance(body, dict) or set(body) - {'action', 'id', 'name', 'credentialKey', 'requirementKey', 'projectId', 'endpoint', 'expiresAt', 'enabled', 'httpTransport'}:
             raise ValueError('Invalid connection request')
         key = body.get('id') or 'c_' + secrets.token_hex(16)
         if not isinstance(key, str) or not CONNECTION.fullmatch(key):
@@ -188,6 +189,9 @@ class Connections:
                 req = next((r for r in self.requirements(owner) if r['key'] == body.get('requirementKey', body.get('credentialKey')) and r.get('adapter') in ADAPTERS), None)
                 if not req or req.get('scope') == 'project' and req.get('projectId') != project_id:
                     raise ValueError('Reviewed credential requirement not available in this scope')
+                http_transport = body.get('httpTransport', rows.get(key, {}).get('httpTransport', 'default'))
+                if http_transport not in ('default', 'direct', 'openshell') or (req['adapter'] in CONSOLE_ADAPTERS and http_transport != 'default'):
+                    raise ValueError('Select a supported HTTP transport for a read-only HTTP connection')
                 credential_key = body.get('credentialKey')
                 if not isinstance(credential_key, str):
                     raise ValueError('Select a saved credential')
@@ -201,7 +205,7 @@ class Connections:
                           endpoint(body.get('endpoint') or (stored.get('endpoint') if record.get('kind') == 'bmc-target' else None)))
                 if req['adapter'] != 'github-readonly' and endpoint(stored.get('endpoint')) != target:
                     raise ValueError('Approved endpoint must match the saved credential endpoint')
-                rows[key] = dict(name=name.strip(), credentialKey=credential_key, requirementKey=req['key'], adapter=req['adapter'], projectId=project_id,
+                rows[key] = dict(name=name.strip(), credentialKey=credential_key, requirementKey=req['key'], adapter=req['adapter'], projectId=project_id, httpTransport=http_transport,
                                  endpoint=target, expiresAt=expiry, enabled=body.get('enabled', True), revision=secrets.token_hex(16),
                                  credentialRevision=record.get('revision', record.get('updatedAt')))
             else:
@@ -304,8 +308,11 @@ class Connections:
             if self.sessions is None:
                 raise PermissionError('Private console runtime is not activated')
             result = self.sessions.dispatch(request, expected_owner, claim, row,
-                                            dict(values, ignoreCertificateErrors=ignore_certificate_errors))
-        elif self.native is not None and transport is None:
+                                            dict(values, ignoreCertificateErrors=ignore_certificate_errors,
+                                                 ipmiCipherSuite=record.get('ipmiCipherSuite', 17)))
+        elif row.get('httpTransport') == 'openshell' and self.native is None and transport is None:
+            raise PermissionError('Native HTTP transport is not activated')
+        elif self.native is not None and row.get('httpTransport') != 'direct' and transport is None:
             if ignore_certificate_errors:
                 # The inspected proxy verifies upstream TLS, independently of the
                 # worker. Do not silently bypass it or change every user's policy.
@@ -330,7 +337,7 @@ class Connections:
 
 
 def get_json(origin, path, headers, *, ignore_certificate_errors=False):
-    """Direct TLS only: no environment proxies, redirects, cookies or retries."""
+    """Direct TLS only; one exact same-origin Redfish trailing-slash redirect."""
     host = urllib.parse.urlsplit(origin).hostname
     context = ssl.create_default_context()
     if ignore_certificate_errors is True:
@@ -340,6 +347,13 @@ def get_json(origin, path, headers, *, ignore_certificate_errors=False):
     try:
         connection.request('GET', path, headers={'Accept': 'application/json', 'User-Agent': 'Prime-Connections/1', **headers})
         response = connection.getresponse()
+        if (response.status in (301, 307, 308) and
+                re.fullmatch(r'/redfish/v1/Systems(?:/[A-Za-z0-9_-]{1,80})?', path) and
+                response.getheader('Location') in (path+'/', origin+path+'/')):
+            # iLO canonicalizes collection/member URLs. This is not an arbitrary
+            # redirect or transport fallback; only one trailing slash is allowed.
+            response.close(); connection.close()
+            return get_json(origin, path+'/', headers, ignore_certificate_errors=ignore_certificate_errors)
         if response.status != 200 or response.getheader('Content-Encoding', 'identity') != 'identity':
             raise ValueError('Upstream rejected read-only request; check access and TLS configuration')
         if response.getheader('Content-Type', '').split(';')[0].strip().lower() not in ('application/json', 'application/json;odata.metadata=minimal'):

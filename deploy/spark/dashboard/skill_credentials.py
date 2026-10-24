@@ -224,6 +224,7 @@ class Vault:
                         req = target_requirement(key, stored)
                         rows.append(dict(req, fields=[dict(f, configured=True) for f in req['fields']],
                                          status='saved', runtimeAvailable=False, endpoint=stored['values']['endpoint'],
+                                         ipmiCipherSuite=stored.get('ipmiCipherSuite', 17),
                                          ignoreCertificateErrors=stored.get('ignoreCertificateErrors') is True))
                     else:
                         rows.append({'key': key, 'label': stored['label'], 'skillName': stored['skillName'],
@@ -271,7 +272,7 @@ class Vault:
         return {'saved': action == 'save', 'deleted': action == 'delete'}
 
     def save_target(self, owner, requirements, body):
-        if set(body) - {'action', 'key', 'name', 'sourceKey', 'values', 'ignoreCertificateErrors'}:
+        if set(body) - {'action', 'key', 'name', 'sourceKey', 'values', 'ignoreCertificateErrors', 'ipmiCipherSuite'}:
             raise ValueError('Invalid target credential request')
         from connections import endpoint
         name = body.get('name')
@@ -279,6 +280,8 @@ class Vault:
             raise ValueError('Target name must be 1-80 printable characters')
         if 'ignoreCertificateErrors' in body and type(body['ignoreCertificateErrors']) is not bool:
             raise ValueError('Certificate setting must be true or false')
+        if 'ipmiCipherSuite' in body and (type(body['ipmiCipherSuite']) is not int or body['ipmiCipherSuite'] not in (17, 3)):
+            raise ValueError('Select IPMI cipher 17 or explicitly allow legacy encrypted cipher 3')
         key = body.get('key') or secrets.token_hex(32)
         if not isinstance(key, str) or not re.fullmatch(r'[a-f0-9]{64}', key):
             raise ValueError('Invalid target reference')
@@ -313,7 +316,8 @@ class Vault:
             merged['endpoint'] = endpoint(merged['endpoint'])
             saved[key] = dict(kind='bmc-target', values=merged, label=name.strip(), skillName='Saved target',
                               updatedAt=int(time.time()), revision=secrets.token_hex(16),
-                              ignoreCertificateErrors=body.get('ignoreCertificateErrors', old.get('ignoreCertificateErrors') is True))
+                              ignoreCertificateErrors=body.get('ignoreCertificateErrors', old.get('ignoreCertificateErrors') is True),
+                              ipmiCipherSuite=body.get('ipmiCipherSuite', old.get('ipmiCipherSuite', 17)))
             self._save(owner, saved)
         return {'key': key, 'saved': True, 'deleted': False}
 
