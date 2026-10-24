@@ -637,6 +637,15 @@ never removed or repointed; tasks receive neither Docker access nor the provisio
 socket. Shared local-input volumes remain installer-managed. See the
 [multi-user runtime checks](deploy/spark/openshell/README.md#new-users-and-storage-recovery).
 
+Project source copies grant the sandbox's own runner UID read/traverse access;
+host supplementary groups alone are insufficient inside OpenShell. Recovered
+pre-start chats preserve their prompt and receive native-compatible metadata.
+On resume, the unprivileged runner adopts a WebUI-owned recovery transcript by
+copying it, retaining an exact original backup, so Prime can migrate and update
+it without privileged ownership changes. No other user's storage is exposed.
+The `validate-runtime-inputs.py` canary tests project-file reads and both new and
+legacy recovered-chat continuation through the real runtime with synthetic data.
+
 ### Skills and additional tools
 
 Installed skills live at `/home/prime/.prime/agent/skills` inside a task and in

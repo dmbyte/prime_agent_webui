@@ -74,6 +74,21 @@ in bounded batches. WebUI-owned recovered transcripts retain their inherited ACL
 the runner cannot change their permissions and must not fail startup trying.
 Symlinks are not traversed. Recovery does not delete conversations or prompts.
 
+Project-source synchronization adds a named read/traverse ACL for the runner UID
+to each WebUI-created project directory and a read ACL to each source file,
+including previously copied files. OpenShell does not inherit the host runner's
+supplementary groups. Do not fix this by opening all users' storage or mounting
+the host upload tree. ACL changes use an opened, non-symlink inode and fail closed.
+
+Recovered pre-start conversations include the native working directory and zero
+usage metadata for the synthetic error message. Legacy recovery records are
+normalized at resume, preserving user text and retaining an exact original in
+`trash/recovery-format-backups/`. The rootless runner then adopts only matching
+`recovered-<task-id>` WebUI-owned transcripts by bounded copy under a lock, with
+another exact backup in `trash/recovery-ownership-backups/`. This lets Prime's
+native format migration preserve ownership without failing `chown`. Ordinary
+native sessions are untouched. Deleted chats stay in trash, not auto-restored.
+
 Both installer and updater install the provisioner module/unit and the runner's
 dependency. For an existing installation, activate matching files while tasks
 are idle, preserve a rollback backup, and restart the broker. Check:
@@ -90,6 +105,24 @@ synthetic prompts. It does not validate browser login and does not use existing
 conversations/files or external providers. Successful test chats move to recoverable
 trash; failures remain available. `--role admin --effort medium` can test an actual
 administrator account's explicit effort. Never use a higher role than the account.
+
+For attachment and recovered-resume coverage, run while production is idle:
+
+```bash
+input_check_dir=$(mktemp -d)
+python3 deploy/spark/prime/validate-runtime-inputs.py \
+  --api-dir "$HOME/prime-dgx-dashboard" --work-dir "$input_check_dir"
+```
+
+This creates an ephemeral loopback API with isolated metadata and a dedicated
+`check-runtime-inputs` storage owner, then uses the installed broker/OpenShell/Qwen
+to read a synthetic project file and recall the original prompt in both new and
+legacy recovered chats. It checks native v3 migration and real IPython execution.
+It does not use existing user files or test browser login. Successful fixtures
+move to recoverable trash; failed fixtures and evidence remain for inspection.
+Deploy matching `api_v2.py` and `runner_launch.py` (installed as
+`/usr/local/libexec/prime-runner-launch`); restart the dashboard API while idle.
+No model/image change or credential-feature activation is needed for this repair.
 
 ## Managed LAN hosting
 

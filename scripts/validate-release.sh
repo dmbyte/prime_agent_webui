@@ -77,6 +77,7 @@ required=(
   deploy/spark/prime/validate-qwen-effort.mjs
   deploy/spark/prime/validate-qwen-task.py
   deploy/spark/prime/validate-user-runtime.py
+  deploy/spark/prime/validate-runtime-inputs.py
   deploy/spark/vllm-nemotron35/README.md
   deploy/spark/llama-qwen38/README.md
   deploy/spark/llama-qwen38/build-image.sh

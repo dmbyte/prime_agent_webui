@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Validated runner boundary that launches one OpenShell task sandbox."""
 import base64, json, os, signal, subprocess, sys, threading, time
+import fcntl, pwd, re, stat, tempfile
 from pathlib import Path
 
 sys.path.insert(0, "/usr/local/lib/prime-runner")
@@ -16,6 +17,51 @@ def stage(label):
 def fake_jwt():
     enc=lambda value: base64.urlsafe_b64encode(json.dumps(value,separators=(",", ":")).encode()).decode().rstrip("=")
     return f"{enc({'alg':'none'})}.{enc({'https://api.openai.com/auth':{'chatgpt_account_id':'gateway'}})}.gateway"
+
+def adopt_recovered_session(agent, session_id, web_owner):
+    """Transfer a WebUI recovery transcript by copy, without root or chown.
+
+    Prime preserves ownership during atomic format migration, so an ACL alone
+    cannot make a WebUI-owned transcript safely resumable. Keep an exact backup.
+    """
+    if not session_id or not re.fullmatch(r"recovered-[a-f0-9]{32}", session_id):
+        return
+    source = agent / "sessions" / f"{session_id}.jsonl"
+    lock_fd = os.open(agent / '.recovery-adoption.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        fd = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(fd, 'rb') as stream:
+            info = os.fstat(stream.fileno())
+            if info.st_uid == os.geteuid():
+                return
+            if not stat.S_ISREG(info.st_mode) or info.st_uid != pwd.getpwnam(web_owner).pw_uid or info.st_size > 2 * 1024 * 1024:
+                raise ValueError('Recovered transcript has unsafe ownership, type or size')
+            original = stream.read(2 * 1024 * 1024 + 1)
+        if len(original) > 2 * 1024 * 1024:
+            raise ValueError('Recovered transcript exceeds adoption limit')
+        header = json.loads(original.split(b'\n', 1)[0])
+        if header.get('type') != 'session' or header.get('id') != session_id:
+            raise ValueError('Recovered transcript identity mismatch')
+        backups = agent / 'trash' / 'recovery-ownership-backups'
+        backups.mkdir(mode=0o700, parents=True, exist_ok=True)
+        backup_fd, _ = tempfile.mkstemp(prefix=session_id+'.', suffix='.jsonl', dir=backups)
+        with os.fdopen(backup_fd, 'wb') as stream:
+            stream.write(original); stream.flush(); os.fsync(stream.fileno())
+        target_fd, target_path = tempfile.mkstemp(prefix=session_id+'.', suffix='.tmp', dir=source.parent)
+        try:
+            with os.fdopen(target_fd, 'wb') as stream:
+                os.fchmod(stream.fileno(), 0o660)
+                stream.write(original); stream.flush(); os.fsync(stream.fileno())
+            current = source.lstat()
+            if (current.st_dev, current.st_ino, current.st_size, current.st_mtime_ns) != (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns):
+                raise ValueError('Recovered transcript changed during adoption')
+            os.replace(target_path, source)
+        finally:
+            Path(target_path).unlink(missing_ok=True)
+    finally:
+        os.close(lock_fd)
+
 
 def configure(owner):
     web_owner = os.environ.get("PRIME_WEB_OWNER", "dbyte")
@@ -107,6 +153,9 @@ def main():
         else: raise SystemExit("Task gateway is unavailable")
         stage("Registering user OpenShell storage")
         volume_provisioner.provision(request['owner'])
+        if request.get('sessionId'):
+            adopt_recovered_session(ROOT/'users'/request['owner']/'prime/agent',
+                                    request['sessionId'], os.environ.get('PRIME_WEB_OWNER', 'dbyte'))
         os.environ["HOME"] = str(ROOT)
         os.environ.setdefault("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
         # Path validation and argv construction can fail before OpenShell starts.

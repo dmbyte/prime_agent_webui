@@ -540,7 +540,9 @@ for line in sys.stdin:
             (root / "users/alice/prime/agent/project-sources").mkdir(parents=True)
             meta = {"projects": {project_id: {"owner": "alice", "name": "Alpha", "instructions": "Be concise", "fileIds": [file_id]}}, "files": {source.name: {"owner": "alice"}}}
             with mock.patch.object(api, "metadata", return_value=meta), mock.patch.object(api.legacy, "UPLOADS", uploads), mock.patch.dict(api.os.environ, {"PRIME_TASK_RUNTIME": "openshell", "PRIME_RUNNER_STORAGE": str(root / "users")}):
-                context = api.project_context(project_id, "alice")
+                with mock.patch.object(api, "grant_runtime_access") as grant:
+                    context = api.project_context(project_id, "alice")
+                    grant.assert_any_call(root / "users/alice/prime/agent/project-sources" / project_id, directory=True)
             self.assertIn("Project instructions", context)
             self.assertIn(f"/home/prime/.prime/agent/project-sources/{project_id}/01-alice-reference.txt", context)
             self.assertNotIn(str(uploads), context)

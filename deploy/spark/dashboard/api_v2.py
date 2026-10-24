@@ -6,6 +6,8 @@ import importlib.util
 import json
 import mimetypes
 import os
+import pwd
+import stat
 import re
 import select
 import shutil
@@ -706,6 +708,7 @@ def sync_project_sources(project_id, user, file_ids):
         root.mkdir(mode=0o750, parents=True, exist_ok=True)
     project_root = root / project_id
     project_root.mkdir(mode=0o755, exist_ok=True)
+    grant_runtime_access(project_root, directory=True)
     desired = set()
     rows = []
     for index, file_id in enumerate(file_ids, 1):
@@ -713,18 +716,50 @@ def sync_project_sources(project_id, user, file_ids):
         safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "-", source.name).strip("-.")[:80] or "source"
         name = f"{index:02d}-{safe_name}"
         target = project_root / name
+        if target.is_symlink():
+            raise ValueError("Project source cannot be a symbolic link")
         source_stat = source.stat()
         if not target.is_file() or target.stat().st_size != source_stat.st_size or target.stat().st_mtime_ns != source_stat.st_mtime_ns:
             temporary = project_root / f".{name}.{uuid.uuid4().hex}.tmp"
             shutil.copy2(source, temporary)
-            os.chmod(temporary, 0o644)
+            os.chmod(temporary, 0o640)
+            grant_runtime_access(temporary)
             os.replace(temporary, target)
+        grant_runtime_access(target)
         desired.add(name)
         rows.append({"id": str(file_id), "path": f"/home/prime/.prime/agent/project-sources/{project_id}/{name}"})
     for path in project_root.iterdir():
         if path.is_file() and path.name not in desired:
             path.unlink()
     return rows
+
+
+def grant_runtime_access(path, *, directory=False, writable=False):
+    """Grant only the sandbox UID access; host supplementary groups do not follow it."""
+    if not container_mode():
+        return
+    runner_uid = pwd.getpwnam("prime-runner").pw_uid
+    # Operate on an opened inode, not a path a task could replace with a symlink.
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+    if directory:
+        flags |= os.O_DIRECTORY
+    descriptor = os.open(path, flags)
+    try:
+        info = os.fstat(descriptor)
+        if not (stat.S_ISDIR(info.st_mode) if directory else stat.S_ISREG(info.st_mode)):
+            raise ValueError("Runtime input must be a regular file or directory")
+        if info.st_uid == runner_uid:
+            return  # Owner permissions already apply inside the sandbox.
+        if info.st_uid != os.geteuid():
+            raise ValueError("Runtime input has an unexpected owner")
+        access = "r-x" if directory else "rw-" if writable else "r--"
+        subprocess.run(["/usr/bin/setfacl", "-m", f"u:{runner_uid}:{access},m::{access}",
+                        "--", f"/proc/self/fd/{descriptor}"], pass_fds=(descriptor,),
+                       check=True, timeout=10, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    except subprocess.SubprocessError as error:
+        raise OSError("Could not prepare sandbox access to the selected file") from error
+    finally:
+        os.close(descriptor)
 
 
 def normalize_project_fields(payload, user, role="user", project_id=None):
@@ -1214,6 +1249,21 @@ def task_deadline_expired(task, fallback_deadline):
         return True
 
 
+def normalize_recovery_entries(records):
+    """Supply native session metadata for WebUI-created, non-inference messages."""
+    records[0].setdefault("cwd", "/project" if container_mode() else str(legacy.HOME / "prime-dgx-agent"))
+    model = next((row for row in records if row.get("type") == "model_change"), {})
+    for row in records:
+        message = row.get("message", {})
+        if row.get("type") == "message" and message.get("role") == "assistant" and "usage" not in message:
+            message.update({"api": "openai-completions", "provider": model.get("provider") or "spark-qwen",
+                            "model": model.get("modelId") or "qwen3.8-flash-next", "stopReason": "stop",
+                            "usage": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0,
+                                      "totalTokens": 0, "cost": {"input": 0, "output": 0,
+                                      "cacheRead": 0, "cacheWrite": 0, "total": 0}}})
+    return records
+
+
 def recover_failed_task_conversation(task, status):
     if status not in {"failed", "timed_out", "stopped"} or task.get("sessionId") or not task.get("submittedMessage"):
         return None
@@ -1227,15 +1277,18 @@ def recover_failed_task_conversation(task, status):
     failure = task.get("rpcError") or f"Task {status.replace('_', ' ')} before Prime could save the conversation."
     if not path.exists():
         records = [
-            {"type": "session", "id": session_id, "timestamp": timestamp},
+            {"type": "session", "id": session_id, "timestamp": timestamp,
+             "cwd": "/project" if container_mode() else str(legacy.HOME / "prime-dgx-agent")},
             {"type": "model_change", "provider": task.get("provider"), "modelId": task.get("model"), "timestamp": timestamp},
             {"type": "thinking_level_change", "thinkingLevel": task.get("thinking"), "timestamp": timestamp},
             {"type": "message", "message": {"id": f"user-{task['id']}", "role": "user", "content": [{"type": "text", "text": task["submittedMessage"]}], "timestamp": millis}},
             {"type": "message", "message": {"id": f"error-{task['id']}", "role": "assistant", "content": [{"type": "text", "text": failure}], "timestamp": millis + 1}},
         ]
+        normalize_recovery_entries(records)
         temporary = path.with_suffix(".tmp")
         temporary.write_text("".join(json.dumps(record, separators=(",", ":"), ensure_ascii=False) + "\n" for record in records))
         os.chmod(temporary, 0o660)
+        grant_runtime_access(temporary, writable=True)
         os.replace(temporary, path)
     with META_LOCK:
         data = metadata()
@@ -1261,6 +1314,45 @@ def recover_failed_task_conversation(task, status):
         data["tasks"][task["id"]]["finishedAt"] = timestamp
         legacy.atomic_json(META, data)
     return session_id
+
+
+def prepare_recovered_session(session_id, owner):
+    """Repair legacy WebUI recovery headers/ACLs; Prime migrates v1 entries itself."""
+    require_conversation_owner(session_id, owner)
+    row = metadata().get("conversations", {}).get(session_id, {})
+    if not row.get("recoveredFromTask"):
+        return
+    with TASK_LOCK:
+        if any(task.get("sessionId") == session_id and task.get("status") == "running"
+               for task in TASKS.values()):
+            raise ValueError("Recovered conversation already has an active task")
+    path = legacy.session_path(session_id, session_root(owner))
+    if path.is_symlink():
+        raise ValueError("Recovered conversation cannot be a symbolic link")
+    original = path.read_bytes()
+    first, separator, remaining = original.partition(b"\n")
+    header = json.loads(first)
+    if header.get("type") != "session" or header.get("id") != session_id:
+        raise ValueError("Recovered conversation header does not match")
+    records = [json.loads(line) for line in original.splitlines() if line.strip()]
+    normalized = normalize_recovery_entries(json.loads(json.dumps(records)))
+    if normalized != records:
+        # Retain the original byte-for-byte; never change prior message content.
+        backup_root = session_trash(owner) / "recovery-format-backups"
+        backup_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        backup = backup_root / f"{session_id}.{uuid.uuid4().hex}.jsonl"
+        with backup.open("xb") as stream:
+            os.chmod(backup, 0o600)
+            stream.write(original)
+        temporary = path.with_suffix(f".{uuid.uuid4().hex}.tmp")
+        with temporary.open("xb") as stream:
+            os.chmod(temporary, 0o660)
+            # Preserve unmodified message lines byte-for-byte when possible.
+            for line, before, after in zip((line for line in original.splitlines(keepends=True) if line.strip()), records, normalized):
+                stream.write(line if before == after else json.dumps(after, separators=(",", ":")).encode() + b"\n")
+        grant_runtime_access(temporary, writable=True)
+        os.replace(temporary, path)
+    grant_runtime_access(path, writable=True)
 
 
 def record_task_finished(task, status):
@@ -1964,6 +2056,8 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITI
     route["routeReason"] += " " + effort_reason
     details = model_details(route["provider"], route["model"])
     task_id = uuid.uuid4().hex
+    if session_id:
+        prepare_recovered_session(session_id, owner)
     if container_mode():
         command = task_common.broker_command(task_id, owner, authorization or {}, route["provider"], route["model"], thinking, session_id, fork, project_id=project_id)
         task_cwd = legacy.HOME
