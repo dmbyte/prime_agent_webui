@@ -18,6 +18,13 @@ required=(
   deploy/spark/dashboard/skill_credentials.py
   deploy/spark/dashboard/connections.py
   deploy/spark/dashboard/connection_broker.py
+  deploy/spark/dashboard/connection_native.py
+  deploy/spark/dashboard/connection_http_worker.py
+  deploy/spark/dashboard/connection_approvals.py
+  deploy/spark/dashboard/connection_sessions.py
+  deploy/spark/dashboard/connection_browser.py
+  deploy/spark/dashboard/connection_browser_worker.py
+  deploy/spark/dashboard/connection_sol.py
   deploy/spark/systemd/prime-connection-broker.service
   deploy/spark/dashboard/credentials.js
   deploy/spark/prime/managed-credential-requirements.json

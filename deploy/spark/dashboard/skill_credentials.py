@@ -52,7 +52,8 @@ def declarations(value):
         normalized = {'id': key, 'label': label.strip(), 'description': description, 'fields': clean}
         if 'adapter' in row:
             adapter = row['adapter']
-            expected = {'github-readonly': {'token'}, 'redfish-readonly': {'endpoint', 'username', 'password'}}
+            expected = {'github-readonly': {'token'}, **{key: {'endpoint', 'username', 'password'}
+                        for key in ('redfish-readonly', 'bmc-browser', 'bmc-kvm', 'ipmi-sol')}}
             if not isinstance(adapter, str) or adapter not in expected or names != expected[adapter]:
                 raise ValueError('Unsupported credential adapter or fields')
             normalized['adapter'] = adapter

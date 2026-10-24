@@ -2,7 +2,9 @@
 """Opt-in loopback connection broker; no management or plaintext-read endpoint."""
 import json
 import os
+import signal
 import threading
+from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import connections
 
@@ -73,4 +75,41 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == '__main__':
     if os.environ.get('PRIME_CONNECTIONS_ENABLED') != '1':
         raise SystemExit('Connection runtime is not enabled')
-    Server(('127.0.0.1', 8767)).serve_forever()
+    manager = connections.Connections()
+    stopping = threading.Event()
+    if os.environ.get('PRIME_CONNECTION_HTTP_TRANSPORT', 'direct') not in ('direct', 'openshell'):
+        raise SystemExit('Unsupported connection HTTP transport')
+    native = None
+    if (os.environ.get('PRIME_CONNECTION_HTTP_TRANSPORT', 'direct') == 'openshell'
+            or os.environ.get('PRIME_CONNECTION_CONSOLES_ENABLED') == '1'):
+        from connection_native import NativeRuntime
+        native = NativeRuntime(manager.root/'connection-runtime', os.environ['PRIME_CONNECTION_IMAGE_MANIFEST'])
+        native.reap(startup=True)
+        if os.environ.get('PRIME_CONNECTION_HTTP_TRANSPORT') == 'openshell':
+            manager.native = native
+        if os.environ.get('PRIME_CONNECTION_CONSOLES_ENABLED') == '1':
+            from connection_sessions import Sessions
+            manager.sessions = Sessions(manager, native)
+        def reap():
+            while not stopping.wait(5):
+                try:
+                    if manager.sessions:
+                        manager.sessions.reap()
+                    native.reap()
+                except Exception:
+                    print('{"event":"connection_cleanup_failed"}', flush=True)
+        threading.Thread(target=reap, daemon=True).start()
+    server = Server(('127.0.0.1', 8767), manager)
+    def stop(*_):
+        stopping.set()
+        threading.Thread(target=server.shutdown, daemon=True).start()
+    signal.signal(signal.SIGTERM, stop)
+    try:
+        server.serve_forever()
+    finally:
+        stopping.set()
+        server.server_close()
+        if manager.sessions:
+            manager.sessions.reap(all_sessions=True)
+        if native:
+            native.reap(startup=True)

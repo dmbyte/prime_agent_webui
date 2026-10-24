@@ -21,6 +21,10 @@ import urllib.parse
 import skill_credentials as credentials
 
 ADAPTERS = {'github-readonly': ['github.repository'], 'redfish-readonly': ['redfish.systems']}
+CONSOLE_ADAPTERS = {'bmc-browser': ['browser.open', 'browser.capture', 'browser.close'],
+                    'bmc-kvm': ['kvm.open', 'kvm.capture', 'kvm.input', 'kvm.close'],
+                    'ipmi-sol': ['ipmi.status', 'sol.open', 'sol.read', 'sol.input', 'sol.close']}
+ADAPTERS.update(CONSOLE_ADAPTERS)
 TASK = re.compile(r'[a-f0-9]{32}')
 CONNECTION = re.compile(r'c_[a-f0-9]{32}')
 PROJECT = re.compile(r'p_[a-f0-9]{24}')
@@ -64,6 +68,9 @@ def permitted(row, context):
     if context.get('executionMode') == 'deny':
         return False
     mode = context.get('networkMode', 'restricted')
+    if row['adapter'] in CONSOLE_ADAPTERS:
+        return (os.environ.get('PRIME_CONNECTION_CONSOLES_ENABLED') == '1' and mode in ('lan', 'full')
+                and context.get('profile') == 'network-operations')
     return (row['adapter'] == 'github-readonly' and mode in ('internet', 'full') or
             row['adapter'] == 'redfish-readonly' and mode in ('lan', 'full')
             and context.get('profile') == 'network-operations')
@@ -77,6 +84,8 @@ class Connections:
         self.auth_path = Path(configured_auth) if configured_auth and Path(configured_auth).parent == self.root else self.root/'web-auth.json'
         self.store = credentials.Vault(self.root/'connections')
         self.vault = credentials.Vault(self.root/'skill-vault')
+        self.native = None
+        self.sessions = None
 
     def metadata(self):
         path = self.home/'.prime/agent/webui-metadata.json'
@@ -100,6 +109,7 @@ class Connections:
         return req.get('scope') != 'project' or req.get('projectId') == project_id
 
     def view(self, owner):
+        from connection_approvals import Approvals
         rows = self.store._load(owner)
         requirements = self.requirements(owner)
         saved = self.vault._load(owner)
@@ -111,9 +121,18 @@ class Connections:
                                  for r in requirements if r.get('adapter') in ADAPTERS],
                 'projects': [{'id': key, 'name': row.get('name', key)} for key, row in self.metadata().get('projects', {}).items()
                              if row.get('owner') == owner],
-                'runtimeEnabled': os.environ.get('PRIME_CONNECTIONS_ENABLED') == '1'}
+                'runtimeEnabled': os.environ.get('PRIME_CONNECTIONS_ENABLED') == '1',
+                'consoleRuntimeEnabled': os.environ.get('PRIME_CONNECTION_CONSOLES_ENABLED') == '1',
+                'consoleApprovals': [dict(pending, endpoint=rows.get(pending['connection'], {}).get('endpoint'),
+                                         name=rows.get(pending['connection'], {}).get('name'))
+                                     for pending in Approvals(self.root).pending(owner)]}
 
     def change(self, owner, body):
+        if isinstance(body, dict) and body.get('action') == 'decide-console':
+            from connection_approvals import Approvals
+            if set(body) != {'action', 'id', 'approve'}:
+                raise ValueError('Invalid console approval')
+            return Approvals(self.root).decide(owner, body['id'], body['approve'], self)
         if not isinstance(body, dict) or set(body) - {'action', 'id', 'name', 'credentialKey', 'projectId', 'endpoint', 'expiresAt', 'enabled'}:
             raise ValueError('Invalid connection request')
         key = body.get('id') or 'c_' + secrets.token_hex(16)
@@ -149,7 +168,7 @@ class Connections:
                 if any(not stored.get(f['id']) for f in req['fields'] if f['required']):
                     raise ValueError('Save the required credentials first')
                 target = 'https://api.github.com' if req['adapter'] == 'github-readonly' else endpoint(body.get('endpoint'))
-                if req['adapter'] == 'redfish-readonly' and endpoint(stored.get('endpoint')) != target:
+                if req['adapter'] != 'github-readonly' and endpoint(stored.get('endpoint')) != target:
                     raise ValueError('Approved endpoint must match the saved credential endpoint')
                 rows[key] = dict(name=name.strip(), credentialKey=req['key'], adapter=req['adapter'], projectId=project_id,
                                  endpoint=target, expiresAt=expiry, enabled=body.get('enabled', True), revision=secrets.token_hex(16),
@@ -239,21 +258,37 @@ class Connections:
             raise PermissionError('Saved credentials changed; renew this connection')
         values = record.get('values', {})
         deadline = time.monotonic()+90
+        def still_authorized():
+            self.verify(request['token'], expected_owner)
+            current = self.store._load(expected_owner).get(request['connection'], {})
+            if current.get('revision') != row['revision'] or not self.eligible(expected_owner, current, claim['projectId']):
+                raise PermissionError('Connection changed during operation')
         def bounded_transport(*args):
             if time.monotonic() >= deadline:
                 raise ValueError('Connection operation timed out')
+            still_authorized()
             return (transport or get_json)(*args)
-        result = perform(row, values, request['operation'], request.get('arguments', {}), bounded_transport)
+        if row['adapter'] in CONSOLE_ADAPTERS:
+            if self.sessions is None:
+                raise PermissionError('Private console runtime is not activated')
+            result = self.sessions.dispatch(request, expected_owner, claim, row, values)
+        elif self.native is not None and transport is None:
+            with self.native.lease(row, values, min(claim['expiresAt'], row['expiresAt'])) as lease:
+                def native_transport(*args):
+                    if time.monotonic() >= deadline:
+                        raise ValueError('Connection operation timed out')
+                    still_authorized()
+                    return lease.get_json(*args)
+                result = perform(row, values, request['operation'], request.get('arguments', {}), native_transport)
+        else:
+            result = perform(row, values, request['operation'], request.get('arguments', {}), bounded_transport)
         # Defense in depth against an approved upstream echoing an exact secret.
         encoded = json.dumps(result)
         for name, value in values.items():
             if name != 'endpoint' and value and value in encoded:
                 raise ValueError('Upstream result withheld by credential protection')
         # Do not return data if the task/connection was revoked during the request.
-        self.verify(request['token'], expected_owner)
-        current = self.store._load(expected_owner).get(request['connection'], {})
-        if current.get('revision') != row['revision'] or not self.eligible(expected_owner, current, claim['projectId']):
-            raise PermissionError('Connection changed during operation')
+        still_authorized()
         return result
 
 

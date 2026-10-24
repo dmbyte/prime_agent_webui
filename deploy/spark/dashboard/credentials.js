@@ -30,7 +30,7 @@
     const summary = el('summary', 'My credentials');
     const body = el('div', '', 'collapsible-body');
     body.append(el('p', 'Private to your login. Enabled, reviewed skills declare the fields shown here. Saved values cannot be displayed; blank fields preserve existing values.', 'muted'));
-    body.append(el('p', 'Saving does not grant tool access. Supported reviewed requirements can be bound in My connections below. Browser/KVM and IPMI login remain unavailable through saved credentials.', 'muted'));
+    body.append(el('p', 'Saving does not grant tool access. Bind reviewed requirements in My connections below. Private browser/KVM and IPMI/SOL require separate administrator activation and validation.', 'muted'));
     const refresh = el('button', 'Refresh requirements'); refresh.type = 'button';
     refresh.onclick = load;
     const list = el('div', '', 'credential-list'); list.setAttribute('aria-live', 'polite');
@@ -99,21 +99,21 @@
     };
     const req = select('Reviewed credential requirement', data.requirements.filter(r => r.saved).map(r => [r.key, `${r.skillName} · ${r.label}`]), current.credentialKey);
     const project = select('Allow use in', [['', 'All my chats (explicit user-wide grant)'], ...data.projects.map(p => [p.id, p.name])], current.projectId);
-    const target = input('Approved BMC HTTPS IPv4 origin (Redfish only)', 'text', current.adapter === 'redfish-readonly' ? current.endpoint : '');
+    const target = input('Approved BMC HTTPS IPv4 origin', 'text', current.adapter && current.adapter !== 'github-readonly' ? current.endpoint : '');
     target.placeholder = 'https://192.168.1.20';
     const expiry = input('Grant expires (1–90 days from now; saving renews)', 'number', '30'); expiry.min = '1'; expiry.max = '90'; expiry.required = true;
     const enabled = input('Enable this connection', 'checkbox', ''); enabled.checked = current.enabled !== false;
     const refreshFields = () => {
       const requirement = data.requirements.find(r => r.key === req.value);
-      target.parentElement.hidden = requirement?.adapter !== 'redfish-readonly';
-      target.required = requirement?.adapter === 'redfish-readonly';
+      target.parentElement.hidden = !requirement || requirement.adapter === 'github-readonly';
+      target.required = !!requirement && requirement.adapter !== 'github-readonly';
       project.disabled = !!requirement?.projectId;
       if (requirement?.projectId) project.value = requirement.projectId;
     };
     req.onchange = refreshFields; refreshFields();
-    form.append(el('p', 'Read-only access. Saving invalidates grants held by existing tasks; new tasks receive the new grant. This does not authorize publishing, rebooting or trading.', 'muted'));
+    form.append(el('p', 'Saving invalidates existing task grants; new tasks receive the new grant. Credential access does not authorize publishing, rebooting or trading. SOL opening and console input require separate exact-action approval below.', 'muted'));
     const status = el('p', '', 'muted'); status.setAttribute('role', 'status');
-    const save = el('button', current.id ? 'Save connection changes' : 'Add read-only connection'); save.type = 'submit'; save.disabled = !req.options.length;
+    const save = el('button', current.id ? 'Save connection changes' : 'Add connection'); save.type = 'submit'; save.disabled = !req.options.length;
     form.append(save, status);
     form.onsubmit = async event => {
       event.preventDefault(); save.disabled = true;
@@ -136,8 +136,10 @@
     const body = group.querySelector('.collapsible-body');
     try {
       const data = await request(null, '/auth/connections'); body.replaceChildren();
-      body.append(el('p', data.runtimeEnabled ? 'Read-only runtime enabled. Connections are scoped to your account and selected project. Saved does not mean tested.' : 'Staged setup: runtime access is disabled. Saving here does not activate services or interrupt tasks.', 'muted'));
+      body.append(el('p', data.runtimeEnabled ? `Read-only runtime enabled. Private console runtime ${data.consoleRuntimeEnabled ? 'enabled' : 'staged/disabled'}. Connections are scoped to your account and project. Saved does not mean tested.` : 'Staged setup: runtime access is disabled. Saving here does not activate services or interrupt tasks.', 'muted'));
       const refresh = el('button', 'Refresh connections'); refresh.type = 'button'; refresh.onclick = loadConnections; body.append(refresh);
+      const approvals = el('div'); approvals.id = 'connectionApprovals'; body.append(approvals);
+      renderApprovals(data.consoleApprovals || []);
       for (const row of data.connections) {
         const box = el('details', '', 'settings-card'); box.append(el('summary', row.name));
         box.append(el('p', `${row.status} · ${row.enabled ? 'enabled' : 'disabled'} · expires ${new Date(row.expiresAt*1000).toLocaleString()} · ${row.operations.join(', ')}`, 'muted'));
@@ -151,9 +153,31 @@
         };
         box.append(remove); body.append(box);
       }
-      if (!data.requirements.some(r => r.saved)) body.append(el('p', 'Save credentials for a reviewed GitHub read-only or Redfish read-only requirement first.', 'muted'));
+      if (!data.requirements.some(r => r.saved)) body.append(el('p', 'Save credentials for a reviewed connection requirement first.', 'muted'));
       body.append(connectionForm(data));
     } catch (error) {body.replaceChildren(el('p', error.message, 'muted'));}
+  }
+  function renderApprovals(rows) {
+    const root = document.getElementById('connectionApprovals'); if (!root) return;
+    root.replaceChildren(el('strong', 'Console action approvals'));
+    if (!rows.length) root.append(el('p', 'No pending actions. Refresh to check for requests.', 'muted'));
+    for (const row of rows) {
+      const card = el('div', '', 'settings-card');
+      card.append(el('p', `${row.operation} · ${row.name || row.connection} · ${row.endpoint || 'unavailable target'}`));
+      card.append(el('p', `Task ${row.taskId} · expires ${new Date(row.expiresAt*1000).toLocaleTimeString()}`, 'muted'));
+      card.append(el('pre', JSON.stringify(row.arguments, null, 2)));
+      card.append(el('p', 'Only approve if you understand the effect on this server. Keys/text can change BIOS, boot, or the running OS. Never enter passwords through agent console input.', 'muted'));
+      for (const [label, approve] of [['Allow once', true], ['Deny', false]]) {
+        const button = el('button', label); button.type = 'button';
+        button.onclick = async () => {
+          button.disabled = true;
+          try {await request({action: 'decide-console', id: row.id, approve}, '/auth/connections'); await loadConnections();}
+          catch (error) {card.append(el('p', error.message)); button.disabled = false;}
+        };
+        card.append(button);
+      }
+      root.append(card);
+    }
   }
   document.querySelector('[data-panel="settings"]')?.addEventListener('click', load);
 })();

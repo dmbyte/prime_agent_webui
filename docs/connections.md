@@ -1,5 +1,10 @@
 # Read-only local connections — opt-in pilot
 
+This page describes the deployed read-only path. The next implementation adds
+opt-in native HTTP substitution and isolated console adapters, still staged:
+see [connection extensions](connection-extensions.md). Those flags default off;
+the existing direct read-only service remains in use on the reference Spark.
+
 This is the first implementation stage of trusted per-user credential consumption.
 It was **activated on the reference Spark on October 24, 2026**, after checking
 that all users' task lists, OpenShell sandboxes and shared terminal were idle.
@@ -63,8 +68,9 @@ metadata; do not put passwords in either field.
 
 ## Reviewed declarations
 
-The optional `adapter` property is accepted only for these two hard-coded types
-with their exact field IDs. It is reviewed with the skill's existing manifest;
+The optional `adapter` property is accepted only for hard-coded reviewed types
+with exact field IDs. This pilot uses the two types above; the staged extensions
+add three explicit console types. It is reviewed with the skill's existing manifest;
 it cannot name an executable, environment destination or arbitrary adapter URL.
 For an enabled GitHub skill, include this `credential-requirements.json` in its
 reviewed package (this does not automatically install/enable a GitHub skill):
@@ -192,11 +198,11 @@ responses and isolation. It never contacts a BMC, GitHub or a model. On non-Linu
 test hosts, the Linux process-identity primitive is mocked in unit fixtures;
 production requires Linux `/proc` and fails closed without it.
 
-Remaining: actual live provider authentication; browser/KVM and
-IPMI/SOL operation adapters; OAuth consent/refresh; multi-user global inventory
-provisioning; MCP serving/authorization; and native OpenShell provider integration
-with its inspected proxy path. No cloud vault is required for this phase.
+Remaining: actual GitHub/BMC account authentication and activation of the staged
+native HTTP/private console adapters; OAuth consent/refresh and MCP serving/
+authorization. Reviewed global inventory is implemented. No cloud vault is
+required for this phase.
 
 Upstream references: [MCP authorization](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization),
-[OpenShell providers](https://docs.nvidia.com/openshell/v0.1.4/how-it-works/providers/overview),
+[OpenShell providers](https://docs.nvidia.com/openshell/v0.1.5/how-it-works/providers/overview),
 [GitHub repository permissions](https://docs.github.com/en/rest/authentication/permissions-required-for-fine-grained-personal-access-tokens).

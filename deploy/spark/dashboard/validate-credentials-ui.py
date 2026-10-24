@@ -14,6 +14,7 @@ import time
 from playwright.sync_api import sync_playwright
 import skill_credentials
 import connections
+from connection_approvals import Approvals
 
 root = Path(__file__).parent
 spec = importlib.util.spec_from_file_location('credential_browser_auth', root/'auth.py')
@@ -83,7 +84,7 @@ def main():
                     alice.locator('#connectionSettings summary').first.click()
                     alice.get_by_label('Connection name', exact=True).fill('Fixture connection')
                     alice.get_by_label('Allow use in', exact=True).select_option(project_id)
-                    alice.get_by_role('button', name='Add read-only connection', exact=True).click()
+                    alice.get_by_role('button', name='Add connection', exact=True).click()
                     alice.get_by_text('Fixture connection', exact=True).wait_for()
                     connection_data = alice.evaluate("async()=>await (await fetch('/auth/connections')).json()")
                     assert len(connection_data['connections']) == 1
@@ -92,6 +93,25 @@ def main():
                     assert 'SYNTHETIC_BROWSER_SECRET' not in json.dumps(connection_data)
                     bob_data = bob.evaluate("async()=>await (await fetch('/auth/connections')).json()")
                     assert bob_data['connections'] == [] and bob_data['projects'] == []
+                    # Exercise the actual authenticated Settings approval path.
+                    # This is an isolated UI fixture; it never invokes an adapter.
+                    meta = json.loads((agent/'webui-metadata.json').read_text())
+                    task_id = 'a'*32
+                    meta['tasks'] = {task_id: {'owner': 'alice', 'projectId': project_id, 'status': 'running'}}
+                    (agent/'webui-metadata.json').write_text(json.dumps(meta))
+                    manager = original_manager(home, home)
+                    connection_id = connection_data['connections'][0]['id']
+                    connection = manager.store._load('alice')[connection_id]
+                    pending = Approvals(home).require('alice', {'taskId': task_id, 'expiresAt': time.time()+300},
+                        connection_id, connection, 'sol.input', {'sessionId': 'synthetic-session', 'requestId': 'a'*32, 'key': 'f9'})
+                    decision = {'action': 'decide-console', 'id': pending['approvalId'], 'approve': True}
+                    assert bob.evaluate("async body=>(await fetch('/auth/connections',{method:'POST',headers:{'Content-Type':'application/json','X-Prime-CSRF':'bob-csrf'},body:JSON.stringify(body)})).status", decision) == 400
+                    assert alice.evaluate("async body=>(await fetch('/auth/connections',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).status", decision) == 403
+                    alice.get_by_role('button', name='Refresh connections', exact=True).click()
+                    alice.get_by_role('button', name='Allow once', exact=True).click()
+                    alice.get_by_role('button', name='Allow once', exact=True).wait_for(state='detached')
+                    assert json.loads(skill_credentials._read(home/'connection-approvals'/(pending['approvalId']+'.json')))['state'] == 'approved'
+                    assert alice.evaluate("async body=>(await fetch('/auth/connections',{method:'POST',headers:{'Content-Type':'application/json','X-Prime-CSRF':'alice-csrf'},body:JSON.stringify(body)})).status", decision) == 400
                     alice.get_by_text('Fixture connection', exact=True).click()
                     alice.once('dialog', lambda dialog: dialog.accept())
                     alice.get_by_role('button', name='Delete connection', exact=True).click()

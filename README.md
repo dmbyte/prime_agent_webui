@@ -678,8 +678,13 @@ putting them in chat. **Settings → My connections** adds an opt-in
 read-only pilot for GitHub repository summaries and Redfish system status. A
 connection references saved values, belongs to one user, and is granted to one
 project or explicitly to all that user's chats. The trusted local broker uses
-credentials without returning them to the model. Browser/KVM, IPMI/SOL, OAuth
-refresh and native OpenShell provider injection are not implemented in this pilot.
+credentials without returning them to the model. Native OpenShell HTTP injection
+and separate private browser/KVM/IPMI/SOL adapters are now **implemented in source
+and staged, not activated on the reference Spark**. They do not add credentials
+to the arbitrary-code browser. Console opening/input have separate exact-action
+approvals; see [connection extensions](docs/connection-extensions.md) for the
+tested boundaries, installation flags and remaining live BMC validation. OAuth
+refresh and MCP serving remain later work.
 **The pilot is activated on the reference Spark as of October 24, 2026.** Live
 synthetic tests passed user/project isolation, OpenShell task handoff and revocation.
 This is not a successful authentication test against your GitHub or BMC account.

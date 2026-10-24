@@ -1,15 +1,18 @@
 [Unit]
-Description=Prime opt-in read-only saved connection broker
+Description=Prime opt-in saved connection broker
 After=network.target
 
 [Service]
 Type=simple
 # Remains disabled until the separately documented idle-window activation.
 Environment=PRIME_CONNECTIONS_ENABLED=0
+Environment=PRIME_CONNECTION_HTTP_TRANSPORT=direct
+Environment=PRIME_CONNECTION_CONSOLES_ENABLED=0
 ExecCondition=/usr/bin/test ${PRIME_CONNECTIONS_ENABLED} = 1
 ExecStart=/usr/bin/python3 %h/prime-dgx-dashboard/connection_broker.py
 Restart=on-failure
 RestartSec=5
+KillMode=control-group
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=read-only

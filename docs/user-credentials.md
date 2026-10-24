@@ -3,8 +3,10 @@
 This branch adds **Settings → My credentials**. Saving is not automatic runtime
 credential injection. A separately gated **My connections** pilot can consume
 reviewed GitHub/Redfish requirements through bounded local read-only operations.
-It is implemented in source but not activated on the reference Spark. Other
-tools still show **tool integration pending**. See [connections](connections.md).
+The read-only pilot is activated on the reference Spark. Additional isolated
+browser/KVM/IPMI/SOL and native OpenShell HTTP paths are staged, not activated;
+see [connection extensions](connection-extensions.md). Other tools still show
+**tool integration pending**. See [connections](connections.md).
 Do not claim a connection is tested or operational merely because it is Saved.
 
 ## User workflow
@@ -132,8 +134,8 @@ For an existing installation, schedule an idle maintenance window:
 
 Existing model-provider credentials and OAuth sessions are not migrated or
 changed. This feature does not approve cloud inference or replace the independent
-no-training approval policy. OAuth login/refresh, named multi-device connections,
-credential sharing and additional runtime adapters are follow-up work. The
+no-training approval policy. OAuth login/refresh and credential sharing are
+follow-up work; multiple separately scoped named connections are supported. The
 read-only connection pilot is activated separately, never by saving credentials.
 Credential replacement/deletion invalidates its existing connections; resave the
 connection to consent to the new credential revision, then start a new task.
