@@ -174,9 +174,12 @@ interrupted. Check Admin for active work; do not stop it without owner approval.
    credential revocation and no cross-user/project access before widening use.
 
 Do not treat unit tests as proof of live BMC compatibility or native sandbox
-handoff. A real Spark task canary and provider tests are still activation gates.
+handoff. The reference Spark's real sandbox canary passed; each real service
+still needs a read-only authentication test before relying on that connection.
 On failure, turn off the connection flags/stop the new broker to deny new calls;
-restore matched code backups during an idle window. Do not remove credential
+restore matched code backups during an idle window. Retain administrator-only
+terminal guards even during rollback; never reopen the shared host console to
+ordinary users once vault data exists. Do not remove credential
 records/keys as a rollback shortcut. Old task capabilities become unusable after
 API restart, without changing stored secrets or conversation history.
 
