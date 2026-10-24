@@ -57,7 +57,7 @@ Launch the configured workspace with `prime-dgx`. Prime is pinned at the
 installed version until an update is deliberately reviewed and validated.
 
 WebUI tasks run as ephemeral NVIDIA OpenShell sandboxes through the local Docker
-driver. The deployment pins OpenShell `0.1.4`, applies hard Landlock
+driver. The deployment pins OpenShell `0.1.5`, applies hard Landlock
 enforcement, starts with an empty direct-network policy, and carries the chosen
 egress through the existing per-user Unix-socket broker. Prime state, workspace,
 and gateway directories are exposed through pre-provisioned local-driver Docker

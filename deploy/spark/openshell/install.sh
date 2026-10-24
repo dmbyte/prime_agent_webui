@@ -3,8 +3,8 @@ set -euo pipefail
 
 test "${EUID}" -ne 0 || { echo "Run as the Docker/WebUI owner, not root." >&2; exit 2; }
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
-version=0.1.4
-deb_sha256=803939a059db6cc2a1ab38ff49e5c57e41b42549ac555130f13749d8ed6f46fb
+version=0.1.5
+deb_sha256=ae381703f78061141bbac44aa85fb7d9856cb567d2ab2b4306318365f5466ac5
 installed_openshell=$(openshell --version 2>/dev/null | awk 'NR == 1 {print $2}' || true)
 if [[ -n "$installed_openshell" ]] && dpkg --compare-versions "$installed_openshell" lt 0.1.0; then
   echo "OpenShell ${installed_openshell} requires the reviewed 0.0.x-to-0.1.x migration before running this installer; do not upgrade it in place." >&2

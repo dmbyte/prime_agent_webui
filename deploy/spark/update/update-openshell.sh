@@ -54,6 +54,9 @@ exec 9>"${HOME}/.prime/agent/openshell-update.lock"
 flock -n 9 || { failure_reason="Another OpenShell update is already running."; echo "$failure_reason" >&2; exit 75; }
 
 test "$(dpkg --print-architecture)" = arm64
+# A running unit can still be binding its listener after package maintenance.
+# Check readiness before the first sandbox query, not just after our restart.
+verify_gateway
 phase="checking for active sandboxes"
 sandbox_ids=$(openshell --gateway spark-local sandbox list --all-workspaces --ids)
 test -z "$sandbox_ids" || {

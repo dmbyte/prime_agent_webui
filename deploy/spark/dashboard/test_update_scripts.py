@@ -70,8 +70,10 @@ class UpdateScriptTests(unittest.TestCase):
         installer = (ROOT / "deploy/spark/openshell/install.sh").read_text()
         config = (ROOT / "deploy/spark/openshell/gateway.toml").read_text()
         volumes = (ROOT / "deploy/spark/openshell/provision-volumes.sh").read_text()
-        self.assertIn("version=0.1.4", installer)
-        self.assertIn("803939a059db6cc2a1ab38ff49e5c57e41b42549ac555130f13749d8ed6f46fb", installer)
+        self.assertIn("version=0.1.5", installer)
+        self.assertIn("ae381703f78061141bbac44aa85fb7d9856cb567d2ab2b4306318365f5466ac5", installer)
+        unit = (ROOT / 'deploy/spark/systemd/prime-dashboard-api.service').read_text()
+        self.assertIn('PRIME_OPENSHELL_VERSION=0.1.5', unit)
         self.assertIn("openshell-gateway config preflight", installer)
         self.assertIn("version = 2", config)
         self.assertIn('compute_driver = "docker"', config)
@@ -85,6 +87,10 @@ class UpdateScriptTests(unittest.TestCase):
         script = (ROOT / "deploy/spark/update/update-openshell.sh").read_text()
         self.assertIn('set_dashboard_version "$installed"', script)
         self.assertIn("zz-openshell-version.conf", script)
+
+    def test_openshell_updater_waits_before_first_sandbox_inventory(self):
+        script = (ROOT / 'deploy/spark/update/update-openshell.sh').read_text()
+        self.assertLess(script.index('\nverify_gateway\n'), script.index('sandbox_ids=$(openshell'))
 
     def test_volume_provisioning_refreshes_only_managed_agent_policy(self):
         script = (ROOT / "deploy/spark/openshell/provision-volumes.sh").read_text()

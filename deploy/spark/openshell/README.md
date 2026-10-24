@@ -4,8 +4,17 @@ The DGX Spark release runs WebUI tasks inside NVIDIA OpenShell sandboxes through
 the local Docker driver. OpenShell replaces the earlier task-container runtime
 for production use.
 
-The reviewed package is NVIDIA OpenShell `0.1.4-1` for ARM64, with SHA256
-`803939a059db6cc2a1ab38ff49e5c57e41b42549ac555130f13749d8ed6f46fb`.
+The reviewed package is NVIDIA OpenShell `0.1.5-1` for ARM64, with SHA256
+`ae381703f78061141bbac44aa85fb7d9856cb567d2ab2b4306318365f5466ac5`.
+
+For 0.1.4 → 0.1.5, preserve gateway state/configuration and old audit logs in a
+protected backup before upgrading while idle. Supervisor OCSF filenames changed
+from `openshell-ocsf.*.log` to `openshell-ocsf.*.jsonl`; external collectors need
+matching updates. Prime does not currently glob those files. CLI metadata labels
+remain compatible; this deployment uses Docker, not Kubernetes, a custom compute
+driver or the Go SDK. Keep the existing pinned Prime task images and network
+policy; rerun real task and saved-connection canaries after package installation.
+See [upstream 0.1.5 upgrade notes](https://github.com/NVIDIA/OpenShell/releases/tag/v0.1.5).
 The loopback `spark-local` gateway uses schema v2, Docker, mTLS, a 256-process
 per-sandbox cap, and disabled telemetry. It enables caller driver config only
 with resource admission enabled; Prime's pre-provisioned bind-backed Docker

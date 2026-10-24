@@ -6,7 +6,7 @@ After=network.target
 Type=simple
 Environment=PRIME_OPENAI_CONFIGURED=1
 Environment=PRIME_TASK_RUNTIME=openshell
-Environment=PRIME_OPENSHELL_VERSION=0.0.116
+Environment=PRIME_OPENSHELL_VERSION=0.1.5
 Environment=PRIME_RUNNER_STORAGE=/var/lib/prime-runner/users
 Environment=PRIME_RUNNER_WORKSPACE_ROOT=%h/prime-agent/tasks
 ExecStart=/usr/bin/python3 %h/prime-dgx-dashboard/api_v2.py
