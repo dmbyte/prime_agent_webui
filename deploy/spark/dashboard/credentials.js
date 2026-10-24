@@ -6,13 +6,13 @@
     if (className) node.className = className;
     return node;
   };
-  async function request(body) {
+  async function request(body, path = '/auth/credentials') {
     const headers = {};
     if (body) {
       headers['Content-Type'] = 'application/json';
       headers['X-Prime-CSRF'] = decodeURIComponent(document.cookie.split('; ').find(x => x.startsWith('prime_csrf='))?.split('=').slice(1).join('=') || '');
     }
-    const response = await fetch('/auth/credentials', {
+    const response = await fetch(path, {
       method: body ? 'POST' : 'GET', headers, credentials: 'same-origin', cache: 'no-store',
       ...(body ? {body: JSON.stringify(body)} : {})
     });
@@ -30,7 +30,7 @@
     const summary = el('summary', 'My credentials');
     const body = el('div', '', 'collapsible-body');
     body.append(el('p', 'Private to your login. Enabled, reviewed skills declare the fields shown here. Saved values cannot be displayed; blank fields preserve existing values.', 'muted'));
-    body.append(el('p', 'Storage and setup only: runtime tool adapters are not connected yet. Saving here does not give an agent access to these secrets.', 'muted'));
+    body.append(el('p', 'Saving does not grant tool access. Supported reviewed requirements can be bound in My connections below. Browser/KVM and IPMI login remain unavailable through saved credentials.', 'muted'));
     const refresh = el('button', 'Refresh requirements'); refresh.type = 'button';
     refresh.onclick = load;
     const list = el('div', '', 'credential-list'); list.setAttribute('aria-live', 'polite');
@@ -42,7 +42,7 @@
     const box = el('div', '', 'settings-card credential-card');
     box.append(el('strong', `${row.skillName} · ${row.label}`));
     box.append(el('p', row.description || '', 'muted'));
-    const status = el('p', row.status === 'saved' ? 'Saved · tool integration pending' : row.status === 'inactive' ? 'Inactive requirement · delete stored values if no longer needed' : 'Required values missing');
+    const status = el('p', row.status === 'saved' ? (row.adapter ? 'Saved · configure access in My connections' : 'Saved · tool integration pending') : row.status === 'inactive' ? 'Inactive requirement · delete stored values if no longer needed' : 'Required values missing');
     status.setAttribute('role', 'status'); box.append(status);
     const fields = new Map();
     for (const field of row.fields) {
@@ -82,6 +82,78 @@
       for (const row of data.credentials) list.append(card(row));
       if (!data.credentials.length) list.append(el('p', 'No enabled skills currently declare credential requirements.', 'muted'));
     } catch (error) {list.replaceChildren(el('p', error.message, 'muted'));}
+    await loadConnections();
+  }
+  function connectionForm(data, current = {}) {
+    const form = el('form', '', 'settings-card');
+    const input = (title, type, value) => {
+      const label = el('label', title), field = document.createElement('input');
+      field.type = type; field.value = value; field.setAttribute('aria-label', title); label.append(field); form.append(label); return field;
+    };
+    const name = input('Connection name', 'text', current.name || ''); name.required = true; name.maxLength = 80;
+    const select = (title, rows, value) => {
+      const label = el('label', title), field = document.createElement('select');
+      field.setAttribute('aria-label', title);
+      for (const [id, text] of rows) {const option = el('option', text); option.value = id; field.append(option);}
+      field.value = value || rows[0]?.[0] || ''; label.append(field); form.append(label); return field;
+    };
+    const req = select('Reviewed credential requirement', data.requirements.filter(r => r.saved).map(r => [r.key, `${r.skillName} · ${r.label}`]), current.credentialKey);
+    const project = select('Allow use in', [['', 'All my chats (explicit user-wide grant)'], ...data.projects.map(p => [p.id, p.name])], current.projectId);
+    const target = input('Approved BMC HTTPS IPv4 origin (Redfish only)', 'text', current.adapter === 'redfish-readonly' ? current.endpoint : '');
+    target.placeholder = 'https://192.168.1.20';
+    const expiry = input('Grant expires (1–90 days from now; saving renews)', 'number', '30'); expiry.min = '1'; expiry.max = '90'; expiry.required = true;
+    const enabled = input('Enable this connection', 'checkbox', ''); enabled.checked = current.enabled !== false;
+    const refreshFields = () => {
+      const requirement = data.requirements.find(r => r.key === req.value);
+      target.parentElement.hidden = requirement?.adapter !== 'redfish-readonly';
+      target.required = requirement?.adapter === 'redfish-readonly';
+      project.disabled = !!requirement?.projectId;
+      if (requirement?.projectId) project.value = requirement.projectId;
+    };
+    req.onchange = refreshFields; refreshFields();
+    form.append(el('p', 'Read-only access. Saving invalidates grants held by existing tasks; new tasks receive the new grant. This does not authorize publishing, rebooting or trading.', 'muted'));
+    const status = el('p', '', 'muted'); status.setAttribute('role', 'status');
+    const save = el('button', current.id ? 'Save connection changes' : 'Add read-only connection'); save.type = 'submit'; save.disabled = !req.options.length;
+    form.append(save, status);
+    form.onsubmit = async event => {
+      event.preventDefault(); save.disabled = true;
+      try {
+        await request({action: 'save', ...(current.id ? {id: current.id} : {}), name: name.value, credentialKey: req.value,
+          projectId: project.value || null, endpoint: target.value, enabled: enabled.checked,
+          expiresAt: Math.floor(Date.now()/1000) + Number(expiry.value)*86400}, '/auth/connections');
+        await loadConnections();
+      } catch (error) {status.textContent = error.message; save.disabled = false;}
+    };
+    return form;
+  }
+  async function loadConnections() {
+    let group = document.getElementById('connectionSettings');
+    if (!group) {
+      const previous = document.getElementById('credentialSettings'); if (!previous) return;
+      group = el('details', '', 'collapsible-group'); group.id = 'connectionSettings';
+      group.append(el('summary', 'My connections'), el('div', '', 'collapsible-body')); previous.after(group);
+    }
+    const body = group.querySelector('.collapsible-body');
+    try {
+      const data = await request(null, '/auth/connections'); body.replaceChildren();
+      body.append(el('p', data.runtimeEnabled ? 'Read-only runtime enabled. Connections are scoped to your account and selected project. Saved does not mean tested.' : 'Staged setup: runtime access is disabled. Saving here does not activate services or interrupt tasks.', 'muted'));
+      const refresh = el('button', 'Refresh connections'); refresh.type = 'button'; refresh.onclick = loadConnections; body.append(refresh);
+      for (const row of data.connections) {
+        const box = el('details', '', 'settings-card'); box.append(el('summary', row.name));
+        box.append(el('p', `${row.status} · ${row.enabled ? 'enabled' : 'disabled'} · expires ${new Date(row.expiresAt*1000).toLocaleString()} · ${row.operations.join(', ')}`, 'muted'));
+        box.append(connectionForm(data, row));
+        const remove = el('button', 'Delete connection', 'danger'); remove.type = 'button';
+        remove.onclick = async () => {
+          if (!confirm('Revoke this connection for tasks? Saved credentials will remain.')) return;
+          remove.disabled = true;
+          try {await request({action: 'delete', id: row.id}, '/auth/connections'); await loadConnections();}
+          catch (error) {box.append(el('p', error.message)); remove.disabled = false;}
+        };
+        box.append(remove); body.append(box);
+      }
+      if (!data.requirements.some(r => r.saved)) body.append(el('p', 'Save credentials for a reviewed GitHub read-only or Redfish read-only requirement first.', 'muted'));
+      body.append(connectionForm(data));
+    } catch (error) {body.replaceChildren(el('p', error.message, 'muted'));}
   }
   document.querySelector('[data-panel="settings"]')?.addEventListener('click', load);
 })();

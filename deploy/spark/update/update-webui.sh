@@ -92,6 +92,13 @@ if id prime-runner >/dev/null 2>&1; then
 fi
 
 install -d -m 0755 "${HOME}/prime-update" "${HOME}/.config/systemd/user"
+install -m 0644 "$repo/deploy/spark/systemd/prime-connection-broker.service" "${HOME}/.config/systemd/user/"
+# Copy only: never enable or start the opt-in connection runtime during updates.
+if sudo test -d "/var/lib/prime-runner/users/${USER}/prime/agent/skills"; then
+  # Refresh reviewed metadata only; do not rebuild images or install skill code.
+  sudo python3 "$repo/deploy/spark/prime/install-managed-skills.py" \
+    --owner "$USER" --bundled "$repo/deploy/spark/prime/skills" --inventory-only
+fi
 install -m 0755 "$repo/deploy/spark/update/update-prime-agent.sh" "$repo/deploy/spark/update/update-webui.sh" "$repo/deploy/spark/update/update-openshell.sh" "${HOME}/prime-update/"
 install -m 0644 "$repo/deploy/spark/systemd/prime-update-agent.service" "$repo/deploy/spark/systemd/prime-update-webui.service" "$repo/deploy/spark/systemd/prime-update-openshell.service" "${HOME}/.config/systemd/user/"
 [[ $repo != *'"'* && $repo != *$'\n'* ]]

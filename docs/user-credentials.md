@@ -1,8 +1,10 @@
 # Per-user skill credential setup
 
-This branch adds **Settings → My credentials**. It is a staged storage/setup
-feature, not automatic runtime credential injection. Existing tools do not yet
-consume these saved values; the UI explicitly says **tool integration pending**.
+This branch adds **Settings → My credentials**. Saving is not automatic runtime
+credential injection. A separately gated **My connections** pilot can consume
+reviewed GitHub/Redfish requirements through bounded local read-only operations.
+It is implemented in source but not activated on the reference Spark. Other
+tools still show **tool integration pending**. See [connections](connections.md).
 Do not claim a connection is tested or operational merely because it is Saved.
 
 ## User workflow
@@ -56,16 +58,24 @@ never live task-writable skill files. The managed skill installer publishes
 requirements in its metadata inventory; NVIDIA catalog manifests can carry the
 same schema. Built-in BMC setup declarations are supplied separately in
 `deploy/spark/prime/managed-credential-requirements.json`, without changing pinned
-task images. These are setup declarations only, not working BMC credential adapters.
+task images. Browser/KVM declarations remain setup-only. The management declaration
+now advertises the `redfish-readonly` adapter; it does not enable IPMI/SOL,
+browser login or server mutations. Adding this reviewed adapter changes the
+requirement identity: old values become inactive and are not silently reused.
+Resave under the new requirement, then explicitly create a scoped connection.
 
-Inventories are owner-scoped. The current single-owner installer publishes the
+Personal inventories are owner-scoped. The installer publishes the
 legacy `.prime/agent/skill-inventory.json`. A multi-user provisioner can publish
 individual snapshots in `.prime/agent/skill-inventories/USERNAME.json` under the
 WebUI service account's home; each file must identify that owner. Do not read
 another user's inventory as a fallback. Uploaded, reviewed skills already use
 the owner-scoped shared metadata catalog. A tool needs a reviewed skill/package
 declaration; credentials are not inferred from free-form model text or all tools
-on PATH. Automatic multi-user global-inventory provisioning remains follow-up work.
+on PATH. The managed publisher additionally writes a protected
+`.prime/agent/global-credential-inventory.json` containing only installed,
+distribution-managed built-ins with reviewed bundled declarations. These fields
+are available to every WebUI user, including new accounts; values remain private
+per user. Personal skill manifests are never copied into this global catalog.
 
 ## Storage and security boundary
 
@@ -96,7 +106,9 @@ running as the service account are also trusted, unlike isolated OpenShell tasks
 
 ## Installation / activation
 
-No production deployment is performed by this change. Keep active work running.
+The reference Spark's credential setup and read-only connection pilot were
+activated in an idle window on October 24, 2026. Other installations still require
+the explicit checks below. Keep active work running.
 For a new installation, the root installer adds the distribution's
 `python3-cryptography`, installs the protected console routes, and enables the
 feature in the generated auth unit. With `--skip-packages`, install the dependency
@@ -121,7 +133,10 @@ For an existing installation, schedule an idle maintenance window:
 Existing model-provider credentials and OAuth sessions are not migrated or
 changed. This feature does not approve cloud inference or replace the independent
 no-training approval policy. OAuth login/refresh, named multi-device connections,
-credential sharing and trusted runtime adapters are follow-up work.
+credential sharing and additional runtime adapters are follow-up work. The
+read-only connection pilot is activated separately, never by saving credentials.
+Credential replacement/deletion invalidates its existing connections; resave the
+connection to consent to the new credential revision, then start a new task.
 
 ## Verification
 

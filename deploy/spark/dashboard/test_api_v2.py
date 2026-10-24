@@ -18,6 +18,12 @@ SPEC.loader.exec_module(api)
 
 
 class DashboardV2Tests(unittest.TestCase):
+    def test_task_connection_capability_is_redacted_from_runtime_logs(self):
+        token = 'a'*32 + '.' + 'b'*64
+        self.assertNotIn(token, api.safe_runtime_line(json.dumps({'text': token})))
+        self.assertNotIn(token, api.safe_runtime_line('PRIME_CONNECTION_TOKEN='+token))
+        self.assertEqual(api.redact_runtime_value({'connectionToken': 'opaque'}), {'connectionToken': '[REDACTED]'})
+
     def test_bmc_runtime_guidance_is_scoped_and_does_not_grant_actions(self):
         with mock.patch.object(api, "container_mode", return_value=True):
             text = api.runtime_context({"profile": "network-operations"})

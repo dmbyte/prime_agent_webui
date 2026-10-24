@@ -143,6 +143,27 @@ def publish_inventory(owner: str, state: Path, uid: int, gid: int) -> None:
         if os.path.exists(temporary):
             os.unlink(temporary)
 
+    # Publish only distribution-managed, installed built-ins for all WebUI users.
+    # Never promote personal manifests or an owner's uploaded skills to global.
+    shared = []
+    for row in rows:
+        slug = row.get('slug')
+        if row['id'] != f'managed:{slug}' or slug not in BUNDLED_SKILLS or slug not in defaults:
+            continue
+        shared.append(dict(id=row['id'], name=row['name'], scope='global',
+                           credentialRequirements=credential_declarations.declarations(
+                               {'version': 1, 'credentials': defaults[slug]})))
+    descriptor, temporary = tempfile.mkstemp(prefix='.global-credentials-', dir=target.parent)
+    try:
+        with os.fdopen(descriptor, 'w', encoding='utf-8') as output:
+            json.dump({'version': 1, 'scope': 'global', 'skills': shared}, output)
+        os.chmod(temporary, 0o600)
+        os.chown(temporary, uid, gid)
+        os.replace(temporary, target.with_name('global-credential-inventory.json'))
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
 
 def main() -> None:
     args = arguments()

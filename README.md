@@ -674,11 +674,24 @@ The WebUI provides a governed **Skills & tools** workflow:
 This branch also adds **Settings → My credentials**, with per-user encrypted
 storage and fields declared by reviewed, enabled skills. Missing fields are
 shown automatically; users can save, replace or delete their own values without
-putting them in chat. **This is staged setup/storage only: runtime tool adapters
-are not connected yet.** Existing installations keep the feature disabled until
+putting them in chat. **Settings → My connections** adds an opt-in
+read-only pilot for GitHub repository summaries and Redfish system status. A
+connection references saved values, belongs to one user, and is granted to one
+project or explicitly to all that user's chats. The trusted local broker uses
+credentials without returning them to the model. Browser/KVM, IPMI/SOL, OAuth
+refresh and native OpenShell provider injection are not implemented in this pilot.
+**The pilot is activated on the reference Spark as of October 24, 2026.** Live
+synthetic tests passed user/project isolation, OpenShell task handoff and revocation.
+This is not a successful authentication test against your GitHub or BMC account.
+Do not restart active work to enable it elsewhere. Existing installations keep credential setup disabled until
 an administrator installs the dependency and enforces administrator-only access
 to the shared Advanced console. See the [credential setup and activation guide](docs/user-credentials.md)
 for the declaration format, isolation limits and installation steps.
+See [read-only connections](docs/connections.md) for supported operations,
+restrictions, task revocation, tests and the separate idle-window activation plan.
+Installed bundled BMC requirements are visible to all users; each user saves
+their own values. GitHub requires a reviewed enabled skill declaration as shown
+in that guide. No passwords are copied between users or automatically granted.
 
 Requests for operating-system tools enter the `Sandbox image change required`
 state. They must be added to a reviewed, rebuilt, digest-pinned OpenShell image;

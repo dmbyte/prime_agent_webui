@@ -122,6 +122,8 @@ install -m 0644 "$repo_dir/deploy/spark/container/console_feed.py" "$dashboard/c
 install -m 0755 "$repo_dir/deploy/spark/dashboard/install-static.sh" "$dashboard/install-static.sh"
 install -m 0755 "$repo_dir/deploy/spark/update/"*.sh "$update_dir"/
 install -m 0755 "$repo_dir/deploy/spark/dashboard/set_web_password.py" "${HOME}/.local/bin/prime-web-password"
+install -m 0644 "$repo_dir/deploy/spark/systemd/prime-connection-broker.service" "$unit_dir/"
+# Connection runtime is opt-in; do not enable/start its unit here.
 
 cat >"$unit_dir/prime-auth.service" <<EOF
 [Unit]

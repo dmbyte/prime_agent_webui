@@ -10,6 +10,7 @@ import unittest
 from unittest import mock
 
 import skill_credentials as credentials
+import connections
 
 DECLARATION = {'id': 'service', 'label': 'Service login', 'fields': [
     {'id': 'username', 'label': 'Username'}, {'id': 'token', 'label': 'Access token'}]}
@@ -145,6 +146,18 @@ class DeclarationTests(unittest.TestCase):
                      [dict(DECLARATION, fields=[])], [dict(DECLARATION, id='../escape')]]:
             with self.assertRaises(ValueError): credentials.declarations({'version': 1, 'credentials': rows})
 
+    def test_explicit_protected_global_inventory_is_shared_without_user_records(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); agent = root/'.prime/agent'; agent.mkdir(parents=True)
+            path = agent/'global-credential-inventory.json'
+            path.write_text(json.dumps({'version': 1, 'scope': 'global', 'skills': [
+                {'id': 'managed:test', 'scope': 'global', 'credentialRequirements': [DECLARATION]}]}))
+            path.chmod(0o600)
+            self.assertEqual(credentials.catalog('alice', root), credentials.catalog('bob', root))
+            self.assertEqual(len(credentials.catalog('bob', root)), 1)
+            path.chmod(0o644)
+            with self.assertRaises(ValueError): credentials.catalog('bob', root)
+
 
 class CredentialHTTPTests(unittest.TestCase):
     def setUp(self):
@@ -169,13 +182,13 @@ class CredentialHTTPTests(unittest.TestCase):
     def close(self):
         self.server.shutdown(); self.server.server_close(); self.thread.join()
 
-    def request(self, method='GET', cookie=None, body=None, csrf=None, spoof=None):
+    def request(self, method='GET', cookie=None, body=None, csrf=None, spoof=None, path='/auth/credentials'):
         conn = http.client.HTTPConnection('127.0.0.1', self.server.server_port)
         headers = {'Content-Type': 'application/json'}
         if cookie: headers['Cookie'] = 'prime_session='+cookie
         if csrf: headers['X-Prime-CSRF'] = csrf
         if spoof: headers['X-Prime-User'] = spoof
-        conn.request(method, '/auth/credentials', json.dumps(body) if body is not None else None, headers)
+        conn.request(method, path, json.dumps(body) if body is not None else None, headers)
         response = conn.getresponse(); status, data = response.status, json.loads(response.read()); conn.close()
         return status, data
 
@@ -216,6 +229,18 @@ class CredentialHTTPTests(unittest.TestCase):
     def test_owner_override_rejected(self):
         body = {'action': 'save', 'key': requirement()['key'], 'owner': 'bob', 'values': {'username': 'x', 'token': 'x'}}
         self.assertEqual(self.request('POST', 'alice', body, 'alice-csrf')[0], 400)
+
+    def test_connection_settings_use_real_session_and_csrf(self):
+        path = '/auth/connections'
+        self.assertEqual(self.request(spoof='alice', path=path)[0], 401)
+        self.assertEqual(self.request('POST', 'alice', {'action': 'save'}, 'wrong', path=path)[0], 403)
+        self.assertEqual(self.request('POST', 'alice', {'action': 'save', 'owner': 'bob'}, 'alice-csrf', path=path)[0], 400)
+        with mock.patch.object(connections.Connections, 'metadata', return_value={}):
+            status, body = self.request(cookie='alice', spoof='bob', path=path)
+        self.assertEqual(status, 200)
+        self.assertEqual(body['connections'], [])
+        with mock.patch.dict(os.environ, {'PRIME_CREDENTIALS_ENABLED': '0'}):
+            self.assertEqual(self.request(cookie='alice', path=path)[0], 503)
 
 
 if __name__ == '__main__': unittest.main()

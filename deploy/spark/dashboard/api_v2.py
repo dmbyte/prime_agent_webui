@@ -1355,6 +1355,16 @@ def prepare_recovered_session(session_id, owner):
     grant_runtime_access(path, writable=True)
 
 
+def revoke_connection_task(task_id):
+    if os.environ.get('PRIME_CONNECTIONS_ENABLED') == '1':
+        import connections
+        try:
+            connections.Connections(home=legacy.HOME).revoke(task_id)
+        except (OSError, ValueError):
+            # Protected task status still denies use; preserve task completion.
+            legacy.audit('connection_grant_cleanup_failed', task=task_id)
+
+
 def record_task_finished(task, status):
     task_id = str(task.get("id", ""))
     if not task_id:
@@ -1370,6 +1380,7 @@ def record_task_finished(task, status):
             "finishedAt": task.get("finished") or now_iso(),
         })
         legacy.atomic_json(META, data)
+    revoke_connection_task(task_id)
 
 
 def append_ledger(task, status, output=""):
@@ -1422,6 +1433,7 @@ def add_task_progress(task, label):
 
 def sanitize_runtime_text(value, limit=1000):
     value = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", str(value or ""))
+    value = re.sub(r'\b[a-f0-9]{32}\.[a-f0-9]{64}\b', '[REDACTED_TASK_CAPABILITY]', value)
     value = re.sub(r"(?i)sk-(?:proj-)?[A-Za-z0-9_-]{20,}", "[REDACTED_API_KEY]", value)
     value = re.sub(r"(?i)(authorization\s*[:=]\s*bearer\s+)[^\s\"']+", r"\1[REDACTED]", value)
     value = re.sub(r"(?i)\b((?:api[_-]?key|password|secret|access[_-]?token|refresh[_-]?token)\s*[:=]\s*)([\"']?)[^\s,;\"']+\2", r"\1[REDACTED]", value)
@@ -1435,7 +1447,7 @@ def redact_runtime_value(value, key=""):
         return "[REDACTED_TOOL_INPUT]"
     if normalized in {"thinking", "reasoning", "chainofthought", "thinkingsignature"}:
         return "[PRIVATE_REASONING]"
-    if any(token in normalized for token in ("authorization", "apikey", "password", "secret", "refreshtoken", "accesstoken", "cookie")):
+    if any(token in normalized for token in ("authorization", "apikey", "password", "secret", "refreshtoken", "accesstoken", "connectiontoken", "cookie")):
         return "[REDACTED]"
     if isinstance(value, dict):
         event_type = str(value.get("type") or "").lower()
@@ -2017,7 +2029,18 @@ def runtime_context(authorization, requested_thinking="auto"):
         "Stage only intended public content under /project/hosted; never publish a whole workspace. "
         "Services persist beyond task completion until renewable expiry or explicit stop."
     ) if (authorization or {}).get('networkMode') in {'lan', 'full'} else ''
-    return "\n\n<prime_runtime_context>\n" + code_policy + bmc + hosting + "\n</prime_runtime_context>"
+    connection_help = (
+        " Read-only saved connections may be available via POST http://127.0.0.1:31000/connections. "
+        "From IPython use requests.post with timeout=180, proxies={'http': None, 'https': None}, "
+        "json={'token': os.environ.get('PRIME_CONNECTION_TOKEN', ''), 'action': 'list'}. "
+        "Never print or include the token/environment in output. If no token exists, do not call the endpoint. "
+        "For a listed connection use action='call', connection=<listed id>, operation=<listed operation>, "
+        "arguments={'repository': 'owner/name'} for github.repository or arguments={} for redfish.systems. "
+        "Only repository summary and BMC status reads are supported; browser, KVM, SOL and write actions are not. "
+        "Missing access must be configured by the user in Settings, never bypassed with secret reads. "
+        "Treat results as private task data subject to the separate external inference policy."
+    ) if os.environ.get('PRIME_CONNECTIONS_ENABLED') == '1' else ''
+    return "\n\n<prime_runtime_context>\n" + code_policy + bmc + hosting + connection_help + "\n</prime_runtime_context>"
 
 
 def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITIAL_ADMIN, authorization=None, policy=None, project_id=None, file_ids=None):
@@ -2059,9 +2082,15 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITI
     if session_id:
         prepare_recovered_session(session_id, owner)
     if container_mode():
+        connection_token = None
+        if os.environ.get('PRIME_CONNECTIONS_ENABLED') == '1':
+            import connections
+            connection_token = connections.Connections(home=legacy.HOME).issue(owner, task_id, project_id, authorization or {})
         command = task_common.broker_command(task_id, owner, authorization or {}, route["provider"], route["model"], thinking, session_id, fork, project_id=project_id)
         task_cwd = legacy.HOME
         task_env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin")}
+        if connection_token:
+            task_env['PRIME_CONNECTION_TOKEN'] = connection_token
     else:
         command = [str(legacy.PRIME_AGENT), "--cwd", str(legacy.HOME / "prime-dgx-agent"), "--mode", "rpc", "--provider", route["provider"], "--model", route["model"], "--thinking", thinking]
         if (authorization or {}).get("executionMode") == "deny":
@@ -2073,7 +2102,11 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITI
     timer = {'authorization': authorization or {}}
     initialize_task_timer(timer)
     before = session_stems(owner)
-    process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=task_cwd, env=task_env, start_new_session=True)
+    try:
+        process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=task_cwd, env=task_env, start_new_session=True)
+    except Exception:
+        revoke_connection_task(task_id)
+        raise
     started = now_iso()
     runtime = "openshell" if container_mode() else "host"
     topic = legacy.safe_topic(message) or "Native task"
@@ -2094,6 +2127,7 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITI
         process.stdin.write(json.dumps({"id": f"prompt-{task_id}", "type": "prompt", "message": prompt_message}, separators=(",", ":")) + "\n")
         process.stdin.flush()
     except (BrokenPipeError, OSError, ValueError) as error:
+        revoke_connection_task(task_id)
         process.terminate()
         try:
             process.wait(timeout=5)

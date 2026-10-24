@@ -109,6 +109,25 @@ class Handler(BaseHTTPRequestHandler):
             self.close_connection = True
     def proxy(self):
         user = self.server.prime_user
+        if self.path == '/connections':
+            if os.environ.get('PRIME_CONNECTIONS_ENABLED') != '1' or self.command != 'POST':
+                return self.send_json(403, {'error': 'Connection runtime is not activated'})
+            length = int(self.headers.get('Content-Length', '0'))
+            if not 2 <= length <= 4096 or self.headers.get('Transfer-Encoding'):
+                return self.send_json(400, {'error': 'Invalid connection request'})
+            conn = http.client.HTTPConnection('127.0.0.1', 8767, timeout=180)
+            try:
+                conn.request('POST', '/connections', self.rfile.read(length),
+                             {'Content-Type': 'application/json', 'X-Prime-Connection-Owner': user})
+                response = conn.getresponse()
+                raw = response.read(65537)
+                if len(raw) > 65536:
+                    return self.send_json(502, {'error': 'Connection response exceeded limit'})
+                return self.send_json(response.status, json.loads(raw))
+            except (OSError, ValueError, http.client.HTTPException):
+                return self.send_json(502, {'error': 'Connection broker unavailable'})
+            finally:
+                conn.close()
         if self.command == "GET" and self.path == "/routing-models":
             return self.send_json(200, {"externalModels": ["openai-codex/" + m for m in external_models(user)],
                 "localModel": "spark-qwen/qwen3.8-flash-next",

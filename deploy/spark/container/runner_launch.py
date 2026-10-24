@@ -124,11 +124,35 @@ def forward_stdin_to_fifo(sandbox, fifo_path):
         payload = base64.b64encode(chunk).decode()
         subprocess.run([*writer, payload], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30, check=False)
 
+def prepare_connection_capability(spec, token):
+    """Send a task-only capability via stdin, never CLI argv or model prompts."""
+    path = spec['inputFifo'] + '.connection'
+    writer = ('import os,sys; data=sys.stdin.buffer.read(101); '
+              'assert len(data)==97; '
+              'fd=os.open(sys.argv[1],os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600); '
+              'os.write(fd,data); os.close(fd)')
+    command = [*OPENSHELL_COMMON, 'sandbox', 'exec', '--name', spec['name'], '--no-tty',
+               '--no-login-shell', '--', '/usr/bin/python3', '-c', writer, path]
+    subprocess.run(command, input=token.encode(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                   timeout=30, check=True)
+    marker = spec['execute'].index('--', spec['execute'].index('exec'))
+    script_at = marker + 3  # -- /usr/bin/python3 -c <relay>
+    if spec['execute'][marker+1:script_at] != ['/usr/bin/python3', '-c']:
+        raise ValueError('Unexpected sandbox relay command')
+    load = (f'import os; fd=os.open({path!r},os.O_RDONLY|os.O_NOFOLLOW); '
+            'os.environ["PRIME_CONNECTION_TOKEN"]=os.read(fd,101).decode(); '
+            f'os.close(fd); os.unlink({path!r}); ')
+    spec['execute'][script_at] = load + spec['execute'][script_at]
+
+
 def main():
     if len(sys.argv)!=2 or len(sys.argv[1])>32768: raise SystemExit(2)
     request=json.loads(base64.urlsafe_b64decode(sys.argv[1]+"=="))
     allowed={"taskId","owner","authorization","provider","model","thinking","sessionId","fork"}
     if set(request) not in (allowed, allowed | {'projectId'}): raise SystemExit(2)
+    connection_token = os.environ.pop('PRIME_CONNECTION_TOKEN', None)
+    if connection_token and (not isinstance(connection_token, str) or not re.fullmatch(re.escape(request['taskId']) + r'\.[a-f0-9]{64}', connection_token)):
+        raise SystemExit(2)
     stage("Preparing task storage")
     configure(request["owner"])
     child = None
@@ -174,6 +198,8 @@ def main():
         if child.wait() != 0:
             raise SystemExit("OpenShell could not create the task sandbox")
         subprocess.run(spec["prepareInput"], stdin=subprocess.DEVNULL, check=True)
+        if connection_token:
+            prepare_connection_capability(spec, connection_token)
         stage("Launching Prime inside sandbox")
         child = subprocess.Popen(spec["execute"], stdin=subprocess.DEVNULL, start_new_session=True)
         threading.Thread(target=forward_stdin_to_fifo, args=(sandbox, spec["inputFifo"]), daemon=True).start()

@@ -3,6 +3,8 @@ import socket
 import sys
 import json
 import os
+import io
+from email.message import Message
 import tempfile
 import unittest
 from pathlib import Path
@@ -33,6 +35,27 @@ class ModelGatewayNetworkTests(unittest.TestCase):
 
 
 class ModelGatewayCredentialTests(unittest.TestCase):
+    def test_connection_route_overwrites_spoofed_owner_and_never_forwards_cookies(self):
+        handler = object.__new__(model_gateway.Handler)
+        handler.server = mock.Mock(prime_user='alice')
+        handler.command, handler.path = 'POST', '/connections'
+        raw = b'{"action":"list","token":"fixture"}'
+        handler.rfile = io.BytesIO(raw)
+        handler.headers = Message()
+        for key, value in {'Content-Length': str(len(raw)), 'X-Prime-Connection-Owner': 'bob', 'Cookie': 'secret-cookie'}.items():
+            handler.headers[key] = value
+        handler.send_json = mock.Mock()
+        response = mock.Mock(status=200); response.read.return_value = b'{"connections":[]}'
+        with mock.patch.dict(os.environ, {'PRIME_CONNECTIONS_ENABLED': '1'}), mock.patch.object(model_gateway.http.client, 'HTTPConnection') as cls:
+            cls.return_value.getresponse.return_value = response
+            handler.proxy()
+            self.assertEqual(cls.call_args.args, ('127.0.0.1', 8767))
+            self.assertEqual(cls.return_value.request.call_args.args[3], {'Content-Type': 'application/json', 'X-Prime-Connection-Owner': 'alice'})
+            handler.send_json.assert_called_once_with(200, {'connections': []})
+        with mock.patch.dict(os.environ, {'PRIME_CONNECTIONS_ENABLED': '0'}):
+            handler.proxy()
+            self.assertEqual(handler.send_json.call_args.args[0], 403)
+
     def test_reused_refresh_token_has_actionable_safe_error(self):
         class Response:
             status = 401

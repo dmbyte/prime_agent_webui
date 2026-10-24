@@ -13,6 +13,7 @@ import threading
 import time
 from playwright.sync_api import sync_playwright
 import skill_credentials
+import connections
 
 root = Path(__file__).parent
 spec = importlib.util.spec_from_file_location('credential_browser_auth', root/'auth.py')
@@ -23,16 +24,19 @@ def main():
     os.environ['PRIME_CREDENTIALS_ENABLED'] = '1'  # Isolated loopback fixture only.
     with tempfile.TemporaryDirectory(prefix='prime-credential-browser-') as directory:
         home = Path(directory); agent = home/'.prime/agent'; agent.mkdir(parents=True)
-        declaration = {'id': 'login', 'label': 'Service login', 'fields': [
-            {'id': 'username', 'label': 'Username'}, {'id': 'token', 'label': 'Token'}]}
+        declaration = {'id': 'login', 'label': 'Service login', 'adapter': 'github-readonly', 'fields': [
+            {'id': 'token', 'label': 'Token'}]}
         skills = {owner: {'owner': owner, 'status': 'installed', 'enabled': True, 'name': 'Fixture skill',
                           'credentialRequirements': [declaration]} for owner in ['alice', 'bob']}
-        (agent/'webui-metadata.json').write_text(json.dumps({'skills': skills}))
+        project_id = 'p_'+'1'*24
+        (agent/'webui-metadata.json').write_text(json.dumps({'skills': skills, 'projects': {project_id: {'owner': 'alice', 'name': 'Fixture project'}}}))
         auth.credential_path = lambda: home/'web-auth.json'
         auth.load_users = lambda: {'users': {'alice': {'enabled': True}, 'bob': {'enabled': True}}}
         auth._credential_module = skill_credentials
         catalog = skill_credentials.catalog
-        skill_credentials.catalog = lambda owner: catalog(owner, home)
+        skill_credentials.catalog = lambda owner, *args: catalog(owner, home)
+        original_manager = connections.Connections
+        connections.Connections = lambda root=None, **kwargs: original_manager(root, home)
         for owner in ['alice', 'bob']:
             auth.SESSIONS[owner] = {'user': owner, 'role': 'user', 'csrf': owner+'-csrf',
                                     'seen': time.time(), 'persisted': time.time(), 'expires': time.time()+3600}
@@ -65,26 +69,41 @@ def main():
                         page.goto(origin); page.get_by_role('button', name='Settings', exact=True).click()
                         page.locator('#credentialSettings summary').click()
                         page.get_by_text('Required values missing', exact=True).wait_for()
-                    alice.get_by_label('Username', exact=True).fill('synthetic-user')
                     alice.get_by_label('Token', exact=True).fill('SYNTHETIC_BROWSER_SECRET')
                     with alice.expect_response(lambda response: response.url.endswith('/auth/credentials') and response.request.method == 'POST') as saved:
                         alice.get_by_role('button', name='Save credentials', exact=True).click()
                     assert saved.value.status == 200, 'Synthetic credential save failed'
-                    alice.get_by_text('Saved · tool integration pending', exact=True).wait_for()
+                    alice.get_by_text('Saved · configure access in My connections', exact=True).wait_for()
                     assert alice.get_by_label('Token', exact=True).input_value() == ''
                     assert 'SYNTHETIC_BROWSER_SECRET' not in alice.content()
                     data = alice.evaluate("async()=>await (await fetch('/auth/credentials')).json()")
                     assert 'SYNTHETIC_BROWSER_SECRET' not in json.dumps(data)
                     bob.get_by_role('button', name='Refresh requirements').click()
                     bob.get_by_text('Required values missing', exact=True).wait_for()
+                    alice.locator('#connectionSettings summary').first.click()
+                    alice.get_by_label('Connection name', exact=True).fill('Fixture connection')
+                    alice.get_by_label('Allow use in', exact=True).select_option(project_id)
+                    alice.get_by_role('button', name='Add read-only connection', exact=True).click()
+                    alice.get_by_text('Fixture connection', exact=True).wait_for()
+                    connection_data = alice.evaluate("async()=>await (await fetch('/auth/connections')).json()")
+                    assert len(connection_data['connections']) == 1
+                    assert connection_data['connections'][0]['projectId'] == project_id
+                    assert not connection_data['runtimeEnabled']
+                    assert 'SYNTHETIC_BROWSER_SECRET' not in json.dumps(connection_data)
+                    bob_data = bob.evaluate("async()=>await (await fetch('/auth/connections')).json()")
+                    assert bob_data['connections'] == [] and bob_data['projects'] == []
+                    alice.get_by_text('Fixture connection', exact=True).click()
+                    alice.once('dialog', lambda dialog: dialog.accept())
+                    alice.get_by_role('button', name='Delete connection', exact=True).click()
+                    alice.get_by_text('Fixture connection', exact=True).wait_for(state='detached')
                     alice.get_by_role('button', name='Refresh requirements').click()
-                    alice.get_by_text('Saved · tool integration pending', exact=True).wait_for()
+                    alice.get_by_text('Saved · configure access in My connections', exact=True).wait_for()
                     alice.once('dialog', lambda dialog: dialog.accept())
                     alice.get_by_role('button', name='Delete saved values', exact=True).click()
                     alice.get_by_text('Required values missing', exact=True).wait_for()
                     for path in (home/'skill-vault').iterdir():
                         assert b'SYNTHETIC_BROWSER_SECRET' not in path.read_bytes()
-                    print('PASS: real browser save/refresh/delete, blank secret inputs, metadata-only responses and two-user isolation')
+                    print('PASS: real browser credential and project-scoped connection save/delete, blank secret inputs, metadata-only responses, staged status and two-user isolation')
                 finally: browser.close()
         finally:
             server.shutdown(); server.server_close(); worker.join()

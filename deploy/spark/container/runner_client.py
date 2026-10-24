@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Unprivileged full-duplex client for the local OpenShell runner broker."""
-import os, selectors, socket, sys
+import base64, json, os, selectors, socket, sys
 
 SOCKET = "\0prime-runner-broker-v1"
 
@@ -9,7 +9,13 @@ def main():
         raise SystemExit(2)
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     sock.connect(SOCKET)
-    sock.sendall(sys.argv[1].encode("ascii") + b"\n")
+    encoded = sys.argv[1]
+    token = os.environ.pop('PRIME_CONNECTION_TOKEN', None)
+    if token:
+        request = json.loads(base64.urlsafe_b64decode(encoded+'=='))
+        request['connectionToken'] = token
+        encoded = base64.urlsafe_b64encode(json.dumps(request).encode()).decode()
+    sock.sendall(encoded.encode("ascii") + b"\n")
     selector = selectors.DefaultSelector()
     selector.register(sock, selectors.EVENT_READ, "socket")
     selector.register(sys.stdin.buffer, selectors.EVENT_READ, "stdin")

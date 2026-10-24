@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import re
+import secrets
 import stat
 import tempfile
 import threading
@@ -26,7 +27,7 @@ def declarations(value):
         raise ValueError('Credential manifest allows at most 16 connections')
     result, seen = [], set()
     for row in rows:
-        if not isinstance(row, dict) or set(row) - {'id', 'label', 'description', 'fields'}:
+        if not isinstance(row, dict) or set(row) - {'id', 'label', 'description', 'fields', 'adapter'}:
             raise ValueError('Invalid credential declaration')
         key = row.get('id')
         if not isinstance(key, str) or not ID.fullmatch(key) or key in seen:
@@ -48,7 +49,14 @@ def declarations(value):
                 raise ValueError('Invalid credential field')
             names.add(name)
             clean.append({'id': name, 'label': title.strip(), 'required': required})
-        result.append({'id': key, 'label': label.strip(), 'description': description, 'fields': clean})
+        normalized = {'id': key, 'label': label.strip(), 'description': description, 'fields': clean}
+        if 'adapter' in row:
+            adapter = row['adapter']
+            expected = {'github-readonly': {'token'}, 'redfish-readonly': {'endpoint', 'username', 'password'}}
+            if not isinstance(adapter, str) or adapter not in expected or names != expected[adapter]:
+                raise ValueError('Unsupported credential adapter or fields')
+            normalized['adapter'] = adapter
+        result.append(normalized)
     return result
 
 
@@ -90,11 +98,23 @@ def catalog(owner, home=None):
         data = json.loads(inventory.read_text())
         if data.get('owner') == owner:
             skills.extend(data.get('skills', []))
+    # Installer-published bundled declarations, never another user's inventory.
+    # Only the trusted host account can publish this explicit global catalog.
+    shared = home / '.prime/agent/global-credential-inventory.json'
+    if shared.exists() or shared.is_symlink():
+        data = json.loads(_read(shared))
+        if data.get('version') != 1 or data.get('scope') != 'global':
+            raise ValueError('Invalid global credential inventory')
+        for row in data.get('skills', []):
+            if row.get('scope') != 'global' or row.get('projectId') or row.get('owner'):
+                raise ValueError('Invalid global credential scope')
+            skills.append(row)
     result = {}
     for skill in skills:
         for declaration in declarations({'version': 1, 'credentials': skill.get('credentialRequirements', [])}):
             key = requirement_id(skill['id'], declaration)
-            result[key] = dict(declaration, key=key, skillId=skill['id'], skillName=skill.get('name', skill['id']))
+            result[key] = dict(declaration, key=key, skillId=skill['id'], skillName=skill.get('name', skill['id']),
+                               scope=skill.get('scope', 'user'), projectId=skill.get('projectId'))
     return list(result.values())
 
 
@@ -220,7 +240,8 @@ class Vault:
                         previous[name] = value
                 if any(not previous.get(f['id']) for f in req['fields'] if f['required']):
                     raise ValueError('Complete all required credential fields')
-                saved[key] = {'values': previous, 'label': req['label'], 'skillName': req['skillName'], 'updatedAt': int(time.time())}
+                saved[key] = {'values': previous, 'label': req['label'], 'skillName': req['skillName'], 'updatedAt': int(time.time()),
+                              'revision': secrets.token_hex(16)}
             else:
                 raise ValueError('Unsupported credential action')
             self._save(owner, saved)

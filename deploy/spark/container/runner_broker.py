@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Group-restricted Unix broker for OpenShell task sandboxes."""
-import grp, json, os, pwd, selectors, socket, struct, subprocess, threading
+import base64, grp, json, os, pwd, selectors, socket, struct, subprocess, threading
 
 SOCKET = "\0prime-runner-broker-v1"
 LAUNCHER = "/usr/local/libexec/prime-runner-launch"
@@ -25,7 +25,16 @@ def handle(conn):
         if b"\n" not in first:
             return
         encoded, remainder = bytes(first).split(b"\n", 1)
-        process = subprocess.Popen([LAUNCHER, encoded.decode("ascii")], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        request = json.loads(base64.urlsafe_b64decode(encoded+b'=='))
+        token = request.pop('connectionToken', None)
+        launch_env = dict(os.environ)
+        launch_env.pop('PRIME_CONNECTION_TOKEN', None)
+        if token:
+            if not isinstance(token, str) or len(token) > 100:
+                return
+            launch_env['PRIME_CONNECTION_TOKEN'] = token
+        encoded = base64.urlsafe_b64encode(json.dumps(request).encode()).decode()
+        process = subprocess.Popen([LAUNCHER, encoded], env=launch_env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         if remainder:
             process.stdin.write(remainder)
             process.stdin.flush()

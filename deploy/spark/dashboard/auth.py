@@ -251,6 +251,7 @@ def manage_user(action, body, actor):
         if username == actor: raise ValueError("You cannot delete your own account")
         if username not in users: raise ValueError("User not found")
         credential_module().Vault(credential_path().parent / 'skill-vault').delete_owner(username)
+        connection_module().Connections(credential_path().parent).delete_owner(username)
         del users[username]
     elif action == "revoke":
         if username not in users: raise ValueError("User not found")
@@ -267,6 +268,29 @@ def manage_user(action, body, actor):
 class Handler(BaseHTTPRequestHandler):
     server_version = "PrimeAuth"
     sys_version = ""
+
+    def connections(self, write=False):
+        if os.environ.get('PRIME_CREDENTIALS_ENABLED') != '1':
+            self.json(503, {'error': 'Credential setup is not activated'}); return
+        row = session_for(self.headers.get('Cookie'))
+        account = (load_users() or {}).get('users', {}).get((row or {}).get('user'), {})
+        if not row or not account or not account.get('enabled', True):
+            self.json(401, {'error': 'Sign in to manage your connections'}); return
+        if write and not csrf_valid(self.headers, row):
+            self.json(403, {'error': 'Request validation failed'}); return
+        try:
+            manager = connection_module().Connections(credential_path().parent)
+            if write:
+                length = int(self.headers.get('Content-Length', '0'))
+                if not 2 <= length <= 4096 or self.headers.get_content_type() != 'application/json':
+                    raise ValueError('Invalid connection request')
+                self.json(200, manager.change(row['user'], json.loads(self.rfile.read(length))))
+            else:
+                self.json(200, manager.view(row['user']))
+        except ValueError:
+            self.json(400, {'error': 'Invalid connection configuration; check saved credentials, scope, endpoint and expiry'})
+        except (OSError, ImportError, TypeError, KeyError, AttributeError):
+            self.json(503, {'error': 'Connection settings unavailable'})
 
     def credentials(self, write=False):
         if os.environ.get('PRIME_CREDENTIALS_ENABLED') != '1':
@@ -308,7 +332,9 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        if self.path == '/auth/credentials':
+        if self.path == '/auth/connections':
+            self.connections()
+        elif self.path == '/auth/credentials':
             self.credentials()
         elif self.path == '/auth/check-admin':
             row = session_for(self.headers.get('Cookie'))
@@ -336,6 +362,9 @@ class Handler(BaseHTTPRequestHandler):
             self.json(404, {"error": "Not found"})
 
     def do_POST(self):
+        if self.path == '/auth/connections':
+            self.connections(write=True)
+            return
         if self.path == '/auth/credentials':
             self.credentials(write=True)
             return
@@ -402,6 +431,12 @@ class Handler(BaseHTTPRequestHandler):
 
 
 _credential_module = None
+
+
+def connection_module():
+    # Normal installation and test discovery both keep modules beside auth.py.
+    import connections
+    return connections
 
 
 def credential_module():

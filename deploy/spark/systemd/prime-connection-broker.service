@@ -1,0 +1,26 @@
+[Unit]
+Description=Prime opt-in read-only saved connection broker
+After=network.target
+
+[Service]
+Type=simple
+# Remains disabled until the separately documented idle-window activation.
+Environment=PRIME_CONNECTIONS_ENABLED=0
+ExecCondition=/usr/bin/test ${PRIME_CONNECTIONS_ENABLED} = 1
+ExecStart=/usr/bin/python3 %h/prime-dgx-dashboard/connection_broker.py
+Restart=on-failure
+RestartSec=5
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+NoNewPrivileges=yes
+UMask=0077
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=yes
+RestrictSUIDSGID=yes
+LimitNOFILE=128
+MemoryMax=256M
+TasksMax=32
+
+[Install]
+WantedBy=default.target

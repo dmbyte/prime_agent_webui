@@ -50,6 +50,22 @@ class ManagedSkillTests(unittest.TestCase):
                 module.publish_inventory("alice", state, 1000, 1000)
             rows = json.loads((root / ".prime/agent/skill-inventory.json").read_text())
             self.assertEqual([row["id"] for row in rows["skills"]], ["managed:example", "nvidia:cuda"])
+            shared = json.loads((root / '.prime/agent/global-credential-inventory.json').read_text())
+            self.assertEqual(shared['skills'], [])
+
+    def test_global_inventory_uses_reviewed_builtin_defaults_not_local_manifests(self):
+        module = load_installer()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); state = root/'state'
+            skill = state/'skills/ipmi-redfish-bmc'; skill.mkdir(parents=True)
+            (skill/'SKILL.md').write_text('---\nname: ipmi-redfish-bmc\ndescription: BMC\n---\n')
+            (skill/'credential-requirements.json').write_text(json.dumps({'version': 1, 'credentials': [
+                {'id': 'personal', 'label': 'Personal', 'fields': [{'id': 'token', 'label': 'Token'}]}]}))
+            with mock.patch.object(module.pwd, 'getpwnam', return_value=mock.Mock(pw_dir=str(root))), mock.patch.object(module.os, 'chown'):
+                module.publish_inventory('alice', state, 1000, 1000)
+            shared = json.loads((root/'.prime/agent/global-credential-inventory.json').read_text())
+            self.assertEqual(shared['skills'][0]['credentialRequirements'][0]['adapter'], 'redfish-readonly')
+            self.assertEqual(shared['skills'][0]['scope'], 'global')
 
     def test_power_mutations_are_confirmation_gated(self):
         source = (ROOT / "skills/ipmi-redfish-bmc/src/ipmi_redfish_bmc/__init__.py").read_text()

@@ -16,6 +16,9 @@ required=(
   deploy/spark/dashboard/task-timer.css
   deploy/spark/dashboard/auth.py
   deploy/spark/dashboard/skill_credentials.py
+  deploy/spark/dashboard/connections.py
+  deploy/spark/dashboard/connection_broker.py
+  deploy/spark/systemd/prime-connection-broker.service
   deploy/spark/dashboard/credentials.js
   deploy/spark/prime/managed-credential-requirements.json
   deploy/spark/dashboard/index.html
@@ -86,6 +89,7 @@ required=(
   deploy/spark/systemd/llama-qwen38.service
   docs/model-routing.md
   docs/user-credentials.md
+  docs/connections.md
   deploy/spark/dashboard/validate-credentials-ui.py
   docs/releases/v0.5.47.md
 )
