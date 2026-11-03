@@ -122,6 +122,7 @@ export PRIME_MAINTENANCE_LOCK="$test_lock"
 export PYTHONPATH="$root/deploy/spark/dashboard:$root/deploy/spark/container${PYTHONPATH:+:$PYTHONPATH}"
 python3 -m unittest discover -s deploy/spark/dashboard -p 'test*.py'
 python3 -m unittest discover -s deploy/spark/prime -p 'test_*skill*.py'
+python3 -m unittest discover -s evals/spark -p 'test_*.py'
 
 if command -v node >/dev/null; then
   node --check deploy/spark/dashboard/app-v2.js

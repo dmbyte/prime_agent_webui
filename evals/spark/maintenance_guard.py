@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+"""Hold Prime's existing admission inode; fail closed if any user has active work.
+
+This does not stop services, tasks, consoles or sandboxes. Use a systemd unit so
+the lease stays held until the entire benchmark process group has terminated.
+"""
+import argparse
+import fcntl
+import json
+import os
+from pathlib import Path
+import signal
+import stat
+import subprocess
+import urllib.request
+from run_screen import NoRedirect
+
+LOCK = '/var/lib/prime-runner/openshell-maintenance.lock'
+
+
+def idle():
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+    users = json.loads((Path.home() / '.config/prime-agent/web-auth.json').read_text())['users']
+    if not users:
+        raise RuntimeError('Cannot establish user inventory')
+    for owner in users:
+        request = urllib.request.Request('http://127.0.0.1:8765/api/tasks', headers={'X-Prime-User': owner})
+        with opener.open(request, timeout=10) as response:
+            payload = json.load(response)
+        tasks = payload['tasks'] if isinstance(payload, dict) else payload
+        if not isinstance(tasks, list):
+            raise RuntimeError('Unrecognized task inventory')
+        if any(t.get('status') in ('running', 'starting', 'queued', 'stopping') for t in tasks):
+            raise RuntimeError('Active task exists; no changes made')
+    result = subprocess.run(['openshell', '--gateway', 'spark-local', 'sandbox', 'list', '--all-workspaces', '--ids'], capture_output=True, text=True, timeout=30, check=True)
+    if result.stdout.strip():
+        raise RuntimeError('Sandbox exists; no changes made')
+    with opener.open('http://127.0.0.1:30001/metrics', timeout=10) as response:
+        metrics = response.read().decode()
+    found = set()
+    for line in metrics.splitlines():
+        if line.startswith('#'):
+            continue
+        for field in ('requests_processing', 'requests_deferred'):
+            if field in line.split(' ')[0]:
+                found.add(field)
+                if float(line.split()[-1]) != 0:
+                    raise RuntimeError('Inference is busy; no changes made')
+    if found != {'requests_processing', 'requests_deferred'}:
+        raise RuntimeError('Cannot verify model is idle')
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('command', nargs=argparse.REMAINDER)
+    args = parser.parse_args()
+    command = args.command[1:] if args.command[:1] == ['--'] else args.command
+    if not command:
+        parser.error('Supply a command')
+    fd = os.open(LOCK, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        metadata = os.fstat(fd)
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != 0:
+            raise RuntimeError('Invalid root-provisioned maintenance inode')
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        idle()
+        print('Verified idle; maintenance admission held for synthetic evaluation', flush=True)
+        environment = os.environ | {'PRIME_EVAL_MAINTENANCE_HELD': '1'}
+        process = subprocess.Popen(command, env=environment)
+        # Forward shutdown but keep the lease until the child has exited.
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            signal.signal(sig, lambda signum, frame: process.send_signal(signum))
+        raise SystemExit(process.wait())
+    finally:
+        os.close(fd)
+
+
+if __name__ == '__main__':
+    main()

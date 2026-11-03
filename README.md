@@ -24,6 +24,11 @@ and update Prime Agent WebUI and its service helpers. Production conversations,
 system history, private operating notes, CAD projects, and locally refined agent
 skills belong outside the repository and are excluded from version control.
 
+The optional [Spark model evaluation harness](evals/spark/README.md) compares
+synthetic workload contracts before changing inference engines. Its pinned FP4
+candidate is experimental: installing the WebUI does not download it, switch
+models, reduce context, or change provider/privacy settings.
+
 ## Why one Qwen model instead of two local models?
 
 The previous deployment split routine orchestration onto Nemotron 3.5 Lightning
