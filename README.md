@@ -974,9 +974,17 @@ identify this build, not that version alone. No new release is implied.
 
 Administrators can check and install published releases from Settings. Prime
 Agent updates use the official versioned artifact and verify its published
-SHA256SUMS entry. The OpenShell task images pin that same Prime version and
-checksum; a WebUI update rebuilds and verifies all six task profiles so host and
-sandbox APIs cannot drift. The managed task-workspace `AGENTS.md` explicitly
+SHA256SUMS entry. **The Prime Agent button updates host tools only**, not the
+OpenShell task images. Upstream 0.10.x npm packages can migrate the host launcher
+to Rust; first-run progress is not a failed installation. The updater verifies
+both package identity/version and the successfully executed CLI version, tolerates
+migration progress, and reports the failed phase instead of a blank error.
+An already-current package is verified without reinstalling it.
+
+OpenShell tasks remain pinned to the separately reviewed Prime 0.9.5 image and
+checksum. A WebUI update rebuilds/verifies the six profiles using its reviewed
+pin, not the host's newest version. Upgrading those tasks to a new Prime runtime
+requires separate API/skill compatibility testing. The managed task-workspace `AGENTS.md` explicitly
 uses Prime 0.9.5's `rlm.spawn` API with the exact
 `spark-qwen/qwen3.8-flash-next` selector and runs `agent_message.send` only
 inside `ipython`. An older managed policy is backed up before replacement;
