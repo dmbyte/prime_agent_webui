@@ -177,6 +177,9 @@ UMask=0077
 WantedBy=default.target
 EOF
 
+install -d -m 0755 "${HOME}/prime-update"
+install -m 0644 "$repo_dir/deploy/spark/openshell/release.json" "${HOME}/prime-update/openshell-release.json"
+install -m 0755 "$repo_dir/deploy/spark/update/verify-openshell.py" "${HOME}/prime-update/"
 for update_unit in prime-update-agent.service prime-update-webui.service prime-update-openshell.service; do
   install -m 0644 "$repo_dir/deploy/spark/systemd/$update_unit" "$unit_dir/$update_unit"
 done

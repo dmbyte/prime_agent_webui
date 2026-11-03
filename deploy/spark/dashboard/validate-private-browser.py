@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import secrets
 import ssl
 import subprocess
 import tempfile
@@ -48,7 +49,9 @@ def serve(host):
             if self.path=='/':
                 self.send(200,'''<input type=text><input type=password><button onclick="fetch('/login',{method:'POST',body:JSON.stringify({username:document.querySelector('input[type=text]').value,password:document.querySelector('input[type=password]').value})}).then(r=>{if(r.ok)location='/home'})">Log In</button>''')
             elif self.path=='/home' and 'fixture=yes' in self.headers.get('Cookie',''):
-                self.send(200,'<h1>Synthetic management status</h1>')
+                self.send(200,'<h1>Synthetic management status</h1><a href="/console">HTML5 Console</a>')
+            elif self.path=='/console' and 'fixture=yes' in self.headers.get('Cookie',''):
+                self.send(200,'<canvas width="640" height="360"></canvas><script>document.querySelector("canvas").getContext("2d").fillText("Synthetic boot screen",20,40)</script>')
             else: self.send(404,'')
         def do_POST(self):
             length=int(self.headers.get('Content-Length','0'))
@@ -119,6 +122,18 @@ def client(host,state,manifest):
         manager.sessions.reap(); assert not manager.sessions.sessions
         assert not list(native.root.glob('pc-*.json'))
         print('PASS: actual private sandbox login/capture, strict denial, saved exception, owner isolation, revocation and cleanup',flush=True)
+        # Exercise a real KVM surface through the same OpenShell worker, not a
+        # real BMC. No console input is sent, and no saved user target is read.
+        from connection_browser import BrowserSession
+        kvm=BrowserSession(native,'pc-'+secrets.token_hex(8),dict(values,ignoreCertificateErrors=True),'kvm',time.time()+120)
+        try:
+            assert kvm.read().get('image')
+            time.sleep(2)
+            assert kvm.read().get('image')
+        finally:
+            kvm.close()
+        assert not list(native.root.glob('pc-*.json'))
+        print('PASS: actual isolated HTML5 KVM launch, repeated console captures and cleanup; no console input',flush=True)
     finally:
         manager.sessions.reap(all_sessions=True); native.reap(startup=True); manager.revoke(task)
 

@@ -23,6 +23,7 @@ import tarfile
 from datetime import datetime, timezone
 from http.cookies import SimpleCookie
 from pathlib import Path
+from runtime_maintenance import admitted
 
 SPEC = importlib.util.spec_from_file_location("prime_dashboard_legacy", Path(__file__).with_name("api.py"))
 legacy = importlib.util.module_from_spec(SPEC)
@@ -1924,6 +1925,7 @@ def store_task_route(task):
         legacy.atomic_json(META, data)
 
 
+@admitted
 def task_start_runtime(payload, owner, role):
     """Explicit timeout wins, otherwise inherit saved chat/project timeout."""
     requested = payload.get('taskPolicy') or {}
@@ -2569,13 +2571,15 @@ def openshell_upgrade_blocker(installed, latest):
         return None
     if current < (0, 1, 0) <= target:
         return 'OpenShell requires a reviewed 0.0.x-to-0.1.x gateway migration before updating.'
-    repo = Path(os.environ.get('PRIME_WEBUI_REPO', legacy.HOME / 'prime_agent_webui'))
     try:
-        source = (repo / 'deploy/spark/openshell/install.sh').read_text()
-    except OSError:
-        source = ''
-    match = re.search(r'^version=(\d+\.\d+\.\d+)$', source, re.M)
-    pin = match.group(1) if match else None
+        approval = json.loads((legacy.HOME / 'prime-update/openshell-release.json').read_text())
+        pin = approval['version']
+        if not re.fullmatch(r'[a-f0-9]{64}', approval['sha256']):
+            pin = None
+        if approval['asset'] != f'openshell_{pin}-1_arm64.deb':
+            pin = None
+    except (OSError, ValueError, KeyError, TypeError):
+        pin = None
     if version_tuple(pin) != target:
         return (f'OpenShell {latest.lstrip("v")} is available upstream, but Prime is approved for '
                 f'{pin or "an unknown version"}. Install a Prime update that validates this OpenShell '

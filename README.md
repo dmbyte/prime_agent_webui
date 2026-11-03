@@ -473,7 +473,7 @@ also uses `deploy/spark/container/kvm_broker.py` and
 
 | Setting | Deployed value |
 |---|---|
-| OpenShell package | `0.1.5-1` ARM64 `.deb`, SHA256 `ae381703f78061141bbac44aa85fb7d9856cb567d2ab2b4306318365f5466ac5` |
+| OpenShell package | `0.1.6-1` ARM64 `.deb`, SHA256 `2f6e2b7b09399d91443fc8e25bd5db360dfee562db17bb2778ac0d0067969f85` |
 | Gateway name | `spark-local` |
 | Gateway | schema v2, Docker driver, loopback `127.0.0.1:17670`, mTLS, telemetry off |
 | Docker attachment policy | `allow_driver_config=true`, resource admission enabled, approved Prime volumes labeled attachable for workspace `default` |

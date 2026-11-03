@@ -24,6 +24,7 @@ from urllib.parse import urlparse, unquote
 
 import openshell_runner
 import task_common
+from runtime_maintenance import admitted
 from console_feed import ConsoleFeed
 
 
@@ -179,6 +180,7 @@ class KVMBroker:
         self.lock = threading.Lock()
         self.stopping = threading.Event()
 
+    @admitted
     def _new_session(self, url: str, ignore_https_errors: bool) -> dict:
         url = validate_url(url)
         with self.lock:

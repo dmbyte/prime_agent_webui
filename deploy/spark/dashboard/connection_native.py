@@ -18,6 +18,7 @@ import time
 from urllib.parse import urlsplit
 
 import skill_credentials as credentials
+from runtime_maintenance import admitted
 
 IMAGE = re.compile(r'local/prime-openshell-[a-z-]+:0\.9\.5-[a-f0-9]{12}')
 LEASE = re.compile(r'pc-[a-f0-9]{16}')
@@ -128,6 +129,7 @@ class NativeLease:
             self.runtime.capacity.release()
             raise
 
+    @admitted
     def start(self):
         self.runtime.reap()
         if self.expiry <= time.time()+5:

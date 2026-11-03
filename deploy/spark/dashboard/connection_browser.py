@@ -9,9 +9,11 @@ from urllib.parse import urlsplit
 
 from connection_native import COMMON
 import skill_credentials as credentials
+from runtime_maintenance import admitted
 
 
 class BrowserSession:
+    @admitted
     def __init__(self, runtime, name, values, kind, expiry):
         self.runtime, self.name, self.process = runtime, name, None
         host = urlsplit(values['endpoint']).hostname

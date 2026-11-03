@@ -10,6 +10,7 @@ import task_common
 import hosting_auth
 import volume_provisioner
 import shared_skills
+from runtime_maintenance import admitted
 
 ROOT=Path("/var/lib/prime-runner")
 OPENSHELL_COMMON = ["/usr/bin/openshell", "--gateway", "spark-local"]
@@ -147,6 +148,7 @@ def prepare_connection_capability(spec, token):
     spec['execute'][script_at] = load + spec['execute'][script_at]
 
 
+@admitted
 def main():
     if len(sys.argv)!=2 or len(sys.argv[1])>32768: raise SystemExit(2)
     request=json.loads(base64.urlsafe_b64decode(sys.argv[1]+"=="))

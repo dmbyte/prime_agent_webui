@@ -17,6 +17,7 @@ import uuid
 import hosting_auth
 import openshell_runner
 import task_common
+from runtime_maintenance import admitted
 
 ROOT = Path('/var/lib/prime-runner')
 COMMON = ['/usr/bin/openshell', '--gateway', 'spark-local']
@@ -164,6 +165,7 @@ class HostingBroker:
         (self.root / 'openshell-policies' / (name + '.yaml')).unlink(missing_ok=True)
         return result.returncode
 
+    @admitted
     def _start(self, row):
         source_directory(self.workspace, row['source'])
         spec = sandbox_spec(self.owner, row, self.root)

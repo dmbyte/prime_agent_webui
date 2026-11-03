@@ -3,8 +3,8 @@ set -euo pipefail
 
 test "${EUID}" -ne 0 || { echo "Run as the Docker/WebUI owner, not root." >&2; exit 2; }
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
-version=0.1.5
-deb_sha256=ae381703f78061141bbac44aa85fb7d9856cb567d2ab2b4306318365f5466ac5
+version=$(jq -er .version "$repo/deploy/spark/openshell/release.json")
+deb_sha256=$(jq -er .sha256 "$repo/deploy/spark/openshell/release.json")
 installed_openshell=$(openshell --version 2>/dev/null | awk 'NR == 1 {print $2}' || true)
 if [[ -n "$installed_openshell" ]] && dpkg --compare-versions "$installed_openshell" lt 0.1.0; then
   echo "OpenShell ${installed_openshell} requires the reviewed 0.0.x-to-0.1.x migration before running this installer; do not upgrade it in place." >&2
@@ -19,6 +19,19 @@ trap 'rm -rf "$staging" "$build_context"' EXIT
 for command in docker jq setfacl rsync curl; do
   command -v "$command" >/dev/null || { echo "Missing OpenShell prerequisite: $command" >&2; exit 1; }
 done
+if [[ -n "$installed_openshell" ]]; then
+  # Existing installs must activate the host admission guards before using the
+  # broad installer; an empty inventory alone is not a maintenance barrier.
+  test -r /var/lib/prime-runner/openshell-maintenance.lock || {
+    echo "Activate the reviewed maintenance guards before updating this existing installation." >&2
+    exit 75
+  }
+  exec 8</var/lib/prime-runner/openshell-maintenance.lock
+  flock -n -x 8 || { echo "Work is active; defer installation." >&2; exit 75; }
+  test -z "$(openshell --gateway spark-local sandbox list --all-workspaces --ids)" || {
+    echo "Sandboxes exist; finish work before installation." >&2; exit 75;
+  }
+fi
 if sudo test -S "/var/lib/prime-runner/hosting/${USER}/admin.sock"; then
   hosting_state=$(sudo -u prime-runner python3 /usr/local/lib/prime-runner/hosting_admin.py --owner "$USER" list)
   if ! jq -e '.ok == true and (.result.services | length) == 0' >/dev/null <<<"$hosting_state"; then
@@ -70,6 +83,9 @@ for mode in restricted internet lan full; do
 done
 sudo chown prime-runner:prime-runner /var/lib/prime-runner /var/lib/prime-runner/users
 sudo chmod 0700 /var/lib/prime-runner /var/lib/prime-runner/users
+if ! sudo test -e /var/lib/prime-runner/openshell-maintenance.lock; then
+  sudo install -o root -g root -m 0644 /dev/null /var/lib/prime-runner/openshell-maintenance.lock
+fi
 sudo setfacl -m "u:${USER}:--x,g:prime-web:--x,m::--x" /var/lib/prime-runner /var/lib/prime-runner/users
 
 workspace_root="${PRIME_RUNNER_WORKSPACE_ROOT:-${HOME}/prime-agent/tasks}"
@@ -118,6 +134,10 @@ sudo find "$owner_agent/sessions" "$owner_agent/trash" "$owner_agent/project-sou
 "$repo/deploy/spark/prime/install-skills.sh" --bundled-only
 
 sudo install -d -o root -g root -m 0755 /usr/local/lib/prime-runner /usr/local/libexec
+sudo install -o root -g root -m 0644 "$repo/deploy/spark/dashboard/runtime_maintenance.py" /usr/local/lib/prime-runner/
+install -d -m 0755 "${HOME}/prime-update"
+install -m 0644 "$repo/deploy/spark/openshell/release.json" "${HOME}/prime-update/openshell-release.json"
+install -m 0755 "$repo/deploy/spark/update/verify-openshell.py" "${HOME}/prime-update/"
 sudo install -o root -g root -m 0644 "$repo/deploy/spark/container/task_common.py" "$repo/deploy/spark/container/model_gateway.py" "$repo/deploy/spark/container/openshell_runner.py" "$repo/deploy/spark/container/kvm_broker.py" /usr/local/lib/prime-runner/
 sudo install -o root -g root -m 0644 "$repo/deploy/spark/container/inference_policy.py" /usr/local/lib/prime-runner/
 sudo install -o root -g root -m 0644 "$repo/deploy/spark/container/volume_provisioner.py" "$repo/deploy/spark/container/shared_skills.py" "$repo/deploy/spark/prime/AGENTS.managed.md" /usr/local/lib/prime-runner/

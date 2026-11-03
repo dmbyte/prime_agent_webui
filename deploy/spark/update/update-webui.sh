@@ -47,6 +47,9 @@ python3 -m unittest discover -s "$source_dir" -p 'test*.py'
 # identity-verifying installer so the updater cannot report success while old
 # sandbox images remain active. Generic non-OpenShell installations skip this.
 if command -v openshell >/dev/null 2>&1 && command -v docker >/dev/null 2>&1; then
+  if ! test -r /var/lib/prime-runner/openshell-maintenance.lock; then
+    bash "$repo/deploy/spark/openshell/install-update-guards.sh" --activate-while-idle
+  fi
   PRIME_RUNNER_WORKSPACE_ROOT="${PRIME_RUNNER_WORKSPACE_ROOT:-${HOME}/prime-agent/tasks}" \
     "$repo/deploy/spark/openshell/install.sh"
 fi
@@ -58,6 +61,7 @@ install -m 0644 "$repo/deploy/spark/container/console_feed.py" "$live/console_fe
 install -m 0755 "$source_dir/install-static.sh" "$live/install-static.sh"
 sudo install -d -o root -g root -m 0755 /usr/local/lib/prime-runner /usr/local/libexec
 sudo install -o root -g root -m 0644 \
+  "$repo/deploy/spark/dashboard/runtime_maintenance.py" \
   "$repo/deploy/spark/container/task_common.py" \
   "$repo/deploy/spark/container/hosting_auth.py" \
   "$repo/deploy/spark/container/openshell_runner.py" \
@@ -93,6 +97,8 @@ if id prime-runner >/dev/null 2>&1; then
 fi
 
 install -d -m 0755 "${HOME}/prime-update" "${HOME}/.config/systemd/user"
+install -m 0644 "$repo/deploy/spark/openshell/release.json" "${HOME}/prime-update/openshell-release.json"
+install -m 0755 "$repo/deploy/spark/update/verify-openshell.py" "${HOME}/prime-update/"
 install -m 0644 "$repo/deploy/spark/systemd/prime-connection-broker.service" "${HOME}/.config/systemd/user/"
 # Copy only: never enable or start the opt-in connection runtime during updates.
 if sudo test -d "/var/lib/prime-runner/users/${USER}/prime/agent/skills"; then

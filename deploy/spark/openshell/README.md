@@ -4,8 +4,52 @@ The DGX Spark release runs WebUI tasks inside NVIDIA OpenShell sandboxes through
 the local Docker driver. OpenShell replaces the earlier task-container runtime
 for production use.
 
-The reviewed package is NVIDIA OpenShell `0.1.5-1` for ARM64, with SHA256
-`ae381703f78061141bbac44aa85fb7d9856cb567d2ab2b4306318365f5466ac5`.
+The reviewed package is NVIDIA OpenShell `0.1.6-1` for ARM64, with SHA256
+`2f6e2b7b09399d91443fc8e25bd5db360dfee562db17bb2778ac0d0067969f85`.
+The single source is `release.json`, deployed as
+`~/prime-update/openshell-release.json` for both the API and updater. A stale
+source checkout cannot silently change the installed approval. Missing/invalid
+approval fails closed; publish it only with the matching reviewed runtime code.
+
+For 0.1.5 → 0.1.6, retain mTLS and validate with the real local TLS directory.
+Never enable `allow_unauthenticated_users` as an upgrade workaround. Docker's
+supervisor and injected sandbox runtime must both be 0.1.6; the updater prepares
+both images before stopping the gateway. Prime 0.9.5 workload images stay pinned.
+See [upstream 0.1.6 upgrade notes](https://github.com/NVIDIA/OpenShell/releases/tag/v0.1.6).
+
+The root-provisioned `/var/lib/prime-runner/openshell-maintenance.lock` inode is
+shared by task launchers, API admission, native/private credential workers,
+hosting and KVM startup. Never replace/delete it while services are running.
+The updater holds an exclusive lease through inventory, installation and
+verification; competing work gets an explicit retry message. Existing sandboxes
+block the update and are never automatically deleted. Only a competing updater's
+own lock failure leaves the current operation's status unchanged.
+
+Before package installation the updater downloads the previous package, stops the
+idle gateway and archives its configuration/state into a private
+`~/.prime/agent/openshell-backup.*` directory. Keep this archive private: it contains
+authentication state. Recovery is an operator action: block new admissions,
+preserve any newer state, stop the gateway, reinstall the saved package (with
+explicit downgrade approval), and restore the matching saved state if required.
+Do not restore older state over newly created user work. Retain old runtime images.
+
+Existing Prime deployments from before these guards need the one-time migration
+before the broad installer or an OpenShell update. From a reviewed checkout run
+`bash deploy/spark/openshell/install-update-guards.sh --activate-while-idle` as the
+WebUI host owner. It checks every user's tasks and all workspaces, makes a private
+code backup, briefly pauses Nginx to prevent new external submissions, rechecks
+idle state and installs/restarts only the necessary guards. It never stops a
+running task or deletes a sandbox. Nginx is restored on failure. The WebUI updater
+performs this migration automatically when the guard is missing. Keep the old
+checkout unchanged if it contains local edits; use a separate reviewed checkout.
+Fresh deployments create the guard during normal installation.
+
+An update/no-op retry succeeds only after actual fresh sandbox execution with
+IPython, streamed output, interrupted exec and cleanup—not gateway status alone.
+After a version migration, also run the synthetic native-connection,
+private-browser/console, ordinary-user/shared-skill and LAN-hosting validators
+while idle. These extended checks are operator acceptance, not claims implied by
+the updater's smaller built-in canary. Do not exercise real BMC input/power controls.
 
 For 0.1.4 → 0.1.5, preserve gateway state/configuration and old audit logs in a
 protected backup before upgrading while idle. Supervisor OCSF filenames changed
@@ -23,7 +67,7 @@ volumes carry `openshell.ai/sandbox-attachable=true` and
 are not removed when an unlabeled Docker volume definition is recreated.
 
 Settings distinguishes an upstream release from a Prime-approved upgrade. If the
-latest release differs from this installer pin, the button shows **Requires Prime
+latest release differs from the installed approval manifest, the button shows **Requires Prime
 compatibility update** and explains the blocker. Both API and updater enforce it.
 The updater checks published and pinned SHA256 values, validates the current
 configuration with the candidate gateway, and rechecks sandbox absence just before

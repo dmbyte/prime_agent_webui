@@ -14,10 +14,10 @@ spec.loader.exec_module(api)
 class OpenShellUpdateTests(unittest.TestCase):
     def test_reviewed_pin_controls_upgrade_not_upstream_availability(self):
         with tempfile.TemporaryDirectory() as directory:
-            installer = Path(directory)/'deploy/spark/openshell/install.sh'
+            installer = Path(directory)/'prime-update/openshell-release.json'
             installer.parent.mkdir(parents=True)
-            installer.write_text('version=0.1.4\n')
-            with mock.patch.dict(api.os.environ, {'PRIME_WEBUI_REPO':directory}):
+            installer.write_text(json.dumps({'version':'0.1.4','sha256':'a'*64,'asset':'openshell_0.1.4-1_arm64.deb'}))
+            with mock.patch.object(api.legacy, 'HOME', Path(directory)):
                 self.assertIsNone(api.openshell_upgrade_blocker('0.1.2','v0.1.4'))
                 self.assertIn('approved for 0.1.4', api.openshell_upgrade_blocker('0.1.4','v0.1.5'))
                 self.assertIn('migration', api.openshell_upgrade_blocker('0.0.116','v0.1.4'))
@@ -93,6 +93,24 @@ assert.equal($('button').disabled,true);assert.equal($('button').textContent,'Up
         current=source.split('if ! dpkg --compare-versions "$version" gt "$installed"; then',1)[1].split('fi',1)[0]
         self.assertLess(current.index('verify_gateway'),current.index('set_dashboard_version'))
         self.assertIn('systemctl --user restart openshell-gateway.service\nverify_gateway',source)
+
+    def test_lock_precedes_status_and_admission_precedes_inventory(self):
+        source=(Path(__file__).parents[1]/'update/update-openshell.sh').read_text()
+        self.assertLess(source.index('flock -n 9'),source.index('trap finish EXIT'))
+        self.assertLess(source.index('flock -n -x 8'),source.index('sandbox_ids=$'))
+        self.assertLess(source.index('verify-openshell.py',source.index('sudo -n apt-get install')),
+                        source.rindex('set_dashboard_version "$version"'))
+        self.assertIn('OPENSHELL_LOCAL_TLS_DIR=', source)
+        self.assertNotIn('PRIME_WEBUI_REPO', source)
+
+    def test_manifest_is_single_installer_approval_source(self):
+        root=Path(__file__).parents[1]
+        release=json.loads((root/'openshell/release.json').read_text())
+        self.assertEqual(release['version'],'0.1.6')
+        self.assertEqual(release['asset'],'openshell_0.1.6-1_arm64.deb')
+        self.assertRegex(release['sha256'],r'^[a-f0-9]{64}$')
+        self.assertIn('openshell/release.json',(root/'openshell/install.sh').read_text())
+        self.assertIn('openshell-release.json',(root/'update/update-webui.sh').read_text())
 
     def test_readiness_function_retries_and_fails_boundedly(self):
         source=(Path(__file__).parents[1]/'update/update-openshell.sh').read_text()

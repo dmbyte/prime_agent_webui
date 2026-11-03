@@ -19,6 +19,10 @@ required=(
   deploy/spark/dashboard/connections.py
   deploy/spark/dashboard/connection_broker.py
   deploy/spark/dashboard/connection_native.py
+  deploy/spark/dashboard/runtime_maintenance.py
+  deploy/spark/openshell/release.json
+  deploy/spark/openshell/install-update-guards.sh
+  deploy/spark/update/verify-openshell.py
   deploy/spark/dashboard/connection_http_worker.py
   deploy/spark/dashboard/connection_approvals.py
   deploy/spark/dashboard/connection_sessions.py
@@ -108,10 +112,14 @@ done
 bash -n install.sh deploy/spark/update/update-prime-agent.sh deploy/spark/update/update-webui.sh deploy/spark/update/update-openshell.sh \
   deploy/spark/container/install-user-codex-credential.sh \
   deploy/spark/prime/install-skills.sh \
-  deploy/spark/openshell/install.sh deploy/spark/openshell/install-hosting.sh deploy/spark/openshell/provision-volumes.sh \
+  deploy/spark/openshell/install.sh deploy/spark/openshell/install-update-guards.sh deploy/spark/openshell/install-hosting.sh deploy/spark/openshell/provision-volumes.sh \
   deploy/spark/container/prime-container-entrypoint.sh
 python3 -m compileall -q deploy/spark/dashboard deploy/spark/container deploy/spark/prime
 python3 -c 'from cryptography.hazmat.primitives.ciphers.aead import AESGCM'
+test_lock=$(mktemp)
+trap 'rm -f "$test_lock"' EXIT
+export PRIME_MAINTENANCE_LOCK="$test_lock"
+export PYTHONPATH="$root/deploy/spark/dashboard:$root/deploy/spark/container${PYTHONPATH:+:$PYTHONPATH}"
 python3 -m unittest discover -s deploy/spark/dashboard -p 'test*.py'
 python3 -m unittest discover -s deploy/spark/prime -p 'test_*skill*.py'
 
