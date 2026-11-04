@@ -409,3 +409,18 @@ Keep raw local evidence outside the public repository. Publish only reviewed
 synthetic aggregate results with their limitations. No cloud routing, data
 sharing approval, credential grant, model training or production promotion is
 performed by these scripts.
+
+### Follow-up hardening boundary
+
+The saved-connection broker now retains human-approved KVM/SOL action receipts,
+including uncertain outcomes, across retries and session loss. Synthetic fault
+injection and Settings browser checks exercise that path. The general KVM client
+also validates its `pages()` list contract; raw worker replies remain dictionaries.
+See [receipt semantics and installation](../../docs/connection-extensions.md#durable-action-receipts).
+
+These changes do **not** make the frozen `spark-agent-v1` fixture broker-aware:
+it calls the raw worker and intentionally remains unchanged. Legacy general KVM
+and arbitrary browser scripts still lack the saved-connection guarantee. Do not
+reinterpret v1 failures, bypass the failing gate or promote FP4 on receipt tests.
+Next acceptance needs the trusted action broker, independent observed-effect
+counters and new suite version, then matched model/vision/soak tests.

@@ -214,6 +214,7 @@
       const refresh = el('button', 'Refresh connections'); refresh.type = 'button'; refresh.onclick = loadConnections; body.append(refresh);
       const approvals = el('div'); approvals.id = 'connectionApprovals'; body.append(approvals);
       renderApprovals(data.consoleApprovals || []);
+      renderReceipts(data.consoleReceipts || []);
       for (const row of data.connections) {
         const box = el('details', '', 'settings-card'); box.append(el('summary', row.name));
         box.append(el('p', `${row.status} · ${row.enabled ? 'enabled' : 'disabled'} · expires ${new Date(row.expiresAt*1000).toLocaleString()} · ${row.operations.join(', ')}`, 'muted'));
@@ -252,6 +253,17 @@
       }
       root.append(card);
     }
+  }
+  function renderReceipts(rows) {
+    const root = document.getElementById('connectionApprovals'); if (!root || !rows.length) return;
+    const history = el('details'); history.append(el('summary', 'Recent console action receipts'));
+    for (const row of rows) {
+      const card = el('div', '', 'settings-card');
+      card.append(el('p', `${row.operation} · ${row.state === 'acknowledged' ? 'Worker acknowledged; verify the target' : 'Outcome unknown — do not repeat'}`));
+      card.append(el('p', `Task ${row.taskId} · request ${row.requestId}`, 'muted'));
+      card.append(el('p', row.message, 'muted')); history.append(card);
+    }
+    root.append(history);
   }
   document.querySelector('[data-panel="settings"]')?.addEventListener('click', load);
 })();

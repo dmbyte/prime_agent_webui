@@ -14,6 +14,7 @@ import tempfile
 import time
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
+from typing import TypedDict
 
 
 SOCKET = "/run/prime-gateway/kvm.sock"
@@ -21,6 +22,27 @@ MAX_FRAME = 2_000_000
 KEYS = {"Enter", "Escape", "Tab", "Backspace", "Delete", "Insert", "Home", "End",
         "PageUp", "PageDown", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
         *(f"F{number}" for number in range(1, 13))}
+
+
+class PageInfo(TypedDict):
+    index: int
+    url: str
+    title: str
+
+
+def page_list(result: dict) -> list[PageInfo]:
+    """Decode raw worker/broker {'pages': [...]} into the client convenience list.
+
+    Contract errors are read failures, never an instruction to repeat input.
+    """
+    if not isinstance(result, dict) or not isinstance(result.get('pages'), list):
+        raise ValueError("KVM pages expects {'pages': [PageInfo, ...]}; do not repeat any input")
+    pages = result['pages']
+    if len(pages) > 8 or any(not isinstance(p, dict) or type(p.get('index')) is not int
+            or not 0 <= p['index'] < 8 or not isinstance(p.get('title'), str)
+            or not isinstance(p.get('url'), str) for p in pages):
+        raise ValueError('Invalid KVM PageInfo list; do not repeat any input')
+    return pages
 
 
 def _origin(value: str) -> tuple[str, str]:
@@ -121,8 +143,12 @@ class KVMClient:
     def status(self) -> dict:
         return self._call("status")
 
-    def pages(self) -> list[dict]:
-        return self._call("pages")["pages"]
+    def pages(self) -> list[PageInfo]:
+        """Return a list, e.g. [{'index': 0, 'url': 'https://bmc/', 'title': 'Console'}].
+
+        Only the raw broker/worker protocol wraps this list in {'pages': [...]}.
+        """
+        return page_list(self._call("pages"))
 
     def inspect(self) -> dict:
         """Read bounded page/frame/control metadata; never form values."""

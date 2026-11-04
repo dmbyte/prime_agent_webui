@@ -78,8 +78,8 @@ all console adapters; use an explicit list for a partial rollout.
 | Reviewed adapter | Operations | Additional human approval |
 |---|---|---|
 | `bmc-browser` | `browser.open`, `browser.capture`, `browser.close` | No control API; only login and masked viewport capture |
-| `bmc-kvm` | `kvm.open`, `kvm.capture`, `kvm.input`, `kvm.close` | Every exact input |
-| `ipmi-sol` | `ipmi.status`, `sol.open`, `sol.read`, `sol.input`, `sol.close` | Opening SOL and every exact input |
+| `bmc-kvm` | `kvm.open`, `kvm.capture`, `kvm.input`, `kvm.receipt`, `kvm.close` | Every exact input |
+| `ipmi-sol` | `ipmi.status`, `sol.open`, `sol.read`, `sol.input`, `sol.receipt`, `sol.close` | Opening SOL and every exact input |
 
 Declarations require exactly `endpoint`, `username`, `password`. An endpoint is
 an explicit HTTPS private IPv4 origin on port 443; for IPMI it identifies the
@@ -170,6 +170,49 @@ connection revision. The agent retries the same request ID; an approved input
 is consumed before execution and cannot be replayed. An uncertain/failed input
 requires a new explicit approval, never an automatic duplicate.
 
+#### Durable action receipts
+
+Saved-connection KVM/SOL input and SOL opening use a disk-synced record before
+dispatch. The broker permits at most one dispatch per human-approved action.
+This is **not exactly-once execution**: a crash between recording and sending may
+result in no input, while a lost reply after sending may mean input occurred.
+
+- `actionReceipt.state="acknowledged"` means the worker returned successfully,
+  not that BIOS/OS achieved the intended result. Verify using capture/read.
+- `state="unknown"` means dispatch may have occurred or may still be running.
+  Stop, inspect the target and ask the user. Do not resend, switch tools, recreate
+  the session or mint a replacement ID to retry automatically.
+- After a lost reply, use `kvm.receipt` or `sol.receipt` with only the original
+  `{"requestId":"<uuid hex>"}`. No live session is needed. Owner/task/connection
+  grants and their revocation checks still apply. A missing receipt is not
+  permission to resend.
+- Repeating an attempted request returns its receipt without sending input.
+  Changing its arguments/session/operation under the same ID is rejected. A new
+  ID requires a new human approval; it is not new authority by itself.
+- Repeating SOL open returns the receipt plus `sessionAvailable`; `sessionId`
+  is returned only while that original lease remains alive. It never silently
+  opens another SOL channel after closure/restart. Browser/KVM login opens are
+  not covered by this SOL/input ledger.
+
+**Settings → My connections → Recent console action receipts** displays the last
+20 attempted actions, including uncertain outcomes, separately from approvals.
+Records remain private under `connection-approvals/` beside the auth configuration;
+no secrets, raw worker responses or exception text are added to receipts. Exact
+approved input arguments are already stored privately: never put passwords in
+agent console text. Historical `consumed` records are treated as unknown.
+Receipts are retained across expiry/restart, with a hard 8192-record cap and a
+128-active-approval cap. Capacity exhaustion fails closed; do not delete receipts
+to retry an action. Archival/retention automation remains future work.
+Preserve this ledger in backups. Do not downgrade to an older broker after using
+receipts: older expiry cleanup can erase replay protection. Prefer a forward
+repair, or keep console mutations disabled during any reviewed rollback.
+
+This guarantee applies only to the **saved-connection broker**. The older general
+`KVMClient`/owner socket and arbitrary browser automation still use caller
+confirmation and do not yet enforce durable, human-issued one-shot steps. Do
+not claim universal replay protection or approve a model promotion from these
+tests. Migrating that path and a new matched live agent gate remain required.
+
 Keys/text can affect firmware or the running OS. Do not approve them merely
 because the credential is saved; confirm the target and intended effect first.
 Never type passwords through model-generated console input. This path does not
@@ -202,6 +245,12 @@ one to stage files while users are working. Work from a separate source export.
    Playwright and Python; no image rebuild is needed for the tested fixture.
    Real internal CA trust may require a reviewed operation-image change. Do not
    grant a general task writable access to trust roots or broker code.
+   Receipt changes require matched auth/API/connection-broker modules and UI;
+   restart them only under idle maintenance admission. Existing task images can
+   call the new receipt operations without a rebuild. The separate typed
+   `KVMClient.pages()` helper is shipped by the managed skill/image installer;
+   it requires a later image rebuild for existing pinned task images. Do not
+   rewrite the frozen v1 evaluation prompt to reclassify previous failures.
 3. Provide the broker a protected copy of the **actual deployed** pinned image
    manifest; verify its tags against the installed images. Set
    `PRIME_CONNECTION_IMAGE_MANIFEST` to that absolute path. Install the distro's

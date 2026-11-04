@@ -22,8 +22,8 @@ import skill_credentials as credentials
 
 ADAPTERS = {'github-readonly': ['github.repository'], 'redfish-readonly': ['redfish.systems']}
 CONSOLE_ADAPTERS = {'bmc-browser': ['browser.open', 'browser.capture', 'browser.close'],
-                    'bmc-kvm': ['kvm.open', 'kvm.capture', 'kvm.input', 'kvm.close'],
-                    'ipmi-sol': ['ipmi.status', 'sol.open', 'sol.read', 'sol.input', 'sol.close']}
+                    'bmc-kvm': ['kvm.open', 'kvm.capture', 'kvm.input', 'kvm.receipt', 'kvm.close'],
+                    'ipmi-sol': ['ipmi.status', 'sol.open', 'sol.read', 'sol.input', 'sol.receipt', 'sol.close']}
 ADAPTERS.update(CONSOLE_ADAPTERS)
 
 
@@ -149,6 +149,7 @@ class Connections:
                 'consoleRuntimeEnabled': os.environ.get('PRIME_CONNECTION_CONSOLES_ENABLED') == '1',
                 'consoleAdapters': sorted(console_adapters()),
                 'defaultHttpTransport': os.environ.get('PRIME_CONNECTION_HTTP_TRANSPORT', 'direct'),
+                'consoleReceipts': Approvals(self.root).history(owner),
                 'consoleApprovals': [dict(pending, endpoint=rows.get(pending['connection'], {}).get('endpoint'),
                                          name=rows.get(pending['connection'], {}).get('name'))
                                      for pending in Approvals(self.root).pending(owner)]}

@@ -236,11 +236,141 @@ class ConsoleTests(unittest.TestCase):
         pending = self.call('sol.input', args)
         self.worker.send.assert_not_called()
         self.approve(pending)
-        self.assertEqual(self.call('sol.input', args), {'sent': True})
+        self.assertEqual(self.call('sol.input', args)['actionReceipt']['state'], 'acknowledged')
         self.worker.send.assert_called_once_with(args)
-        with self.assertRaises(PermissionError): self.call('sol.input', args)
-        changed = self.call('sol.input', dict(args, key='enter'))
+        self.assertEqual(self.call('sol.input', args)['actionReceipt']['state'], 'acknowledged')
+        self.worker.send.assert_called_once()
+        with self.assertRaises(PermissionError): self.call('sol.input', dict(args, key='enter'))
+        changed = self.call('sol.input', dict(args, requestId='c'*32, key='enter'))
         self.assertTrue(changed['approvalRequired'])
+
+    def test_uncertain_input_survives_close_restart_and_new_session(self):
+        self.configure('bmc-kvm')
+        key = self.call('kvm.open')['sessionId']
+        args = {'sessionId': key, 'requestId': 'b'*32, 'key': 'f9'}
+        self.approve(self.call('kvm.input', args))
+        self.worker.send.side_effect = TimeoutError('SECRET MUST NOT BE RECORDED')
+        result = self.call('kvm.input', args)
+        self.assertEqual(result['actionReceipt']['state'], 'unknown')
+        self.call('kvm.close', {'sessionId': key})
+        self.manager.sessions = connection_sessions.Sessions(self.manager, mock.Mock(), self.factory, self.factory)
+        self.assertEqual(self.call('kvm.input', args), result)
+        self.assertEqual(self.call('kvm.receipt', {'requestId': 'b'*32}), result)
+        new = self.call('kvm.open', {'requestId': 'c'*32})['sessionId']
+        with self.assertRaises(PermissionError): self.call('kvm.input', dict(args, sessionId=new))
+        pending = self.call('kvm.input', dict(args, sessionId=new, requestId='d'*32))
+        self.assertTrue(pending['approvalRequired'])  # Agent-minted IDs are not authority.
+        self.worker.send.assert_called_once()
+        for path in (self.manager.root/'connection-approvals').glob('*.json'):
+            self.assertNotIn('SECRET', path.read_text())
+
+    def test_consumption_survives_crash_and_expiry_without_dispatch(self):
+        self.configure(); key = self.open()
+        args = {'sessionId': key, 'requestId': 'b'*32, 'key': 'f9'}
+        pending = self.call('sol.input', args); self.approve(pending)
+        ledger = self.manager.sessions.approvals
+        claim = self.manager.verify(self.token, 'alice')
+        row = self.manager.store._load('alice')[self.key]
+        self.assertIsNone(ledger.require('alice', claim, self.key, row, 'sol.input', args))
+        path = ledger.root/(pending['approvalId']+'.json')
+        record = json.loads(path.read_text()); record['expiresAt'] = 1
+        skill_credentials._write(path, json.dumps(record).encode())
+        self.assertEqual(ledger.pending('alice'), [])
+        self.assertTrue(path.exists())
+        self.assertEqual(self.call('sol.input', args)['actionReceipt']['state'], 'unknown')
+        self.worker.send.assert_not_called()
+
+    def test_sol_open_failure_is_not_repeated(self):
+        self.configure(); self.approve(self.call())
+        self.factory.side_effect = TimeoutError('synthetic')
+        self.assertEqual(self.call()['actionReceipt']['state'], 'unknown')
+        self.assertFalse(self.call()['sessionAvailable'])
+        self.factory.assert_called_once()
+
+    def test_sol_reopen_after_close_returns_receipt_not_new_worker(self):
+        self.configure(); key = self.open()
+        self.assertEqual(self.call()['sessionId'], key)
+        self.call('sol.close', {'sessionId': key})
+        self.assertFalse(self.call()['sessionAvailable'])
+        self.factory.assert_called_once()
+
+    def test_receipt_scope_and_revocation_remain_enforced(self):
+        self.configure(); self.open()
+        self.assertTrue(self.manager.view('alice')['consoleReceipts'])
+        self.assertFalse(self.manager.view('bob')['consoleReceipts'])
+        self.meta['tasks']['d'*32] = {'owner': 'alice', 'projectId': fixtures.PROJECT, 'status': 'running'}; self.save_meta()
+        other = self.manager.issue('alice', 'd'*32, fixtures.PROJECT, fixtures.POLICY)
+        with self.assertRaises(ValueError): self.call('sol.receipt', {'requestId':'a'*32}, token=other)
+        self.manager.revoke(fixtures.TASK)
+        with self.assertRaises(OSError): self.call('sol.receipt', {'requestId':'a'*32})
+
+    def test_receipt_is_durable_before_worker_and_write_failure_fails_closed(self):
+        self.configure(); key = self.open()
+        args = {'sessionId': key, 'requestId': 'b'*32, 'key': 'f9'}
+        pending = self.call('sol.input', args); self.approve(pending)
+        def sent(_):
+            row = json.loads((self.manager.sessions.approvals.root/(pending['approvalId']+'.json')).read_text())
+            self.assertEqual(row['state'], 'dispatching')
+            return {'sent': True}
+        self.worker.send.side_effect = sent
+        with mock.patch.object(connection_approvals.os, 'fsync', side_effect=OSError('disk error')):
+            with self.assertRaises(OSError): self.call('sol.input', args)
+        self.worker.send.assert_not_called()
+        self.call('sol.input', args)
+        self.worker.send.assert_called_once()
+
+    def test_concurrent_claim_consumes_one_human_approval_once(self):
+        from concurrent.futures import ThreadPoolExecutor
+        self.configure(); key = self.open()
+        args = {'sessionId': key, 'requestId': 'b'*32, 'key': 'f9'}
+        self.approve(self.call('sol.input', args))
+        claim = self.manager.verify(self.token, 'alice'); row = self.manager.store._load('alice')[self.key]
+        def consume(_):
+            return connection_approvals.Approvals(self.manager.root).require('alice', claim, self.key, row, 'sol.input', args)
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            results = list(pool.map(consume, range(8)))
+        self.assertEqual(results.count(None), 1)
+        self.assertTrue(all(r is None or r['actionReceipt']['state'] == 'unknown' for r in results))
+
+    def test_legacy_consumed_record_is_unknown_never_replayed(self):
+        self.configure(); key = self.open()
+        args = {'sessionId': key, 'requestId': 'b'*32, 'key': 'f9'}
+        pending = self.call('sol.input', args)
+        path = self.manager.sessions.approvals.root/(pending['approvalId']+'.json')
+        row = json.loads(path.read_text()); row.update(state='consumed', expiresAt=1)
+        skill_credentials._write(path, json.dumps(row).encode())
+        self.assertEqual(self.call('sol.input', args)['actionReceipt']['state'], 'unknown')
+        self.worker.send.assert_not_called()
+
+    def test_failed_completion_write_cannot_reexecute_sent_input(self):
+        self.configure(); key = self.open()
+        args = {'sessionId': key, 'requestId': 'b'*32, 'key': 'f9'}
+        self.approve(self.call('sol.input', args))
+        ledger = self.manager.sessions.approvals
+        save = ledger._save
+        def fail_completion(path, record):
+            if record['state'] == 'acknowledged': raise OSError('disk full')
+            return save(path, record)
+        with mock.patch.object(ledger, '_save', side_effect=fail_completion):
+            with self.assertRaises(OSError): self.call('sol.input', args)
+        self.assertEqual(self.call('sol.input', args)['actionReceipt']['state'], 'unknown')
+        self.worker.send.assert_called_once()
+
+    def test_record_capacity_never_evicts_consumed_actions(self):
+        self.configure(); self.open()
+        with mock.patch.object(connection_approvals, 'MAX_RECORDS', 1):
+            with self.assertRaisesRegex(ValueError, 'storage full'):
+                self.call(arguments={'requestId': 'b'*32})
+        self.assertEqual(self.call('sol.receipt', {'requestId': 'a'*32})['actionReceipt']['state'], 'acknowledged')
+
+    def test_invalid_worker_reply_is_unknown_not_success(self):
+        self.configure(); key = self.open()
+        args = {'sessionId': key, 'requestId': 'b'*32, 'key': 'f9'}
+        self.approve(self.call('sol.input', args))
+        self.worker.send.return_value = {'sent': 'true'}
+        self.assertEqual(self.call('sol.input', args)['actionReceipt']['state'], 'unknown')
+        self.call('sol.input', args)
+        self.worker.send.assert_called_once()
 
     def test_read_close_and_cross_task_access(self):
         self.configure(); key = self.open()

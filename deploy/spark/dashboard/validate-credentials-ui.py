@@ -68,7 +68,7 @@ def main():
                     alice, bob = [ctx.new_page() for ctx in contexts]
                     for page in [alice, bob]:
                         page.goto(origin); page.get_by_role('button', name='Settings', exact=True).click()
-                        page.locator('#credentialSettings summary').click()
+                        page.locator('#credentialSettings > summary').click()
                         page.get_by_text('Required values missing', exact=True).wait_for()
                     alice.get_by_label('Token', exact=True).fill('SYNTHETIC_BROWSER_SECRET')
                     assert not alice.get_by_label('Ignore certificate errors', exact=True).is_checked()
@@ -128,6 +128,16 @@ def main():
                     alice.get_by_role('button', name='Allow once', exact=True).wait_for(state='detached')
                     assert json.loads(skill_credentials._read(home/'connection-approvals'/(pending['approvalId']+'.json')))['state'] == 'approved'
                     assert alice.evaluate("async body=>(await fetch('/auth/connections',{method:'POST',headers:{'Content-Type':'application/json','X-Prime-CSRF':'alice-csrf'},body:JSON.stringify(body)})).status", decision) == 400
+                    ledger = Approvals(home)
+                    claim = {'taskId': task_id, 'expiresAt': time.time()+300}
+                    args = {'sessionId': 'synthetic-session', 'requestId': 'a'*32, 'key': 'f9'}
+                    assert ledger.require('alice', claim, connection_id, connection, 'sol.input', args) is None
+                    ledger.finish('alice', claim, connection_id, args, False)
+                    alice.get_by_role('button', name='Refresh connections', exact=True).click()
+                    alice.get_by_text('Recent console action receipts', exact=True).click()
+                    alice.get_by_text('sol.input · Outcome unknown — do not repeat', exact=True).wait_for()
+                    assert not bob.evaluate("async()=> (await (await fetch('/auth/connections')).json()).consoleReceipts")
+                    assert 'SYNTHETIC_BROWSER_SECRET' not in alice.content()
                     alice.get_by_text('Fixture connection', exact=True).click()
                     alice.once('dialog', lambda dialog: dialog.accept())
                     alice.get_by_role('button', name='Delete connection', exact=True).click()

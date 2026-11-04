@@ -53,6 +53,18 @@ class Sessions:
             return connection_sol.status(values)
         with self.lock:
             self.reap()
+            if action == 'receipt':
+                return self.approvals.receipt(owner, claim, request['connection'], arguments)
+            if action == 'input' or (family == 'sol' and action == 'open'):
+                previous = self.approvals.previous(owner, claim, request['connection'], row, operation, arguments)
+                if previous:
+                    if family == 'sol' and action == 'open':
+                        existing_key = 'pc-'+hashlib.sha256(json.dumps([owner, claim['taskId'], request['connection'],
+                                                                      family, arguments['requestId']]).encode()).hexdigest()[:16]
+                        previous['sessionAvailable'] = existing_key in self.sessions
+                        if existing_key in self.sessions:
+                            previous['sessionId'] = existing_key
+                    return previous
             if action == 'open':
                 if (set(arguments) != {'requestId'} or not isinstance(arguments['requestId'], str)
                         or not re.fullmatch(r'[a-f0-9]{32}', arguments['requestId'])):
@@ -68,7 +80,12 @@ class Sessions:
                     if pending:
                         return pending
                 expiry = min(time.time()+3600, claim['expiresAt'], row['expiresAt'])
-                worker = self.sol_factory(values) if family == 'sol' else self.browser_factory(self.native, key, values, family, expiry)
+                try:
+                    worker = self.sol_factory(values) if family == 'sol' else self.browser_factory(self.native, key, values, family, expiry)
+                except Exception:
+                    if family == 'sol':
+                        return self.approvals.finish(owner, claim, request['connection'], arguments, False)
+                    raise
                 self.sessions[key] = dict(owner=owner, token=request['token'], taskId=claim['taskId'],
                     connection=request['connection'], revision=row['revision'], family=family,
                     worker=worker, expiresAt=expiry, lastUse=time.monotonic())
@@ -79,7 +96,10 @@ class Sessions:
                 if not valid:
                     self.close(key)
                     raise PermissionError('Console grant changed while opening')
-                return {'sessionId': key, 'expiresAt': expiry, 'idleTimeoutSeconds': 300}
+                result = {'sessionId': key, 'expiresAt': expiry, 'idleTimeoutSeconds': 300}
+                if family == 'sol':
+                    result.update(self.approvals.finish(owner, claim, request['connection'], arguments, True))
+                return result
             key = arguments.get('sessionId')
             if not isinstance(key, str):
                 raise ValueError('Session ID required')
@@ -103,7 +123,15 @@ class Sessions:
                 if not self.valid(session):
                     self.close(key)
                     raise PermissionError('Console grant changed before input')
-                result = session['worker'].send(arguments)
+                try:
+                    acknowledgement = session['worker'].send(arguments)
+                    if not isinstance(acknowledgement, dict) or acknowledgement.get('sent') is not True:
+                        raise ValueError('Invalid console input acknowledgement')
+                except Exception:
+                    # Never persist or return exception text; it may contain secrets.
+                    result = self.approvals.finish(owner, claim, request['connection'], arguments, False)
+                else:
+                    result = self.approvals.finish(owner, claim, request['connection'], arguments, True)
             else:
                 raise ValueError('Unsupported console operation')
             session['lastUse'] = time.monotonic()

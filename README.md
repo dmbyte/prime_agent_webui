@@ -775,6 +775,13 @@ are rejected as non-console targets. Inspect
 on-demand PNG/JPEG frames before sending confirmed keyboard, mouse, or form input.
 `capture('console.png')` saves below `/project`. `inspect()` lists visible controls,
 login-page presence, and frame indexes without exposing form values.
+`KVMClient.pages()` returns a validated list of `{index, url, title}` objects;
+the raw worker/broker protocol instead returns `{"pages": [...]}`. A polling or
+parsing failure never authorizes repeating console input. For saved connections,
+[durable action receipts](docs/connection-extensions.md#durable-action-receipts)
+prevent a human-approved KVM/SOL action from being dispatched twice and expose
+uncertain outcomes in Settings. This protection does **not** yet cover the older
+general KVM socket or arbitrary browser scripts.
 Capture replies use complete, newline-framed socket writes, bounded to 3.5 MB
 of JSON and 2 MB per decoded image. An incomplete reply raises a transport error
 without overwriting an existing capture; do not infer the console state or send

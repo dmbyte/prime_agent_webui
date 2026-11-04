@@ -28,6 +28,15 @@ def load_broker():
 
 
 class KVMTests(unittest.TestCase):
+    def test_pages_contract_is_validated_list_not_raw_envelope(self):
+        rows = [{'index': 0, 'url': 'https://bmc.example/', 'title': 'Console'}]
+        with mock.patch.object(client, '_broker', return_value={'pages': rows}) as call:
+            self.assertEqual(client.KVMClient('a'*32).pages(), rows)
+            self.assertEqual(call.call_args.args[0]['action'], 'pages')
+        for result in (rows, {}, {'pages': {}}, {'pages': ['Console']},
+                       {'pages': [{'index': True, 'url': '/', 'title': 'Console'}]}):
+            with self.subTest(result=result), self.assertRaises(ValueError): client.page_list(result)
+
     def test_viewer_sampling_never_extends_idle_timeout_or_sends_input(self):
         broker = load_broker()
         with tempfile.TemporaryDirectory() as directory:
