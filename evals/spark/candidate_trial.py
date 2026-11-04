@@ -73,6 +73,9 @@ def recover(root, recovery_token=None):
     deadline = time.monotonic() + 600
     while time.monotonic() < deadline:
         if healthy(30001):
+            if (root / 'agent-runtime.json').exists():
+                from agent_probe import cleanup
+                cleanup(root, recovery_token)
             marker.rename(root / 'restored-production.json')
             print('Original IQ4 production container restored and healthy', flush=True)
             return
@@ -84,7 +87,7 @@ def trial(root, grader_image, disable_qp_moe=False, *, name=NAME, context=131072
           utilization=.73, probe='screen', restart_checks=0, recovery_token=None):
     name = trial_name(name)
     validate_settings(context, utilization, restart_checks)
-    if probe not in ('screen', 'context'):
+    if probe not in ('screen', 'context', 'agent'):
         raise ValueError('Unknown probe')
     if not os.environ.get('PRIME_EVAL_MAINTENANCE_HELD'):
         raise RuntimeError('Maintenance guard required')
@@ -173,7 +176,12 @@ def trial(root, grader_image, disable_qp_moe=False, *, name=NAME, context=131072
         started = time.monotonic()
         subprocess.run(['bash', str(script)], env=environment, check=True, timeout=180)
         ready(started)
-        if probe == 'context':
+        if probe == 'agent':
+            print('Starting isolated Prime/OpenShell agent gate', flush=True)
+            subprocess.run([sys.executable, str(Path(__file__).with_name('agent_probe.py')),
+                            '--root', str(root), '--port', '30002'], check=True, timeout=2100,
+                           env=os.environ | {'PRIME_EVAL_INVOCATION': recovery_token})
+        elif probe == 'context':
             print('Starting distributed context / warm-follow-up gate', flush=True)
             subprocess.run([sys.executable, str(Path(__file__).with_name('context_probe.py')),
                             '--engine', 'vllm', '--port', '30002', '--context', str(context),
@@ -221,7 +229,7 @@ if __name__ == '__main__':
     parser.add_argument('--trial-name', default=NAME, type=trial_name)
     parser.add_argument('--context', type=int, choices=(131072, 262144), default=131072)
     parser.add_argument('--gpu-memory-utilization', type=float, default=.73)
-    parser.add_argument('--probe', choices=('screen', 'context'), default='screen')
+    parser.add_argument('--probe', choices=('screen', 'context', 'agent'), default='screen')
     parser.add_argument('--restart-checks', type=int, choices=(0, 1, 2), default=0)
     args = parser.parse_args()
     if args.recovery_token is not None and not re.fullmatch(r'[0-9a-f]{32}', args.recovery_token):

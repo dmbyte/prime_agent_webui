@@ -20,7 +20,7 @@ def main():
     parser.add_argument('--trial-name', default=NAME, type=trial_name)
     parser.add_argument('--context', type=int, choices=(131072, 262144))
     parser.add_argument('--gpu-memory-utilization', type=float, default=.73)
-    parser.add_argument('--probe', choices=('screen', 'context'), default='screen')
+    parser.add_argument('--probe', choices=('screen', 'context', 'agent'), default='screen')
     parser.add_argument('--restart-checks', type=int, choices=(0, 1, 2), default=0)
     args = parser.parse_args()
     context = args.context or (131072 if args.candidate else 262144)
@@ -38,7 +38,7 @@ def main():
     if not re.fullmatch(r'sha256:[0-9a-f]{64}', args.grader_image):
         parser.error('An immutable grader image ID is required')
     harness = root / 'harness'
-    for filename in ('maintenance_guard.py', 'run_screen.py', 'candidate_trial.py', 'context_probe.py', 'suite.py', 'code_grader.py', 'candidate.json'):
+    for filename in ('maintenance_guard.py', 'run_screen.py', 'candidate_trial.py', 'context_probe.py', 'agent_probe.py', 'agent_fixture.py', 'suite.py', 'code_grader.py', 'candidate.json'):
         if not (harness / filename).is_file():
             parser.error('Incomplete harness export')
     if args.candidate and not (root / 'candidate/recipe/serve/prime-trial-serve.sh').is_file():
@@ -52,6 +52,12 @@ def main():
     command = ['systemd-run', '--user', '--unit=' + unit,
                '--property=RuntimeMaxSec=' + ('10800' if args.probe == 'context' or args.restart_checks else '4500'), '--property=TimeoutStopSec=720',
                '--property=KillMode=mixed']
+    if args.probe == 'agent':
+        if (root / 'agent-work').exists() or (root / 'agent-runtime.json').exists():
+            parser.error('Agent probes require a fresh root')
+        command += ['--setenv=PRIME_EVAL_INVOCATION=' + recovery_token]
+        if not args.candidate:
+            command += ['--property=ExecStopPost=/usr/bin/python3 ' + str(harness / 'agent_probe.py') + ' --root ' + str(root) + ' --cleanup']
     # KillMode=mixed sends TERM only to the guard, which forwards it and keeps
     # admission held during candidate finally/recovery; forced kill is bounded.
     if args.candidate:
@@ -65,6 +71,8 @@ def main():
                     '--probe', args.probe, '--restart-checks', str(args.restart_checks)]
         if args.disable_qp_moe:
             command.append('--disable-qp-moe')
+    elif args.probe == 'agent':
+        command += [str(harness / 'agent_probe.py'), '--root', str(root), '--port', '30001']
     elif args.probe == 'context':
         command += [str(harness / 'context_probe.py'), '--engine', 'llama', '--port', '30001',
                     '--context', str(context), '--output', str(root / f'results/context-control-{stamp}.jsonl')]
