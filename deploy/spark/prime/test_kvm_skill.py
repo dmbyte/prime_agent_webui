@@ -179,9 +179,11 @@ class KVMTests(unittest.TestCase):
             with self.assertRaises(PermissionError):
                 service.dispatch({"action": "key", "sessionId": session.session_id, "key": "F9"})
             session.call.assert_not_called()
-            service.dispatch({"action": "key", "sessionId": session.session_id,
-                              "key": "F9", "confirm": True})
-            session.call.assert_called_once_with("key", key="F9", confirm=True)
+            for action in broker.INPUT_ACTIONS:
+                with self.assertRaisesRegex(PermissionError, 'Legacy KVM input is disabled'):
+                    service.dispatch({"action": action, "sessionId": session.session_id,
+                                      "key": "F9", "confirm": True, 'requestId':'b'*32, 'approvalId':'a_'+'b'*64})
+            session.call.assert_not_called()
             session.last_used = time.monotonic() - broker.IDLE - 1
             service.expire()
             session.close.assert_called_once()
@@ -214,8 +216,10 @@ class KVMTests(unittest.TestCase):
         self.assertEqual(broker.validate_url("https://bmc.example/"), "https://bmc.example/")
         text = (ROOT / "skills/bmc-html5-kvm/SKILL.md").read_text()
         self.assertIn("name: bmc-html5-kvm", text)
-        self.assertIn("HPE iLO 5", text)
-        self.assertIn("eight hours", text)
+        self.assertIn("iLO 5 remains unvalidated", text)
+        self.assertIn("PrivateKVMClient", text)
+        self.assertIn("at most one hour", text)
+        self.assertIn("disabled at both client", text)
 
 
 if __name__ == "__main__":

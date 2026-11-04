@@ -287,5 +287,8 @@ sudo find /var/lib/prime-runner/.config/openshell -type f -exec chmod 0600 {} +
 "$repo/deploy/spark/openshell/provision-volumes.sh"
 sudo install -o prime-runner -g prime-runner -m 0400 "$repo/deploy/spark/openshell/image-digests.json" /var/lib/prime-runner/openshell-image-digests.json
 sudo -u prime-runner env HOME=/var/lib/prime-runner openshell --gateway spark-local status
-sudo systemctl enable --now prime-kvm-broker.service
+sudo systemctl enable prime-kvm-broker.service
+# Activation must replace an already-running legacy input handler as well as
+# its files. The installer holds maintenance admission and rejects live sessions.
+sudo systemctl restart prime-kvm-broker.service
 bash "$repo/deploy/spark/openshell/install-hosting.sh"

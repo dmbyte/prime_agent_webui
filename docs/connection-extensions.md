@@ -207,11 +207,21 @@ Preserve this ledger in backups. Do not downgrade to an older broker after using
 receipts: older expiry cleanup can erase replay protection. Prefer a forward
 repair, or keep console mutations disabled during any reviewed rollback.
 
-This guarantee applies only to the **saved-connection broker**. The older general
-`KVMClient`/owner socket and arbitrary browser automation still use caller
-confirmation and do not yet enforce durable, human-issued one-shot steps. Do
-not claim universal replay protection or approve a model promotion from these
-tests. Migrating that path and a new matched live agent gate remain required.
+This guarantee applies to the **saved-connection broker**. Control is now routed
+through `PrivateKVMClient` in the reviewed task images. The older general
+`KVMClient`/owner socket rejects fill, click, key, text and focus input, even with
+forged confirmation/approval IDs or an old client. Read-only inspection remains.
+Arbitrary browser scripts still lack these receipts; never use them to evade
+console approvals or claim universal replay protection. A new matched live agent
+gate remains required before model promotion.
+
+`PrivateKVMClient.connections()` returns the current task's authorized KVM
+connections. `open(connection_id, request_id=...)` uses the saved login; never
+copy its password. `capture('console.png')` returns a workspace PNG path.
+`input(request_id=..., key='f9')` returns the pending approval or durable receipt.
+Keep IDs unchanged across approval and reconciliation. The class-level
+`action_receipt(connection_id, request_id)` needs no live session. There is no
+automatic approval, retry, arbitrary selector, mouse or script interface.
 
 Keys/text can affect firmware or the running OS. Do not approve them merely
 because the credential is saved; confirm the target and intended effect first.
@@ -249,8 +259,13 @@ one to stage files while users are working. Work from a separate source export.
    restart them only under idle maintenance admission. Existing task images can
    call the new receipt operations without a rebuild. The separate typed
    `KVMClient.pages()` helper is shipped by the managed skill/image installer;
-   it requires a later image rebuild for existing pinned task images. Do not
+   the reviewed manifest includes rebuilt images for all six profiles. Do not
    rewrite the frozen v1 evaluation prompt to reclassify previous failures.
+   The OpenShell installer now explicitly restarts the KVM broker after its idle
+   checks; `enable --now` alone would leave the old mutation handler running.
+   Install matching skill metadata/runtime instructions, image manifests and
+   broker together under maintenance admission. Preserve old image tags for
+   recovery, but do not re-enable the old input handler to bypass approvals.
 3. Provide the broker a protected copy of the **actual deployed** pinned image
    manifest; verify its tags against the installed images. Set
    `PRIME_CONNECTION_IMAGE_MANIFEST` to that absolute path. Install the distro's

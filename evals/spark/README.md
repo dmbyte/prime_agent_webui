@@ -420,7 +420,15 @@ See [receipt semantics and installation](../../docs/connection-extensions.md#dur
 
 These changes do **not** make the frozen `spark-agent-v1` fixture broker-aware:
 it calls the raw worker and intentionally remains unchanged. Legacy general KVM
-and arbitrary browser scripts still lack the saved-connection guarantee. Do not
+input is now disabled at both client and broker; use `PrivateKVMClient` and saved
+connections. Arbitrary browser scripts still lack that guarantee. Do not
 reinterpret v1 failures, bypass the failing gate or promote FP4 on receipt tests.
 Next acceptance needs the trusted action broker, independent observed-effect
 counters and new suite version, then matched model/vision/soak tests.
+
+The separate `validate-private-browser.py` integration canary now exercises the
+production connection/approval/session modules and real OpenShell Chromium with
+a synthetic HTTPS console. A trusted test driver approves exactly one F9. An
+independent target counter must stay at one after an injected lost reply, retries,
+session loss/replacement and a new request ID (which requires fresh approval).
+It is a broker/runtime test, not a model-driven acceptance or real BMC test.

@@ -224,6 +224,10 @@ class KVMBroker:
 
     def dispatch(self, request: dict) -> dict:
         action = request.get("action")
+        if action in INPUT_ACTIONS:
+            # This owner-shared socket has no authenticated task claim. Neither
+            # confirm=True nor a caller-generated request ID grants authority.
+            raise PermissionError("Legacy KVM input is disabled. Use PrivateKVMClient with a saved kvm connection and human-approved action receipts; never switch tools to bypass approval.")
         if action == "create":
             return self._new_session(request["url"], request.get("ignoreHttpsErrors") is True)
         if action == "list":
@@ -245,8 +249,6 @@ class KVMBroker:
             return {}
         if action not in WORKER_ACTIONS:
             raise ValueError("Unsupported KVM action")
-        if action in INPUT_ACTIONS and request.get("confirm") is not True:
-            raise PermissionError("KVM input requires explicit confirmation")
         values = {key: value for key, value in request.items() if key not in {"action", "sessionId"}}
         return session.call(action, **values)
 

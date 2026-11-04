@@ -1,135 +1,87 @@
 ---
 name: bmc-html5-kvm
-description: Maintain a bounded, reconnectable HTML5 BMC KVM session across Prime tasks; capture the console and send confirmed keyboard or mouse input. Initial target is HPE iLO 5.
+description: Inspect and control a saved-target HTML5 BMC console through task-bound connections, human-approved inputs and durable receipts. Legacy persistent KVM sessions are read-only.
 ---
 
-# Long-running HTML5 BMC KVM
+# Saved-target HTML5 BMC KVM
 
-## Saved credentials in Prime WebUI (preferred)
-
-For a saved target login, use the task's private connection capability from the
-runtime context. Never retrieve/copy the password into `KVMClient`, tool code or
-chat. List authorized connections through `POST http://127.0.0.1:31000/connections`
-using the in-memory `PRIME_CONNECTION_TOKEN`, and select one offering `kvm.open`.
-Open with a fresh `requestId`; retain `sessionId`. `kvm.capture` and `kvm.close`
-take only that session ID. Decode PNG base64 to an image; never print the payload.
-The broker identifies the login and HTML5 canvas conservatively; an unsupported
-launcher is a compatibility failure, not permission to guess or expose a secret.
-
-`kvm.input` takes the session ID, fresh request ID and one named `key` or printable
-`text`. If `approvalRequired`, the owner must approve the exact action under
-Settings → My connections → Console action approvals; then retry the same
-request unchanged. Never self-approve, send blind keys or enter a password as
-console input. The broker enforces account, project, target, expiry and revision.
-
-Private saved sessions are task-bound, at most one hour with five minutes idle.
-They do not inherit the longer lifetime or popout of the legacy broker below.
-Private captures return to the requesting task. Never claim a boot/installer
-outcome without inspecting a current console image. Close your session when done;
-do not close another user's viewer or change virtual media to test the adapter.
-
-## Legacy persistent KVM without saved-credential injection
-
-The WebUI's **Console viewer ↗** opens a read-only popout of the selected KVM
-page. It samples about once per second while the viewer is visible, without
-sending input or extending the session's idle lifetime. Closing the viewer does
-not close KVM. A stale frame is not proof of current server state. The viewer
-does not grant control, new permissions, or authorization for boot/power actions.
-
-Use with the `network-operations` profile and **LAN/VPN or Full network** mode. The
-owner-scoped KVM broker creates a separate OpenShell sandbox, so the browser
-can remain open after the current Prime task ends. A session lasts at most
-eight hours and expires after 45 minutes without a client request. It does
-not survive a broker restart, host reboot, or a BMC-imposed idle timeout.
-Never promise uninterrupted installation or virtual media. HPE iLO 5 is the
-first target, but an actual iLO 5 console has not yet been validated; other
-BMCs require their own validation too.
-The launcher supplies `PRIME_KVM_SOCKET` for the owner's KVM control channel in
-both supported network modes; keep that value rather than replacing it with a
-guessed path. `KVMClient.list_sessions()` checks broker availability without
-contacting a BMC. A missing control socket indicates a deployment or task-mount
-problem, not proof that the selected profile was denied. Report the exact error.
-Changes to the chat's controls apply when a new task starts.
-For iLO 5, the account needs Remote Console privilege, the feature must be
-enabled, and the installed license must support it. iLO's own idle timeout can
-close the console before the broker's limit and interrupt console-mounted
-virtual media; do not assume broker heartbeats override that policy.
-
-First call `KVMClient.list_sessions()` and reconnect to a matching target with
-`KVMClient.connect(session_id)`. There are only two concurrent sessions per
-owner. Repeated `create` for the same URL and TLS setting reuses the existing
-session without reloading its page. Never blindly close another active console
-to make room. Redfish API URLs are not console pages and are rejected by this
-adapter; use `RedfishClient` for those. Do not infer console success from loading
-an API page or login page.
-
-Use exactly `KVMClient.create(base_url, ignore_https_errors=False)` for a new
-connection or `KVMClient.connect(session_id)` for an existing one. Do not call
-`KVMClient(base_url, ...)`: the low-level constructor accepts only a session ID.
-If no matching session exists, create one with `KVMClient.create("https://bmc.example")`; retain the
-returned session ID in the conversation (not credentials) to reconnect later
-with `KVMClient.connect(id)`. The broker holds Chromium, not a password. Use
-`pages()` to find the popup that contains the HTML5 console, then
-`select_page(index)`. Capture a frame into the task workspace and inspect it
-before sending input. Browser screenshots are on demand, not a video stream.
-Login forms may be filled using `fill(..., confirm=True)` only after the user
-authorizes this exact BMC login; never record credentials in the transcript,
-source, screenshot filenames, or logs. `click`, `key`, and `type_text` also
-require exact-target, exact-action user authorization and `confirm=True`.
-They can change BIOS, boot or installation state. After each consequential
-input, capture and inspect another frame. Do not send blind keys. Do not mount
-or eject virtual media, reset power, save BIOS settings, or start an installer
-without specific authorization. The adapter offers no virtual-media API.
-
-The selected page must remain at the BMC's origin; normal query/fragment routes
-and an initial same-host HTTP-to-HTTPS upgrade are supported, not cross-host
-redirects or HTTPS downgrades. `inspect()` returns bounded control selectors,
-frame indexes, and `loginFormPresent` without form values. Its `consoleSurfaces`
-list identifies visible canvas/video surfaces with exact `frameIndex` and
-`selector` fields across same-origin frames. Use that list instead of guessing
-selectors or assuming frame 0. Select the inspected surface's frame with
-`select_frame(surface['frameIndex'])` before focusing its selector. If the list
-is empty, wait briefly for loading or open the observed console control; do not
-fall back to a management frame. Use `select_frame(index)` for a same-origin iframe console.
-An iLO login/management page is NOT the server console; credentials go into
-observed login fields with `fill`, not through console keyboard input. If only
-legacy plugin controls are present, report that compatibility limit.
-
-Capture PNG or JPEG with `capture('kvm-frame.png')` (relative paths are placed
-under `/project`) or an absolute path below `/project`. Inspect the image before
-input. Never claim the installer booted merely because media is mounted or a
-one-time boot override was consumed. Keyboard/text input is rejected unless
-a visible canvas/video console is focused. After identifying the actual console,
-use `focus_console(selector, confirm=True)`; a canvas alone is not proof of a
-working server connection. Mouse coordinates are
-fractions of the element's bounding box, not host-screen pixels. iLO may close
-an idle remote console independently. If it disconnects, report that state;
-do not silently refresh a virtual-media installation.
-
-An incomplete-response or JSON decode error during capture is a transport
-failure, not a usable screenshot. If metadata requests still work but capture
-keeps failing, report the capture-channel error rather than repeatedly recreating
-sessions or continuing BIOS input blind. No SSH response by itself identifies
-the current boot screen.
+Use `PrivateKVMClient` for console control. It uses the task's saved connection
+grant, not a password in tool code. Network operations, LAN/Full access, tools
+enabled and an enabled owner/project connection are required. Never print the
+token/environment, retrieve the password or bypass missing access through another
+browser, raw worker, socket or network tool. Ask the owner to configure Settings
+→ My connections and start a new task if access is missing.
 
 ```python
-from bmc_html5_kvm import KVMClient
+import uuid
+from bmc_html5_kvm import PrivateKVMClient
 
-kvm = KVMClient.create("https://bmc.example", ignore_https_errors=True)
-print(kvm.session_id)
-pages = kvm.pages()
-print(pages)
-inspection = kvm.inspect()
-print(inspection)
-# Stay on page 0 unless pages() actually lists a separate console popup.
-# An iframe is not a new page: use select_frame(index) from inspection['frames'].
-# Never assume select_page(1) is valid. Inspect the current login page first.
-frame = kvm.capture("ilo-console.png")
-print(frame)
-# After user approval for the exact target and key:
-kvm.focus_console("canvas", confirm=True)  # Only if inspect() and the image identify it.
-kvm.key("F9", confirm=True)
-kvm.capture("/project/ilo-after-f9.jpg")
-# A later task can use KVMClient.connect(kvm.session_id).
-# Call kvm.close() when the console is no longer needed.
+connections = PrivateKVMClient.connections()  # list of id/name/operations objects
+print(connections)  # select the user's intended target, never guess
+# Once that exact connection is identified:
+open_id = uuid.uuid4().hex  # retain across retries of this open
+kvm = PrivateKVMClient.open(connection_id, request_id=open_id)
+image_path = kvm.capture('console-before.png')  # PNG Path below /project
+# Inspect image_path using attach_image; a login page is NOT a server console.
+step_id = uuid.uuid4().hex  # retain for this exact user-requested action
+result = kvm.input(request_id=step_id, key='f9')
+print(result)
 ```
+
+`input()` sends a request, not an automatic keypress. If `approvalRequired` is
+true, tell the owner to review **Settings → My connections → Console action
+approvals**. Only after their approval, retry `kvm.input` with the same ID and
+identical arguments. Do not rerun a cell that regenerates IDs. Do not poll faster
+than five seconds or longer than five minutes. Never self-approve.
+
+Input accepts one lowercase named key (`enter`, `escape`, `tab`, `backspace`,
+`up`, `down`, `left`, `right`, `f1`, `f2`, `f9`, `f10`, `f11`, `f12`) or one
+`text` string of 1–256 printable ASCII characters, excluding `~`. Never enter
+passwords through console text. The adapter focuses the identified console;
+no arbitrary selector, mouse click, shell or script interface is available.
+
+## Outcome and retry rules
+
+- `actionReceipt.state == 'acknowledged'`: the worker acknowledged the input.
+  Capture and inspect the target; this is NOT proof of boot/installer success.
+- `state == 'unknown'`: input may have occurred or may still be running. STOP.
+  Inspect capture and ask the owner. Never resend, change IDs, reopen a session
+  or switch tools to try the same action again automatically.
+- After a lost/malformed response, reconcile without needing a live session:
+  `PrivateKVMClient.action_receipt(connection_id, step_id)` returns a dictionary
+  containing `actionReceipt`. A missing receipt does not authorize another send.
+- Receipts survive session closure and broker restart; current task/grant checks
+  still apply. A new task cannot consume an old task's approval. Only a new
+  explicit human approval can authorize a separate action after review.
+
+`capture()` saves PNG only, returns a `Path`, and never returns a pages list.
+`connections()` returns a list. `input()` and `action_receipt()` return dictionary
+envelopes. Do not confuse these shapes or infer failure of input from a later
+polling/parse error. `kvm.close()` closes only this task's session.
+
+Private sessions last at most one hour, expire after five minutes idle, and are
+revoked with their task/connection. They do not have the legacy cross-task lease
+or general KVM popout. Do not promise uninterrupted virtual media or multi-day
+console operation. The private broker supports only reviewed login/HTML5 layouts;
+unsupported launchers are compatibility failures, not permission to guess or
+expose secrets. iLO 4 login/capture was verified; live iLO 5 remains unvalidated.
+Do not reboot, change boot overrides, virtual media or BIOS settings merely to
+test a console. Screenshots can contain private OS data and remain subject to
+external-inference privacy controls.
+
+## Legacy read-only sessions
+
+`KVMClient.list_sessions()` and `KVMClient.connect(session_id)` can inspect an
+existing owner-scoped legacy session. `pages()` returns a validated list of
+`{index, url, title}` objects; raw worker/broker replies use `{'pages': [...]}`.
+Use observed indexes for `select_page`/`select_frame`; `inspect()` lists frames
+and console surfaces. `capture('frame.png')` supports PNG/JPEG below `/project`.
+`fill`, `click`, `key`, `type_text`, and `focus_console` are disabled at both client
+and broker, even with `confirm=True`. A new legacy session cannot automate login.
+
+The existing read-only popout samples without input or extending idle lifetime.
+Legacy sessions are owner-shared, at most two, expire after 45 minutes idle/eight
+hours total and do not survive restart. Do not close someone else's session.
+The low-level worker is an internal implementation, NOT an alternative control
+path. Generic browser scripts are not covered by the receipt guarantee and must
+not be used to evade this migration.

@@ -763,7 +763,17 @@ short skill metadata for routing, but imports these adapters only after a task
 selects them. Playwright is present only in the `network-operations` image and
 starts only when the BMC browser is opened.
 
-The separate `bmc-html5-kvm` skill keeps an HTML5 console in a dedicated,
+The `bmc-html5-kvm` skill uses `PrivateKVMClient` and an authorized saved
+connection for control. Select the intended connection with `connections()`,
+open with an explicit retained request ID, inspect a capture, then request input.
+Each exact input requires **Settings → My connections → Console action approvals**;
+`confirm=True` is not authority. The client never automatically retries a key or
+creates a replacement action ID. See [private console setup and receipts](docs/connection-extensions.md#durable-action-receipts).
+Private sessions remain task-bound, with a one-hour maximum and five-minute idle
+limit; the legacy cross-task popout is not yet available for private sessions.
+Unsupported login/console layouts must be reported, not bypassed with scripts.
+
+The older `KVMClient` keeps a read-only HTML5 session in a dedicated,
 owner-scoped OpenShell sandbox across Prime tasks. It requires the
 `network-operations` profile with **LAN/VPN or Full network** mode. The launcher
 mounts the owner's KVM control channel at `/run/prime-kvm` and sets
@@ -772,7 +782,9 @@ itself retains LAN egress. Two sessions are allowed per owner. List existing
 sessions first and connect by session ID. Repeated creation at the same BMC
 origin and TLS setting reuses that session without reloading it; Redfish API URLs
 are rejected as non-console targets. Inspect
-on-demand PNG/JPEG frames before sending confirmed keyboard, mouse, or form input.
+on-demand PNG/JPEG frames. Keyboard, mouse, form input and focus clicks are now
+rejected by both the old client and its host broker, even for stale task images.
+It cannot automate new logins; use the saved-connection path for that.
 `capture('console.png')` saves below `/project`. `inspect()` lists visible controls,
 login-page presence, and frame indexes without exposing form values.
 `KVMClient.pages()` returns a validated list of `{index, url, title}` objects;
@@ -780,8 +792,9 @@ the raw worker/broker protocol instead returns `{"pages": [...]}`. A polling or
 parsing failure never authorizes repeating console input. For saved connections,
 [durable action receipts](docs/connection-extensions.md#durable-action-receipts)
 prevent a human-approved KVM/SOL action from being dispatched twice and expose
-uncertain outcomes in Settings. This protection does **not** yet cover the older
-general KVM socket or arbitrary browser scripts.
+uncertain outcomes in Settings. The old general KVM socket is read-only;
+arbitrary browser scripts remain outside this receipt guarantee and must not
+be used to evade console approvals.
 Capture replies use complete, newline-framed socket writes, bounded to 3.5 MB
 of JSON and 2 MB per decoded image. An incomplete reply raises a transport error
 without overwriting an existing capture; do not infer the console state or send
@@ -792,8 +805,8 @@ large real Chromium JPEG/PNG captures and their read-only viewer feed.
 `selector`. Embedded consoles use `select_frame(surface['frameIndex'])`; do not
 guess frame 0 or assume a second browser tab exists.
 Normal query-string routes and initial same-host HTTP-to-HTTPS redirects are
-supported. Console keys/text require a focused, visible canvas/video surface;
-use `focus_console(selector, confirm=True)` after inspecting the console. A login
+supported. The private adapter handles focus on its verified console surface;
+legacy `focus_console` is disabled along with other input methods. A login
 page, mounted media, or consumed boot override is not evidence that an installer
 booted. Cross-origin frames and redirects remain blocked.
 Sessions expire after 45 minutes idle or eight hours total, and do not survive

@@ -18,6 +18,8 @@ import subprocess
 import tempfile
 import threading
 import time
+import urllib.request
+from unittest import mock
 
 import connections
 from connection_native import NativeRuntime, COMMON
@@ -38,6 +40,7 @@ def serve(host):
     cert=(x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(key.public_key())
           .serial_number(x509.random_serial_number()).not_valid_before(now-timedelta(days=2))
           .not_valid_after(now-timedelta(days=1)).sign(key,hashes.SHA256()))
+    events = {'keys': 0}
     class Handler(BaseHTTPRequestHandler):
         def log_message(self,*_): pass
         def send(self,status,body,cookie=False):
@@ -46,15 +49,20 @@ def serve(host):
             if cookie: self.send_header('Set-Cookie','fixture=yes; Secure; HttpOnly; SameSite=Strict')
             self.end_headers(); self.wfile.write(data)
         def do_GET(self):
-            if self.path=='/':
+            if self.path=='/events':
+                self.send(200,json.dumps(events))
+            elif self.path=='/':
                 self.send(200,'''<input type=text><input type=password><button onclick="fetch('/login',{method:'POST',body:JSON.stringify({username:document.querySelector('input[type=text]').value,password:document.querySelector('input[type=password]').value})}).then(r=>{if(r.ok)location='/home'})">Log In</button>''')
             elif self.path=='/home' and 'fixture=yes' in self.headers.get('Cookie',''):
                 self.send(200,'<h1>Synthetic management status</h1><a href="/console">HTML5 Console</a>')
             elif self.path=='/console' and 'fixture=yes' in self.headers.get('Cookie',''):
-                self.send(200,'<canvas width="640" height="360"></canvas><script>document.querySelector("canvas").getContext("2d").fillText("Synthetic boot screen",20,40)</script>')
+                self.send(200,'<canvas width="640" height="360" tabindex="0"></canvas><script>const c=document.querySelector("canvas");c.getContext("2d").fillText("Synthetic boot screen",20,40);c.addEventListener("keydown",e=>{if(e.key==="F9")fetch("/key",{method:"POST",body:"F9"})})</script>')
             else: self.send(404,'')
         def do_POST(self):
             length=int(self.headers.get('Content-Length','0'))
+            if self.path=='/key' and length==2 and 'fixture=yes' in self.headers.get('Cookie',''):
+                if self.rfile.read(length)==b'F9': events['keys']+=1
+                self.send(200,'{}'); return
             if self.path!='/login' or not 0<length<1000: self.send(400,''); return
             data=json.loads(self.rfile.read(length))
             self.send(200 if data=={'username':'fixture','password':SECRET} else 403,'',True)
@@ -134,6 +142,56 @@ def client(host,state,manifest):
             kvm.close()
         assert not list(native.root.glob('pc-*.json'))
         print('PASS: actual isolated HTML5 KVM launch, repeated console captures and cleanup; no console input',flush=True)
+        # New replay canary uses production Connections/Sessions/Approvals and
+        # actual isolated Chromium. Only this synthetic target receives one F9.
+        metadata=json.loads((agent/'webui-metadata.json').read_text())
+        metadata['skills']['s_fixture']['credentialRequirements'][0]['adapter']='bmc-kvm'
+        (agent/'webui-metadata.json').write_text(json.dumps(metadata))
+        req=manager.requirements(owner)[0]
+        manager.vault.change(owner,[req],{'action':'save-target','key':target,'name':'Synthetic target','values':{},'ignoreCertificateErrors':True})
+        kvm_body=dict(body, requirementKey=req['key'], name='Synthetic KVM')
+        kvm_key=manager.change(owner,kvm_body)['id']
+        manager.revoke(task); kvm_token=manager.issue(owner,task,None,policy)
+        def call(operation,args):
+            return manager.dispatch({'action':'call','token':kvm_token,'connection':kvm_key,
+                                     'operation':operation,'arguments':args},owner)
+        context=ssl._create_unverified_context()  # Generated expired fixture cert only.
+        def count():
+            opener=urllib.request.build_opener(urllib.request.ProxyHandler({}),urllib.request.HTTPSHandler(context=context))
+            with opener.open('https://'+host+'/events',timeout=5) as response:
+                return json.load(response)['keys']
+        assert count()==0, 'Fixture must be fresh; never reset observed effects'
+        session=call('kvm.open',{'requestId':'b'*32})['sessionId']
+        args={'sessionId':session,'requestId':'c'*32,'key':'f9'}
+        pending=call('kvm.input',args); assert pending['approvalRequired']
+        assert count()==0
+        # Trusted fixture acts as the human exactly once, never the model/client.
+        manager.change(owner,{'action':'decide-console','id':pending['approvalId'],'approve':True})
+        worker=manager.sessions.sessions[session]['worker']; send=worker.send
+        def lost_reply(arguments):
+            send(arguments)
+            raise TimeoutError('Synthetic lost reply after input')
+        with mock.patch.object(worker,'send',side_effect=lost_reply):
+            receipt=call('kvm.input',args)
+        assert receipt['actionReceipt']['state']=='unknown'
+        for _ in range(50):
+            if count()==1: break
+            time.sleep(.1)
+        assert count()==1
+        for _ in range(3): assert call('kvm.input',args)==receipt
+        assert call('kvm.capture',{'sessionId':session})['image']
+        call('kvm.close',{'sessionId':session})
+        manager.sessions=Sessions(manager,native)  # Simulate broker session loss.
+        assert call('kvm.input',args)==receipt
+        assert call('kvm.receipt',{'requestId':'c'*32})==receipt
+        replacement=call('kvm.open',{'requestId':'d'*32})['sessionId']
+        try: call('kvm.input',dict(args,sessionId=replacement))
+        except PermissionError: pass
+        else: raise AssertionError('Changed session reused an approved action')
+        assert call('kvm.input',dict(args,sessionId=replacement,requestId='e'*32))['approvalRequired']
+        assert count()==1, 'Duplicate key escaped receipt boundary'
+        call('kvm.close',{'sessionId':replacement})
+        print('PASS: private broker/OpenShell replay canary: one human approval, one observed F9 despite lost reply, retries, session replacement and new ID; no real BMC',flush=True)
     finally:
         manager.sessions.reap(all_sessions=True); native.reap(startup=True); manager.revoke(task)
 

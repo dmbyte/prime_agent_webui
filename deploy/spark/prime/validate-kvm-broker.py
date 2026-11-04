@@ -14,7 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent / "skills/bmc-html5-kvm/src"))
 sys.path.insert(0, str(Path(__file__).parent.parent / 'container'))
-from bmc_html5_kvm import KVMClient
+from bmc_html5_kvm import KVMClient, _broker
 from console_feed import snapshots, watch
 
 
@@ -49,7 +49,7 @@ def main() -> None:
     threading.Thread(target=server.serve_forever, daemon=True).start()
     kvm = None
     try:
-        kvm = KVMClient.create(f"http://{host}:{server.server_port}/")
+        kvm = KVMClient.create(f"http://{host}:{server.server_port}/framed")
         session_id = kvm.session_id
         feed_root = Path(os.environ.get('PRIME_RUNNER_WORKSPACE_ROOT','/home/dbyte/prime-agent/tasks'))/'dbyte'/'.prime-console'
         for _ in range(20):
@@ -70,22 +70,23 @@ def main() -> None:
         assert any(row['id'] == session_id for row in api('/api/consoles?watch=1')['sessions'])
         assert api('/api/consoles/frame?id=' + session_id)['session']['image']
         assert not api('/api/consoles', 'viewer-test-other')['sessions']
-        assert kvm.inspect()["loginFormPresent"]
+        assert not kvm.inspect()["loginFormPresent"]
         try:
             kvm.key("F9",confirm=True)
-        except RuntimeError as error:
-            assert "No focused graphical console" in str(error)
-        else: raise AssertionError("Login page accepted console keyboard input")
+        except PermissionError as error:
+            assert "Legacy KVM input is disabled" in str(error)
+        else: raise AssertionError("Legacy client accepted keyboard input")
+        for action in ('key', 'click', 'fill', 'type_text', 'focus_console'):
+            try:
+                _broker({'action':action, 'sessionId':session_id, 'confirm':True, 'key':'F9',
+                         'requestId':'f'*32, 'approvalId':'a_'+'f'*64})
+            except RuntimeError as error:
+                assert 'Legacy KVM input is disabled' in str(error)
+            else: raise AssertionError('Raw legacy socket accepted input')
         assert any(row["sessionId"] == session_id for row in KVMClient.list_sessions())
-        kvm.click("#open", confirm=True)
-        pages = []
-        for _ in range(30):
-            pages = kvm.pages()
-            if len(pages) >= 2:
-                break
-            time.sleep(.1)
-        assert len(pages) >= 2, pages
-        kvm.select_page(1)
+        pages = kvm.pages()
+        assert len(pages) == 1, pages
+        kvm.select_page(pages[0]['index'])
         inspection=kvm.inspect()
         assert len(inspection['frames'])==2
         assert inspection['consoleSurfaces'][0]['selector']=='#screen'
@@ -108,19 +109,17 @@ def main() -> None:
                     break
                 time.sleep(.5)
             assert viewer and len(viewer.get('image') or '') > 250_000, 'Large viewer frame missing'
-        kvm.focus_console("#screen", confirm=True)
-        kvm.key("F9", confirm=True)
-        assert any(row["title"] == "Key F9" for row in kvm.pages())
+        assert all(row['title'] != 'Key F9' for row in kvm.pages())
         reused = KVMClient.create(f"http://{host}:{server.server_port}/")
         assert reused.session_id == session_id
-        assert any(row["title"] == "Key F9" for row in reused.pages())
+        assert any(row["title"] == "Framed console" for row in reused.pages())
         try:
             KVMClient.create(f"http://{host}:{server.server_port}/redfish/v1/")
         except RuntimeError as error:
             assert "Redfish is an API" in str(error)
         else:
             raise AssertionError("Redfish URL incorrectly accepted for KVM")
-        print("Persistent KVM broker ready: reconnect, frame, input, reuse without reload, and API URL rejection")
+        print("Read-only KVM broker ready: input denied at client and raw socket, reconnect, large captures, viewer, reuse and API URL rejection")
     finally:
         if kvm is not None:
             kvm.close()

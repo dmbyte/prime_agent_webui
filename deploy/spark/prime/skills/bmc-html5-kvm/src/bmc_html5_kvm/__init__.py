@@ -15,6 +15,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 from typing import TypedDict
+import urllib.request
 
 
 SOCKET = "/run/prime-gateway/kvm.sock"
@@ -43,6 +44,117 @@ def page_list(result: dict) -> list[PageInfo]:
             or not isinstance(p.get('url'), str) for p in pages):
         raise ValueError('Invalid KVM PageInfo list; do not repeat any input')
     return pages
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *_args, **_kwargs):
+        raise PermissionError('Connection broker redirects are forbidden')
+
+
+def _connection_call(action: str, **values) -> dict:
+    """Fixed local relay; no URL override, proxy inheritance or automatic retry."""
+    token = os.environ.get('PRIME_CONNECTION_TOKEN', '')
+    if not re.fullmatch(r'[a-f0-9]{32}\.[a-f0-9]{64}', token):
+        raise PermissionError('No active saved-connection grant. Configure My connections and start a new task.')
+    request = urllib.request.Request('http://127.0.0.1:31000/connections',
+        data=json.dumps({'token': token, 'action': action, **values}).encode(),
+        headers={'Content-Type': 'application/json'}, method='POST')
+    try:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
+        with opener.open(request, timeout=180) as response:
+            raw = response.read(1_000_001)
+            if response.status != 200 or len(raw) > 1_000_000:
+                raise ValueError('Invalid response size/status')
+        result = json.loads(raw)
+        if not isinstance(result, dict) or 'error' in result:
+            raise ValueError('Invalid response')
+        return result
+    except Exception:
+        # Do not echo upstream errors, request objects, credentials or input.
+        raise RuntimeError('Saved-connection response unavailable. Do not repeat input: query action_receipt with the original request ID, inspect the target and ask the user.') from None
+
+
+def _request_id(value):
+    if not isinstance(value, str) or not re.fullmatch(r'[a-f0-9]{32}', value):
+        raise ValueError('Supply an explicit 32-hex request ID; retain it for approval/reconciliation')
+    return value
+
+
+def _connection_id(value):
+    if not isinstance(value, str) or not re.fullmatch(r'c_[a-f0-9]{32}', value):
+        raise ValueError('Select an authorized connection ID from PrivateKVMClient.connections()')
+    return value
+
+
+class PrivateKVMClient:
+    """Task-bound saved-target console. No credentials or arbitrary browser code.
+
+    Input returns either approvalRequired or actionReceipt. Never auto-retry,
+    auto-approve, mint a replacement ID, or treat acknowledgement as target effect.
+    """
+    def __init__(self, connection_id: str, session_id: str):
+        self.connection_id = _connection_id(connection_id)
+        if not isinstance(session_id, str) or not re.fullmatch(r'pc-[a-f0-9]{16}', session_id):
+            raise ValueError('Use the session ID returned by private kvm.open')
+        self.session_id = session_id
+
+    @staticmethod
+    def connections() -> list[dict]:
+        rows = _connection_call('list').get('connections')
+        if not isinstance(rows, list) or any(not isinstance(r, dict)
+                or not isinstance(r.get('operations'), list) for r in rows):
+            raise ValueError('Invalid connection list; no actions sent')
+        return [r for r in rows if 'kvm.open' in r['operations']]
+
+    @classmethod
+    def open(cls, connection_id: str, *, request_id: str) -> 'PrivateKVMClient':
+        result = _connection_call('call', connection=_connection_id(connection_id), operation='kvm.open',
+                                  arguments={'requestId': _request_id(request_id)})
+        return cls(connection_id, result.get('sessionId'))
+
+    def _call(self, operation: str, arguments: dict) -> dict:
+        return _connection_call('call', connection=self.connection_id, operation=operation, arguments=arguments)
+
+    def input(self, *, request_id: str, key: str | None = None, text: str | None = None) -> dict:
+        args = {'sessionId': self.session_id, 'requestId': _request_id(request_id)}
+        keys = {'enter','escape','tab','backspace','up','down','left','right','f1','f2','f9','f10','f11','f12'}
+        if key is not None and text is None and isinstance(key, str) and key in keys:
+            args['key'] = key
+        elif text is not None and key is None and isinstance(text, str) and 1 <= len(text) <= 256 and all(32 <= ord(c) <= 126 and c != '~' for c in text):
+            args['text'] = text
+        else:
+            raise ValueError('Supply one supported lowercase key or 1–256 printable ASCII text characters; never passwords')
+        result = self._call('kvm.input', args)
+        if result.get('approvalRequired') is True:
+            if not isinstance(result.get('approvalId'), str) or not re.fullmatch(r'a_[a-f0-9]{64}', result['approvalId']):
+                raise ValueError('Invalid approval response; do not repeat input')
+        elif not isinstance(result.get('actionReceipt'), dict) or result['actionReceipt'].get('state') not in ('acknowledged', 'unknown'):
+            raise ValueError('Invalid action receipt; do not repeat input')
+        return result
+
+    @staticmethod
+    def action_receipt(connection_id: str, request_id: str) -> dict:
+        return _connection_call('call', connection=_connection_id(connection_id), operation='kvm.receipt',
+                                arguments={'requestId': _request_id(request_id)})
+
+    def capture(self, filename: str | os.PathLike[str] = 'kvm-frame.png') -> Path:
+        workspace = Path(os.environ.get('PRIME_WORKSPACE', '/project')).resolve()
+        target = (workspace / Path(filename)).resolve()
+        if workspace not in target.parents or target.suffix.lower() != '.png':
+            raise ValueError('Save private console PNG images below the task workspace')
+        result = self._call('kvm.capture', {'sessionId': self.session_id})
+        if result.get('mimeType') != 'image/png':
+            raise ValueError('Invalid console image; do not send input')
+        frame = base64.b64decode(result.get('image', ''), validate=True)
+        if len(frame) > MAX_FRAME or not frame.startswith(b'\x89PNG\r\n\x1a\n'):
+            raise ValueError('Invalid console PNG; do not send input')
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(frame)
+        os.chmod(target, 0o600)
+        return target
+
+    def close(self) -> dict:
+        return self._call('kvm.close', {'sessionId': self.session_id})
 
 
 def _origin(value: str) -> tuple[str, str]:
@@ -138,6 +250,8 @@ class KVMClient:
         return _broker({"action": "list"})["sessions"]
 
     def _call(self, action: str, **values) -> dict:
+        if action in {'fill', 'click', 'key', 'type_text', 'focus_console'}:
+            raise PermissionError('Legacy KVM input is disabled; use PrivateKVMClient and saved-connection approvals')
         return _broker({"action": action, "sessionId": self.session_id, **values})
 
     def status(self) -> dict:
