@@ -45,9 +45,9 @@ def parse_json(content):
     return json.loads(text, parse_constant=lambda _: (_ for _ in ()).throw(ValueError('nonfinite JSON')))
 
 
-def chat(base, model, messages, tools=None):
+def chat(base, model, messages, tools=None, *, max_tokens=2048, timeout=180, deadline=240):
     payload = {'model': model, 'messages': messages, 'temperature': 0,
-               'max_tokens': 2048, 'reasoning_effort': 'low', 'stream': True,
+               'max_tokens': max_tokens, 'reasoning_effort': 'low', 'stream': True,
                'stream_options': {'include_usage': True}}
     if tools:
         payload.update(tools=tools, tool_choice='auto')
@@ -58,9 +58,9 @@ def chat(base, model, messages, tools=None):
     done = False
     # Disable proxy environment variables even for loopback requests.
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
-    with opener.open(request, timeout=180) as response:
+    with opener.open(request, timeout=timeout) as response:
         for line in response:
-            if time.monotonic() - start > 240:
+            if time.monotonic() - start > deadline:
                 raise TimeoutError('total response deadline')
             if not line.startswith(b'data: '):
                 continue

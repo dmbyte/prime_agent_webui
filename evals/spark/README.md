@@ -160,9 +160,9 @@ individual fixture failures remain in the report. Completion is not a passing
 quality gate and never triggers model promotion.
 
 For the candidate, the unit's ExecStart must invoke the guard around
-`candidate_trial.py --root /absolute/trial-root --grader-image sha256:...`.
+`candidate_trial.py --root /absolute/trial-root --grader-image sha256:... --recovery-token UNIQUE_32_HEX_INVOCATION_ID`.
 Also configure **ExecStopPost** to run
-`candidate_trial.py --root /absolute/trial-root --recover`, a bounded unit
+`candidate_trial.py --root /absolute/trial-root --recover --recovery-token SAME_INVOCATION_ID`, a bounded unit
 runtime (e.g. 75 minutes), and enough stop time for production reload (e.g.
 12 minutes). Monitor the unit and container logs. Do not launch the trial
 without the independent recovery action.
@@ -198,6 +198,104 @@ the published all-optimizations recipe. Keep failed containers/logs and record
 the precise variant. The Spark trial encountered a CUDA illegal-address error
 during the first QP_MOE profile call; a single asynchronous error does not yet
 prove which kernel or configuration caused it.
+
+### Distributed context and restart gate
+
+#### Reference context comparison — November 4, 2026
+
+Both engines configured for 262,144 context, one slot and low effort. FP4 uses
+the same pinned fallback as above, but GPU utilization **0.76**, FP8 target KV,
+four MTP drafts and 8192-token chunks. It allocated **9.10 GiB / 394,145 cache
+tokens** at this configuration. Cache geometry differs from the 128K run; do
+not extrapolate memory linearly from that earlier token-pool ratio.
+
+| Synthetic request | IQ4_XS / Q8 | FP4 fallback / FP8 |
+|---|---:|---:|
+| 15,873-token distributed recall | 26.47 s | 7.57 s |
+| Immediate 16K follow-up | 2.18 s | 1.40 s |
+| 249,865-token distributed recall | 892.24 s | 95.79 s |
+| Immediate 250K follow-up | 7.38 s | 2.02 s |
+| Correct recall / follow-up responses | 4/4 | 4/4 |
+| Minimum available RAM during these requests | 39.69 GiB | 23.93 GiB |
+
+The first-document hashes and rendered input counts matched across engines.
+Follow-up inputs were 15,956 and 249,948 tokens; response whitespace differed.
+Both read all three markers correctly and reported the expected input counts.
+FP4's near-limit first response was about **9.3 times faster in this single
+synthetic probe**. Estimated decode was 79.1 vs 12.5 tokens/s at that depth,
+but outputs were only 224 vs 206 tokens and SSE estimates are not exact decoder
+benchmarks. This is not a general accuracy gain or a 9.3x end-to-end agent claim.
+Memory minima describe these runs, not fixed model-weight footprints.
+
+Initial FP4 startup with populated compilation caches took 267 seconds; one
+stop/start of the same container took 247 seconds and its arithmetic smoke
+passed. The one-second watchdog observed at least **23.20 GiB (19.07%) available**
+across both startups and the probe; its 15% floor was not crossed. This is two
+successful cached loads, not an extended reliability or power-failure test.
+All **444 regression tests pass**: 393 dashboard, 25 managed-skill and 26
+evaluation tests; the 26 evaluation tests also pass on Spark. The published launcher additionally rejects labelling the
+unchanged production control as 128K; measured runs used 256K on both engines.
+Runtime
+warnings about the draft cache group and video pixel budgeting remain relevant
+to further validation. Prompt fitting can log an overlength **tokenization**
+warning while measuring an initial candidate document; no overlength document
+is submitted for inference. Production has not been promoted.
+The exact original IQ4 container and image were restored; its API confirms
+262,144 context / one slot and health. The model gateway and user service are
+active, the experiment unit ended successfully, and no evaluation container or
+OpenShell test sandbox remains running. No production configuration or user
+state was changed.
+
+The next acceptance gate is actual Prime coding/browser/console and bounded
+vision workloads with their memory usage, broader quality checks and a longer
+soak. The allocated pool has surplus capacity relative to a single 256K slot;
+a smaller allocation is worth a separately measured trial, not an assumed safe
+setting. Do not reduce production context or the 15% reserve to make it fit.
+
+`context_probe.py` is a separate `spark-context-v1` capacity probe, not a change
+to the frozen 100-case suite. It requests low effort and 2,048 output tokens,
+fits synthetic documents to approximately 16K and 250K input tokens (119K for
+a 128K configuration), and leaves at least 8K of context reserve. Three markers
+are distributed near the start, middle and end among deterministic varied
+records. Each first request is followed immediately by a question about the
+middle marker. Responses must match, finish normally and report input-token
+usage within eight tokens of the server's rendered-template token count.
+Missing usage, truncation, wrong answers or the memory floor fail the gate.
+
+Both engines use their actual tokenizer APIs. Documents are fitted independently;
+compare the recorded document SHA256 values before claiming identical inputs.
+Follow-ups include each engine's actual answer, which can differ in formatting.
+The probe does not flush prefix caches or the host page cache. Report **first
+document / warm follow-up**, not a guaranteed cold-system benchmark. Its four
+responses are not a general long-context accuracy evaluation or a real agent
+workflow. It never accesses credentials, browsers, BMCs or cloud inference.
+
+Create a **fresh trial root and distinct container name for each experiment**.
+An existing verified candidate directory and its populated compilation cache
+may be reused via explicit links; retain previous launchers, results and stopped
+containers. The default screen remains at 128K/.73. Context and allocation
+overrides are opt-in and do not alter production:
+
+```bash
+# Original engine, no model/configuration changes:
+python3 /absolute/control-root/harness/start_experiment.py --root /absolute/control-root --grader-image sha256:FULL_IMAGE_ID --probe context --context 262144
+# Experimental 256K fallback, not a recommended production allocation:
+python3 /absolute/new-trial-root/harness/start_experiment.py --root /absolute/new-trial-root --grader-image sha256:FULL_IMAGE_ID --candidate --disable-qp-moe --trial-name prime-eval-fp4-256k-unique --context 262144 --gpu-memory-utilization 0.76 --probe context --restart-checks 1
+```
+
+The context/restart unit is bounded to three hours, including startup, tests and
+recovery. Each startup has a 30-minute deadline and the entire context child a
+separate 80-minute deadline. A restart check only runs after the probe succeeds:
+stop/start the same candidate container, measure health readiness and require a
+correct arithmetic reply. This measures reuse of existing compilation caches,
+not a clean-cache installation or power-failure recovery. Lifecycle JSONL records
+the configuration, startup times and one-second host memory samples. The same
+15% watchdog and original-container recovery remain mandatory. The recovery
+marker records the new candidate name and unique invocation ID, so unrelated
+retained trials are untouched. The start helper generates that ID and passes it
+to both the trial and ExecStopPost. A failed concurrent dispatch cannot recover
+another invocation's model. Use the helper instead of hand-building units.
+No probe or restart result triggers promotion.
 
 The strict score counts extra or differently named JSON fields as mismatches.
 Three v1 source-selection prompts underspecify the field name, so inspect those
