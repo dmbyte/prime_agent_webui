@@ -7,6 +7,23 @@ system. There is no force reset/off, arbitrary HTTP, OEM action, automatic
 installation sequence or raw-credential fallback. Synthetic tests do not certify
 any particular iLO/BMC firmware.
 
+### iLO 4 compatibility limitation
+
+A read-only iLO 4 preflight found legacy `links.ManagedBy`,
+`links.VirtualMedia`, `BootSourceOverrideSupported` and HPE OEM media data,
+without the body ETags and standard media actions required by this adapter.
+The standard observer therefore did not discover that target's virtual media;
+`not-advertised` must **not** be interpreted as empty or absent hardware. Separate
+read-only legacy discovery found an occupied slot. No media was changed.
+
+HPE documents these pre-Redfish differences in its
+[iLO 4 migration guide](https://servermanagementportal.ext.hpe.com/docs/redfishservices/ilos/ilo5/ilo5_adaptation).
+This adapter does not currently translate them. Missing body ETags do not prove
+the firmware has no HTTP-header ETag support. Supporting legacy HPE writes needs
+a separately reviewed compatibility implementation and hardware acceptance,
+not silently dropping prerequisites, assuming boot mode or guessing actions.
+Use a validated standard-compatible target or explicitly plan that extension.
+
 ## Owner setup and use
 
 1. Enable the managed **ipmi-redfish-bmc** skill for the intended project. In

@@ -153,6 +153,21 @@ class InstallationTests(unittest.TestCase):
         with self.assertRaises(install.InstallationPrecondition): self.call()
         self.assertEqual(self.ledger.pending('alice'), [])
 
+    def test_legacy_hpe_links_do_not_silently_authorize_media(self):
+        system = self.data[SYSTEM]
+        system['links'] = system.pop('Links')
+        self.data['/redfish/v1/Managers/1'] = {'links': {'VirtualMedia': {'href': MEDIA.rsplit('/', 1)[0]}}}
+        with self.assertRaises(install.InstallationPrecondition): self.call()
+        self.assertEqual(self.writes, [])
+        self.assertEqual(self.ledger.pending('alice'), [])
+
+    def test_legacy_hpe_media_has_no_guessed_oem_write_fallback(self):
+        self.data[MEDIA].pop('Actions')
+        self.data[MEDIA]['Oem'] = {'Hp': {'BootOnNextServerReset': False}}
+        with self.assertRaises(install.InstallationPrecondition): self.call()
+        self.assertEqual(self.writes, [])
+        self.assertEqual(self.ledger.pending('alice'), [])
+
     def test_invalid_urls_and_force_reset_and_extra_fields(self):
         for url in ('http://127.0.0.1/a.iso', 'http://example.com/a.iso', 'http://192.168.1.20/a.iso',
                     'http://user:pass@192.168.1.9/a.iso', ISO+'?key=secret', ISO+'#x',
