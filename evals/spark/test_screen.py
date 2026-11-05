@@ -76,10 +76,17 @@ class ScreeningTests(unittest.TestCase):
 
     def test_active_task_blocks_before_sandbox_probe(self):
         with patch('maintenance_guard.Path.read_text', return_value='{"users":{"synthetic":{}}}'), patch('maintenance_guard.urllib.request.build_opener') as opener, patch('maintenance_guard.subprocess.run') as run:
-            opener.return_value.open.return_value = io.BytesIO(b'{"tasks":[{"status":"running"}]}')
+            opener.return_value.open.return_value = io.BytesIO(b'{"ok":true,"activeTasks":1}')
             with self.assertRaisesRegex(RuntimeError, 'Active task'):
                 maintenance_guard.idle()
             run.assert_not_called()
+
+    def test_unrecognized_health_never_implies_idle(self):
+        for payload in ({'ok': True}, {'ok': True, 'activeTasks': False}, {'ok': True, 'activeTasks': -1}):
+            with patch('maintenance_guard.urllib.request.build_opener') as opener, patch('maintenance_guard.subprocess.run') as run:
+                opener.return_value.open.return_value = io.BytesIO(json.dumps(payload).encode())
+                with self.assertRaises(RuntimeError): maintenance_guard.idle()
+                run.assert_not_called()
 
     def test_recovery_identity_mismatch_does_not_stop_anything(self):
         with tempfile.TemporaryDirectory() as directory:

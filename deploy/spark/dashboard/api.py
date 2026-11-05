@@ -82,6 +82,11 @@ def atomic_json(path, value):
             os.fsync(handle.fileno())
         os.chmod(name, 0o600)
         os.replace(name, path)
+        directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
     finally:
         try:
             os.unlink(name)

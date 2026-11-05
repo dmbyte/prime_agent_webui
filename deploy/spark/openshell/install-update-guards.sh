@@ -9,13 +9,10 @@ idle() {
   python3 - <<'PY'
 import json, os, pathlib, subprocess, urllib.request
 home=pathlib.Path.home()
-users=json.loads((home/'.config/prime-agent/web-auth.json').read_text())['users']
 opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
-for owner in users:
-    request=urllib.request.Request('http://127.0.0.1:8765/api/tasks',headers={'X-Prime-User':owner})
-    with opener.open(request,timeout=15) as response: rows=json.load(response)['tasks']
-    if any(row.get('status') in ('running','starting','queued','stopping') for row in rows):
-        raise SystemExit('Tasks are active; do not activate maintenance guards.')
+with opener.open('http://127.0.0.1:8765/api/health',timeout=15) as response: state=json.load(response)
+if state.get('ok') is not True or type(state.get('activeTasks')) is not int or state['activeTasks'] != 0:
+    raise SystemExit('Cannot verify idle tasks; do not activate maintenance guards. Upgrade the API first.')
 result=subprocess.run(['openshell','--gateway','spark-local','sandbox','list','--all-workspaces','--ids'],capture_output=True,text=True,check=True)
 if result.stdout.strip(): raise SystemExit('Sandboxes exist; do not activate maintenance guards.')
 print('All users idle; no OpenShell sandboxes.')

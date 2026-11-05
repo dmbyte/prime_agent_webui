@@ -341,16 +341,20 @@ class Handler(BaseHTTPRequestHandler):
             account = (load_users() or {}).get('users', {}).get((row or {}).get('user'), {})
             allowed = bool(row and account.get('enabled', True) and account.get('role') == 'admin')
             self.json(200 if allowed else 403, {'allowed': True} if allowed else {'error': 'Administrator access required'})
-        elif self.path == "/auth/check":
+        elif self.path in {"/auth/check", "/auth/check-write"}:
             row = session_for(self.headers.get("Cookie"))
-            if row:
+            account = (load_users() or {}).get('users', {}).get((row or {}).get('user'))
+            if not row or not account or not account.get('enabled', True):
+                self.json(401, {'error': 'Authentication required'})
+            elif self.path == '/auth/check-write' and not csrf_valid(self.headers, row):
+                self.json(403, {'error': 'Request validation failed'})
+            elif account.get('role', 'user') not in {'user', 'power_user', 'admin'}:
+                self.json(403, {'error': 'Invalid account role'})
+            else:
                 self.send_response(204)
                 self.send_header("X-Prime-User", row["user"])
-                self.send_header("X-Prime-Role", row.get("role", "user"))
+                self.send_header("X-Prime-Role", account.get("role", "user"))
                 self.send_header("Cache-Control", "no-store")
-                self.end_headers()
-            else:
-                self.send_response(401)
                 self.end_headers()
         elif self.path == "/auth/status":
             row = session_for(self.headers.get("Cookie"))

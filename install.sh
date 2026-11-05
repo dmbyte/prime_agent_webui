@@ -246,7 +246,7 @@ if ((set_password)); then
   systemctl --user restart prime-auth.service
 fi
 
-curl -fsS http://127.0.0.1:8765/api/telemetry >/dev/null
+curl -fsS http://127.0.0.1:8765/api/health >/dev/null
 code=$(curl -ksS -o /dev/null -w '%{http_code}' "https://127.0.0.1:${port}/api/state")
 [[ $code == 401 ]] || { echo "Expected unauthenticated API status 401, received $code" >&2; exit 1; }
 if ! command -v gh >/dev/null; then

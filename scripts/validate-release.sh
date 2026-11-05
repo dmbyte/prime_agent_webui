@@ -105,6 +105,9 @@ required=(
   evals/spark/prepare_trial.py
   evals/spark/candidate.json
   docs/model-routing.md
+  docs/reliable-tasks.md
+  deploy/spark/dashboard/test_reliable_core.py
+  deploy/spark/dashboard/validate-reliable-core-ui.py
   docs/user-credentials.md
   docs/connections.md
   deploy/spark/dashboard/validate-credentials-ui.py

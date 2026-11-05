@@ -2,6 +2,7 @@
 import base64
 from collections import deque
 import hashlib
+import http.client
 import importlib.util
 import json
 import mimetypes
@@ -1101,9 +1102,11 @@ def conversation_task_logs(session_id, user=INITIAL_ADMIN):
     for task_id, task in metadata().get("tasks", {}).items():
         if task.get("owner") != user or task.get("sessionId") != session_id:
             continue
-        if not re.fullmatch(r"[a-f0-9]{32}", str(task_id)) or not (TASK_LOGS / f"{task_id}.log").is_file():
+        if not re.fullmatch(r"[a-f0-9]{32}", str(task_id)) or not ((TASK_LOGS / f"{task_id}.log").is_file() or task.get('terminalReport')):
             continue
-        rows.append({"id": task_id, "status": task.get("status", "unknown"), "createdAt": task.get("createdAt"), "finishedAt": task.get("finishedAt")})
+        rows.append({"id": task_id, "status": task.get("status", "unknown"), "createdAt": task.get("createdAt") or task.get('started'), "finishedAt": task.get("finishedAt"),
+                     'terminalReport': task.get('terminalReport'), 'toolSteps': task.get('toolSteps', []),
+                     'lastHeartbeatAt': task.get('lastHeartbeatAt')})
     return sorted(rows, key=lambda row: row.get("createdAt") or "")[-20:]
 
 
@@ -1399,7 +1402,83 @@ def record_task_finished(task, status):
             "finishedAt": task.get("finished") or now_iso(),
         })
         legacy.atomic_json(META, data)
+    checkpoint_task(task)
     revoke_connection_task(task_id)
+
+
+def checkpoint_task(task):
+    """Host-only recovery state, not authority to replay a tool or restore grants."""
+    if not task.get('_durable'):
+        return
+    keys = ('owner', 'sessionId', 'agentSessionId', 'projectId', 'fileIds', 'topic',
+            'provider', 'model', 'thinking', 'requestedThinking', 'routingMode',
+            'routeReason', 'contextWindow', 'maxTokens', 'runtime', 'sandboxName',
+            'status', 'started', 'startedEpoch', 'submittedAt', 'finished',
+            'elapsedSeconds', 'progress', 'progressEvents', 'runtimeEvents',
+            'lastOutputAt', 'lastHeartbeatAt', 'terminalReport', 'toolSteps',
+            'eventSequence', 'logAvailable', 'policyPreference', 'persistPolicyOnSessionCreate')
+    snapshot = {key: task[key] for key in keys if key in task}
+    snapshot['checkpointVersion'] = 1
+    snapshot['createdAt'] = task.get('started')
+    snapshot['checkpointAt'] = now_iso()
+    snapshot['prompt'] = task.get('submittedMessage', '')
+    # Never persist process handles, bearer capabilities, environment, tool
+    # arguments/results or hidden reasoning in recovery metadata.
+    with META_LOCK:
+        data = metadata()
+        data.setdefault('tasks', {}).setdefault(task['id'], {}).update(snapshot)
+        legacy.atomic_json(META, data)
+
+
+def finish_task_record(task, status, error=None):
+    task.update(status=status, finished=now_iso(),
+                elapsedSeconds=round(time.time() - task['startedEpoch'], 1))
+    if error:
+        task['rpcError'] = sanitize_runtime_text(error)
+    if status != 'completed':
+        task['terminalReport'] = ('Runtime report: ' + (task.get('rpcError') or
+            f'Task {status.replace("_", " ")}.') +
+            ' The request and saved work are retained. Tool actions may have occurred; '
+            'review their receipts and actual target state before continuing. No actions were replayed by recovery.')
+        for step in task.get('toolSteps', []):
+            if step['state'] == 'running':
+                step['state'] = 'unknown'
+    add_task_progress(task, status.replace('_', ' ').title())
+    task['logAvailable'] = (TASK_LOGS / f"{task['id']}.log").is_file()
+    checkpoint_task(task)
+    try:
+        recovered = recover_failed_task_conversation(task, status)
+    except OSError:
+        recovered = None
+        add_runtime_event(task, 'error', 'Conversation storage unavailable; request retained in task checkpoint')
+    if recovered:
+        task['sessionId'] = task['agentSessionId'] = recovered
+    if task.get('sessionId'):
+        store_task_route(task)
+    record_task_finished(task, status)
+
+
+def restore_task_checkpoints():
+    """At API startup, expose interrupted work without resending any request.
+
+    An old runner may still be alive: revoke its task capability and label the
+    outcome uncertain, never infer that its last action failed or completed.
+    """
+    rows = metadata().get('tasks', {})
+    for task_id, row in rows.items():
+        if not re.fullmatch(r'[a-f0-9]{32}', task_id) or not isinstance(row, dict):
+            continue
+        if row.get('checkpointVersion') != 1 and row.get('status') != 'running':
+            continue
+        if not re.fullmatch(r'[A-Za-z0-9_.-]{2,32}', str(row.get('owner', ''))):
+            continue
+        task = dict(row, id=task_id, submittedMessage=row.get('prompt', ''), _durable=True)
+        task.pop('prompt', None)
+        task.setdefault('started', row.get('createdAt') or now_iso())
+        task.setdefault('startedEpoch', legacy.parse_timestamp(task['started']) or time.time())
+        if task.get('status') in {'running', 'starting', 'queued', 'stopping'}:
+            finish_task_record(task, 'failed', 'Task supervision was interrupted. Execution outcome is unverified.')
+        TASKS[task_id] = task
 
 
 def append_ledger(task, status, output=""):
@@ -1517,6 +1596,8 @@ def add_runtime_event(task, kind, label, detail=""):
     recent = task.setdefault("_recentRuntimeEvents", {})
     now = time.time()
     if row["label"] and now - recent.get(key, 0) >= 5:
+        task['eventSequence'] = task.get('eventSequence', 0) + 1
+        row['sequence'] = task['eventSequence']
         recent[key] = now
         if len(recent) > 100:
             task["_recentRuntimeEvents"] = {item: at for item, at in recent.items() if now - at < 30}
@@ -1639,11 +1720,21 @@ def apply_task_event(task_id, event):
             task["hasAssistantText"] = False
             add_task_progress(task, f"Using {event.get('toolName') or event.get('tool') or 'tool'}")
             add_runtime_event(task, "tool", f"Started {event.get('toolName') or event.get('tool') or 'tool'}")
+            task.setdefault('toolSteps', []).append({
+                'id': sanitize_runtime_text(event.get('toolCallId') or uuid.uuid4().hex, 100),
+                'tool': sanitize_runtime_text(event.get('toolName') or event.get('tool') or 'tool', 80),
+                'state': 'running', 'startedAt': now_iso()})
+            task['toolSteps'] = task['toolSteps'][-100:]
         elif event_type == "tool_execution_end":
             tool_name = str(event.get("toolName") or event.get("tool") or "tool")
             result = event.get("result") or {}
             details = result.get("details") or {}
             task["toolExecuted"] = True
+            for step in reversed(task.get('toolSteps', [])):
+                if step['state'] == 'running' and (not event.get('toolCallId') or step['id'] == event['toolCallId']):
+                    step.update(state='error' if result.get('isError') or details.get('status') == 'error' else 'returned',
+                                finishedAt=now_iso())
+                    break
             if result.get("isError") or details.get("status") == "error":
                 error_name = sanitize_runtime_text(details.get("errorEname") or "ToolError", 80)
                 task["lastToolFailure"] = {"tool": tool_name, "error": error_name}
@@ -1662,6 +1753,8 @@ def apply_task_event(task_id, event):
             task["rpcError"] = "OpenShell task runtime exited"
             add_task_progress(task, "Isolated task runtime failed")
             add_runtime_event(task, "error", "Isolated task runtime failed")
+        if event_type != 'message_update':
+            checkpoint_task(task)
 
 
 def queue_unanswered_recovery(task_id):
@@ -1724,6 +1817,29 @@ def terminal_task_error(task):
 
 
 def monitor_task(task_id, before):
+    try:
+        _monitor_task(task_id, before)
+    except Exception:
+        # Preserve a deterministic report even if the monitor itself fails.
+        # Never include exception text: it can contain private tool output.
+        with TASK_LOCK:
+            task = TASKS.get(task_id)
+        if not task:
+            return
+        process = task.get('process')
+        if process and process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+        with TASK_LOCK:
+            finish_task_record(task, 'failed', 'Task supervision failed; inspect the retained work log.')
+        legacy.audit('native_task_monitor_failed', task=task_id)
+
+
+def _monitor_task(task_id, before):
     with TASK_LOCK:
         task = TASKS[task_id]
         process = task["process"]
@@ -1739,8 +1855,14 @@ def monitor_task(task_id, before):
     pending_bytes = bytearray()
     pending_lines = deque()
     discarding_line = False
+    last_checkpoint = 0
     while process.poll() is None or pending_lines:
         now = time.monotonic()
+        if now - last_checkpoint >= 5:
+            with TASK_LOCK:
+                task['lastHeartbeatAt'] = now_iso()
+                checkpoint_task(task)
+            last_checkpoint = now
         alive = process.poll() is None
         if alive and task_deadline_expired(task, deadline):
             timed_out = True
@@ -1878,6 +2000,8 @@ def monitor_task(task_id, before):
         if rpc_error and current:
             current["rpcError"] = rpc_error
     stopped = bool(current.get("stopRequested"))
+    if not rpc_error and not current.get('hasAssistantText'):
+        rpc_error = 'Prime exited without a final answer.'
     status = "timed_out" if timed_out else "stopped" if stopped else "failed" if rpc_error else "completed" if agent_ended or process.returncode == 0 else "failed"
     root = session_root(task.get("owner", INITIAL_ADMIN))
     after = session_stems(task.get("owner", INITIAL_ADMIN))
@@ -1889,17 +2013,8 @@ def monitor_task(task_id, before):
         task = TASKS[task_id]
         if not task.get("sessionId") and created:
             task["sessionId"] = created[0]
-        task.update({"status": status, "finished": now_iso(), "elapsedSeconds": round(time.time() - task["startedEpoch"], 1)})
-        add_task_progress(task, status.replace("_", " ").title())
-        task["logAvailable"] = (TASK_LOGS / f"{task_id}.log").is_file()
-        recovered = recover_failed_task_conversation(task, status)
-        if recovered:
-            task["sessionId"] = recovered
-            task["agentSessionId"] = recovered
+        finish_task_record(task, status, rpc_error)
         append_ledger(task, status, output)
-        if task.get("sessionId"):
-            store_task_route(task)
-        record_task_finished(task, status)
     legacy.audit("native_task_finished", task=task_id, session=task.get("sessionId"), status=status)
 
 
@@ -2144,25 +2259,35 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITI
     timer = {'authorization': authorization or {}}
     initialize_task_timer(timer)
     before = session_stems(owner)
+    started = now_iso()
+    topic = legacy.safe_topic(message) or 'Native task'
+    prepared = {'id': task_id, 'owner': owner, 'sessionId': session_id if not fork else None,
+                'projectId': project_id, 'fileIds': file_ids, 'topic': topic, **route,
+                'thinking': thinking, 'status': 'starting', 'started': started,
+                'startedEpoch': time.time(), 'submittedAt': started, 'submittedMessage': message,
+                'policyPreference': policy or {}, 'persistPolicyOnSessionCreate': not bool(session_id) or fork,
+                '_durable': True}
+    # Persist before starting any runner or sending the first prompt.
+    checkpoint_task(prepared)
     try:
         process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=task_cwd, env=task_env, start_new_session=True)
     except Exception:
-        revoke_connection_task(task_id)
+        finish_task_record(prepared, 'failed', 'Prime could not start the task runtime.')
+        with TASK_LOCK:
+            TASKS[task_id] = prepared
         raise
     started = now_iso()
     runtime = "openshell" if container_mode() else "host"
     topic = legacy.safe_topic(message) or "Native task"
     task = {"id": task_id, "sessionId": session_id if not fork else None, "agentSessionId": session_id if session_id and not fork else None, "rpcReady": True, "rpcResponses": {}, "owner": owner, "projectId": project_id, "fileIds": file_ids, "authorization": authorization or {}, "policyPreference": policy or {}, "persistPolicyOnSessionCreate": not bool(session_id) or fork, "submittedMessage": message, "submittedAt": started, "topic": topic, **route, "thinking": thinking, "contextWindow": details.get("contextWindow"), "maxTokens": details.get("maxTokens"), "runtime": runtime, "sandboxName": f"pt-{task_id[:16]}" if runtime == "openshell" else None, "policyRevision": 1 if runtime == "openshell" else None, "status": "running", "progress": "Starting Prime", "progressEvents": [{"at": started, "label": "Request received"}], "runtimeEvents": [{"at": started, "kind": "request", "label": "Request received"}], "liveLog": [], "liveLogBytes": 0, "liveResponse": "", "started": started, "startedEpoch": time.time(), "pid": process.pid, "process": process, "logAvailable": False, "_stdinLock": threading.Lock()}
     task.update({key: value for key, value in timer.items() if key != 'authorization'})
+    task['_durable'] = True
     with TASK_LOCK:
         TASKS[task_id] = task
-    with META_LOCK:
-        data = metadata()
-        data.setdefault("tasks", {})[task_id] = {"owner": owner, "createdAt": task["started"], "status": "running", "topic": topic, "prompt": message, "sessionId": task.get("sessionId"), "projectId": project_id}
-        legacy.atomic_json(META, data)
-    if task.get("sessionId"):
-        store_task_route(task)
     try:
+        checkpoint_task(task)
+        if task.get("sessionId"):
+            store_task_route(task)
         prompt_message += project_context(project_id, owner)
         prompt_message += runtime_context(authorization, requested_thinking)
         process.stdin.write(json.dumps({"id": f"state-{task_id}", "type": "get_state"}, separators=(",", ":")) + "\n")
@@ -2175,13 +2300,10 @@ def launch_task(message, session_id=None, fork=False, thinking=None, owner=INITI
             process.wait(timeout=5)
         except subprocess.TimeoutExpired:
             process.kill()
+            process.wait(timeout=5)
         with TASK_LOCK:
-            TASKS.pop(task_id, None)
-        with META_LOCK:
-            data = metadata()
-            data.get("tasks", {}).pop(task_id, None)
-            legacy.atomic_json(META, data)
-        raise RuntimeError("Prime could not accept the initial prompt") from error
+            finish_task_record(task, 'failed', 'Prime could not accept the initial prompt.')
+        raise RuntimeError("Prime could not accept the initial prompt; the request was retained") from error
     threading.Thread(target=monitor_task, args=(task_id, before), daemon=True).start()
     legacy.audit("native_task_started", task=task_id, session=session_id)
     return {key: value for key, value in task.items() if key not in {"process", "rpcResponses", "agentEnded", "liveLogBytes"} and not key.startswith("_")}
@@ -2787,6 +2909,38 @@ def console_snapshots(owner, selected=None, watching=False):
 
 
 class Handler(legacy.Handler):
+    def authenticate_request(self, write=False):
+        """Authenticate every API request, including direct loopback callers.
+
+        Nginx identity headers are hints, never authority. Only the fixed local
+        auth service may supply identity; no redirects/proxies/caller endpoint.
+        """
+        cookie = self.headers.get('Cookie', '')
+        if not cookie or len(cookie) > 8192:
+            self.send_json(401, {'error': 'Sign in required'})
+            return False
+        connection = http.client.HTTPConnection('127.0.0.1', 8764, timeout=5)
+        try:
+            connection.request('GET', '/auth/check-write' if write else '/auth/check',
+                headers={'Cookie': cookie, 'X-Prime-CSRF': self.headers.get('X-Prime-CSRF', '')})
+            response = connection.getresponse()
+            user, role = response.getheader('X-Prime-User', ''), response.getheader('X-Prime-Role', '')
+            if response.status != 204:
+                self.send_json(response.status if response.status in {401, 403} else 503,
+                               {'error': 'Authentication or request validation failed'})
+                return False
+            if not re.fullmatch(r'[A-Za-z0-9_.-]{2,32}', user) or role not in {'user', 'power_user', 'admin'}:
+                raise ValueError('Invalid authentication response')
+            for key, value in (('X-Prime-User', user), ('X-Prime-Role', role)):
+                del self.headers[key]  # removes all caller-supplied duplicates
+                self.headers[key] = value
+            return True
+        except (OSError, ValueError, http.client.HTTPException):
+            self.send_json(503, {'error': 'Authentication service unavailable'})
+            return False
+        finally:
+            connection.close()
+
     def request_user(self):
         value = self.headers.get("X-Prime-User", "")
         if not re.fullmatch(r"[A-Za-z0-9_.-]{2,32}", value):
@@ -2813,6 +2967,15 @@ class Handler(legacy.Handler):
         parsed = urllib.parse.urlparse(self.path)
         query = urllib.parse.parse_qs(parsed.query)
         path = parsed.path
+        if path == '/api/health':
+            # Aggregate liveness only. Maintenance combines this with its
+            # exclusive admission lock, sandbox inventory and model metrics.
+            with TASK_LOCK:
+                active = sum(t.get('status') in {'running', 'starting', 'queued', 'stopping'} for t in TASKS.values())
+            self.send_json(200, {'ok': True, 'activeTasks': active})
+            return
+        if not self.authenticate_request():
+            return
         try:
             if path == '/api/consoles':
                 self.send_json(200, {'sessions': console_snapshots(self.request_user(), watching=query.get('watch') == ['1']),
@@ -2890,6 +3053,8 @@ class Handler(legacy.Handler):
                 source = upload_path(str(row.get("sourceFileId") or ""), row.get("owner", INITIAL_ADMIN))
                 self.send_bytes(200, source.read_bytes(), "application/zip", row.get("sourceName") or f"{skill_id}.zip")
             else:
+                if path == '/api/activity':
+                    self.require_admin()
                 super().do_GET()
         except ValueError as error:
             self.send_json(400, {"error": str(error)})
@@ -2899,9 +3064,14 @@ class Handler(legacy.Handler):
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
+        if not self.authenticate_request(write=True):
+            return
         v2 = {"/api/tasks/extend", "/api/settings", "/api/skills", "/api/tasks/start", "/api/tasks/stop", "/api/tasks/message", "/api/tasks/authorization", "/api/conversations/update", "/api/conversations/delete", "/api/conversations/duplicate", "/api/conversations/promote", "/api/projects/create", "/api/projects/update", "/api/projects/delete", "/api/files/delete", "/api/admin/restart", "/api/admin/retention", "/api/admin/update", "/api/admin/sandboxes", "/api/admin/user-cache", "/api/admin/routing-rules", "/api/admin/skills", "/api/providers/configure", "/api/files/upload"}
         v2.add('/api/projects/skills')
         if path not in v2:
+            if path == '/api/activity/stop' and self.headers.get('X-Prime-Role') != 'admin':
+                self.send_json(403, {'error': 'Administrator access is required'})
+                return
             if not csrf_ok(self.headers):
                 self.send_json(403, {"error": "CSRF validation failed"})
                 return
@@ -3035,4 +3205,5 @@ class Handler(legacy.Handler):
 
 
 if __name__ == "__main__":
+    restore_task_checkpoints()
     legacy.BoundedThreadingHTTPServer(("127.0.0.1", 8765), Handler).serve_forever()

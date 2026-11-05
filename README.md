@@ -36,6 +36,11 @@ The broker-aware acceptance test also checks completed coding work, approved
 console actions with lost-reply recovery, retained screenshots and image reading.
 A faster failed task is not a promotion pass; existing v1 failures remain recorded.
 
+The [reliable task core](docs/reliable-tasks.md) verifies API sessions even on
+loopback, saves requests before runner startup, checkpoints tool-step status and
+retains failure reports across API restarts without automatically replaying
+actions. Domain-specific workflow adapters remain a separate next stage.
+
 ## Why one Qwen model instead of two local models?
 
 The previous deployment split routine orchestration onto Nemotron 3.5 Lightning

@@ -37,18 +37,12 @@ def idle_metrics(metrics):
 
 def idle():
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
-    users = json.loads((Path.home() / '.config/prime-agent/web-auth.json').read_text())['users']
-    if not users:
-        raise RuntimeError('Cannot establish user inventory')
-    for owner in users:
-        request = urllib.request.Request('http://127.0.0.1:8765/api/tasks', headers={'X-Prime-User': owner})
-        with opener.open(request, timeout=10) as response:
-            payload = json.load(response)
-        tasks = payload['tasks'] if isinstance(payload, dict) else payload
-        if not isinstance(tasks, list):
-            raise RuntimeError('Unrecognized task inventory')
-        if any(t.get('status') in ('running', 'starting', 'queued', 'stopping') for t in tasks):
-            raise RuntimeError('Active task exists; no changes made')
+    with opener.open('http://127.0.0.1:8765/api/health', timeout=10) as response:
+        payload = json.load(response)
+    if payload.get('ok') is not True or type(payload.get('activeTasks')) is not int:
+        raise RuntimeError('Cannot verify aggregate task inventory')
+    if payload['activeTasks'] != 0:
+        raise RuntimeError('Active task exists; no changes made')
     result = subprocess.run(['openshell', '--gateway', 'spark-local', 'sandbox', 'list', '--all-workspaces', '--ids'], capture_output=True, text=True, timeout=30, check=True)
     if result.stdout.strip():
         raise RuntimeError('Sandbox exists; no changes made')
