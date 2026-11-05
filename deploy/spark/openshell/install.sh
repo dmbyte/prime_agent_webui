@@ -250,7 +250,7 @@ openshell --gateway spark-local settings set --global --key agent_policy_proposa
 
 cp -a "$repo/deploy/spark/container/." "$build_context/"
 install -d -m 0755 "$build_context/managed-skills"
-# The dependency-free lan-web-host client is installed into the owner's mounted
+# The script-only lan-web-host and prime-workflows clients use the owner's mounted
 # skill directory, not baked into these approved image layers.
 for skill in bmc-headless-browser bmc-html5-kvm ipmi-redfish-bmc prime-nvidia-catalog; do
   cp -a "$repo/deploy/spark/prime/skills/$skill" "$build_context/managed-skills/"

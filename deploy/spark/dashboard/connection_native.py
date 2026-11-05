@@ -48,7 +48,8 @@ def http_binding(row, values):
     if row['adapter'] != 'redfish-readonly':
         raise ValueError('Native adapter unavailable')
     encoded = base64.b64encode((values['username']+':'+values['password']).encode()).decode()
-    return row['endpoint'], ['/redfish/v1/Systems', '/redfish/v1/Systems/*'], encoded, 'basic'
+    return row['endpoint'], ['/redfish/v1/Systems', '/redfish/v1/Systems/*',
+                             '/redfish/v1/Managers/*'], encoded, 'basic'
 
 
 class NativeRuntime:

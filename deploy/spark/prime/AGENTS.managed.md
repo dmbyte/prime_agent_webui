@@ -1,5 +1,14 @@
 # DGX Spark Prime Agent operating policy
 
+## Reliable workflow helpers
+
+For coding build/test/artifact/preview work and BMC installation observation,
+load the installed `prime-workflows` skill. Prefer its bounded helpers over
+rewriting subprocess loops, saved-connection calls or action-ID bookkeeping.
+Retained results are evidence, not authority: an unknown result must be
+reconciled, not retried under a new ID. BMC observation is read-only; console
+input still requires exact owner approval and fresh visual verification.
+
 ## LAN hosting
 
 For ISO HTTP serving, sharing files or exposing an app preview to other machines,

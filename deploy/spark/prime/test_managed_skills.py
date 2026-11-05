@@ -21,7 +21,7 @@ class ManagedSkillTests(unittest.TestCase):
         module = load_installer()
         rows = module.validate_tree(ROOT / "skills", len(module.BUNDLED_SKILLS), module.BUNDLED_SKILLS)
         self.assertEqual({row["name"] for row in rows}, {
-            "bmc-headless-browser", "bmc-html5-kvm", "ipmi-redfish-bmc", "prime-nvidia-catalog", "lan-web-host",
+            "bmc-headless-browser", "bmc-html5-kvm", "ipmi-redfish-bmc", "prime-nvidia-catalog", "lan-web-host", "prime-workflows",
         })
 
     def test_symlink_is_rejected(self):
@@ -106,9 +106,9 @@ class ManagedSkillTests(unittest.TestCase):
         self.assertIn('-type f -exec chmod 0644', installer)
         self.assertIn('-type d -exec chmod 0755', installer)
         for name in load_installer().BUNDLED_SKILLS:
-            if name == 'lan-web-host':
-                self.assertTrue((ROOT / 'skills/lan-web-host/scripts/prime_web_host.py').is_file())
-                self.assertNotIn('/opt/prime-managed-skills/lan-web-host', containerfile)
+            if name in ('lan-web-host', 'prime-workflows'):
+                self.assertTrue(list((ROOT / 'skills' / name / 'scripts').glob('*.py')))
+                self.assertNotIn('/opt/prime-managed-skills/'+name, containerfile)
                 continue
             self.assertIn(f"/opt/prime-managed-skills/{name}", containerfile)
             self.assertIn("$repo/deploy/spark/prime/skills/$skill", installer)

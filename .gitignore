@@ -20,6 +20,7 @@ __pycache__/
 /deploy/spark/prime/EVALS.md
 /deploy/spark/prime/skills/*
 !/deploy/spark/prime/skills/lan-web-host/
+!/deploy/spark/prime/skills/prime-workflows/
 # These reviewed, distribution-managed adapters are part of the installer.
 !/deploy/spark/prime/skills/bmc-headless-browser/
 !/deploy/spark/prime/skills/bmc-headless-browser/**

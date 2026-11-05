@@ -18,7 +18,7 @@ from pathlib import Path
 
 NVIDIA_COMMIT = "fd9f1466ff8a39178e488981e8b5118709392949"
 NVIDIA_SKILL_COUNT = 366
-BUNDLED_SKILLS = ("bmc-headless-browser", "bmc-html5-kvm", "ipmi-redfish-bmc", "prime-nvidia-catalog", "lan-web-host")
+BUNDLED_SKILLS = ("bmc-headless-browser", "bmc-html5-kvm", "ipmi-redfish-bmc", "prime-nvidia-catalog", "lan-web-host", "prime-workflows")
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
 _spec = importlib.util.spec_from_file_location('prime_skill_declarations', Path(__file__).parents[1] / 'dashboard/skill_credentials.py')

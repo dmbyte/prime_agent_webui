@@ -13,7 +13,8 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         from urllib.parse import urlsplit
         path = urlsplit(req.full_url).path
         if (code in (301, 307, 308) and newurl == req.full_url+'/' and
-                re.fullmatch(r'/redfish/v1/Systems(?:/[A-Za-z0-9_-]{1,80})?', path)):
+                re.fullmatch(r'/redfish/v1/(?:Systems|Managers)(?:/[A-Za-z0-9_.-]{1,80}(?:/VirtualMedia(?:/[A-Za-z0-9_.-]{1,80})?)?)?', path)
+                and not any(p in ('.', '..') for p in path.split('/'))):
             return urllib.request.Request(newurl, headers=dict(req.headers), method='GET')
         return None
 

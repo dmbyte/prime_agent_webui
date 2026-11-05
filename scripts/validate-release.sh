@@ -57,6 +57,10 @@ required=(
   deploy/spark/systemd/prime-hosting-broker.service
   deploy/spark/openshell/install-hosting.sh
   deploy/spark/prime/skills/lan-web-host/SKILL.md
+  deploy/spark/prime/skills/prime-workflows/SKILL.md
+  deploy/spark/prime/skills/prime-workflows/scripts/prime_workflows.py
+  deploy/spark/prime/test_workflow_skill.py
+  deploy/spark/dashboard/test_installation_snapshot.py
   deploy/spark/container/openshell_runner.py
   deploy/spark/container/runner_broker.py
   deploy/spark/container/volume_provisioner.py

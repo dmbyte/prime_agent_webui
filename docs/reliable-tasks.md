@@ -102,9 +102,12 @@ BMC, and does not weaken production authentication for tests.
 
 ## Next capability stage
 
-Typed BMC installation operations and coding build/test/preview workflows still
-need dedicated adapters, artifact verification and end-to-end acceptance. This
-stage records their supervision safely; it does not claim to implement them.
+The [first dedicated workflow adapters](workflow-adapters.md) now provide coding
+build/test results, artifact hashes, LAN previews, BMC boot/media observation and
+recoverable exact-approved console steps. They do not implement automatic
+Redfish mutations, a complete OS-installation workflow or a privileged workflow
+engine. Continue with end-to-end workload acceptance and separately reviewed
+write adapters before claiming unattended installation.
 Keep mutation authorization outside generated code. Follow with restart/restore
 drills, multi-user FP4 soak and workload-specific quality measurements before
 additional resident models or autonomous skill promotion.

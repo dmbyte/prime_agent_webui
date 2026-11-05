@@ -22,7 +22,7 @@ class SharedSkillTests(unittest.TestCase):
             with mock.patch.object(installer.pwd,'getpwnam',return_value=account):
                 installer.publish_shared('admin',bundled,root=registry)
             index=json.loads((home/'.prime/agent/global-skill-inventory.json').read_text())
-            self.assertEqual(len(index['skills']),5)
+            self.assertEqual(len(index['skills']),6)
             for owner in ('alice','bob'):
                 agent=root/owner; (agent/'skills/bmc-headless-browser').mkdir(parents=True)
                 (agent/'skills/bmc-headless-browser/SKILL.md').write_text('personal')

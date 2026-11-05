@@ -25,6 +25,7 @@ services and may rebuild images. Prepare and test a separate staging directory.
 |---|---|---|---|
 | `github-readonly` | `github.repository`, arguments `{"repository":"owner/name"}` | Private/archived/disabled flags and issue/fork/star counts | Internet or Full, tools enabled |
 | `redfish-readonly` | `redfish.systems`, arguments `{}` | Bounded system count/list with ordinal, power, health and state enums | Network operations profile, LAN or Full, tools enabled |
+| `redfish-readonly` | `redfish.installation`, `{}` to list IDs, then `{"systemId":"observed-id"}` | Selected system boot override and advertised virtual-media state, without image URLs | Network operations profile, LAN or Full, tools enabled |
 
 Only these operations are accepted. No generic URL, arbitrary HTTP method, raw
 response, shell command or secret-read operation exists. GitHub uses the fixed
@@ -33,6 +34,15 @@ repositories with Metadata read permission. Redfish accepts only an exact RFC191
 IPv4 HTTPS origin on port 443. It reads `/redfish/v1/Systems` and at most 16 direct
 members, rejecting pagination, external links, traversal and encoded paths.
 Use a read-only BMC account. No reset, boot override or write is implemented.
+
+Installation observation additionally follows only a selected system's advertised
+VirtualMedia collection, or at most four explicitly linked managers and their
+advertised media collections. Collections are capped at 16 members and must be
+complete, without pagination, duplicate members, encoded/traversal or foreign
+links. Only enum/boolean projections and bounded resource IDs are returned;
+image URLs, serials and OEM data are withheld. Missing advertisement is unknown,
+not proof of no media. The native profile permits only GET for these paths.
+See [workflow adapters](workflow-adapters.md); no write grant is added.
 
 TLS verification is on by default. BMC certificates normally must chain to the
 host's trusted CA and contain the selected IP address in their subject alternative

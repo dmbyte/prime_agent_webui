@@ -20,7 +20,8 @@ import urllib.parse
 
 import skill_credentials as credentials
 
-ADAPTERS = {'github-readonly': ['github.repository'], 'redfish-readonly': ['redfish.systems']}
+ADAPTERS = {'github-readonly': ['github.repository'],
+            'redfish-readonly': ['redfish.systems', 'redfish.installation']}
 CONSOLE_ADAPTERS = {'bmc-browser': ['browser.open', 'browser.capture', 'browser.close'],
                     'bmc-kvm': ['kvm.open', 'kvm.capture', 'kvm.input', 'kvm.receipt', 'kvm.close'],
                     'ipmi-sol': ['ipmi.status', 'sol.open', 'sol.read', 'sol.input', 'sol.receipt', 'sol.close']}
@@ -349,7 +350,7 @@ def get_json(origin, path, headers, *, ignore_certificate_errors=False):
         connection.request('GET', path, headers={'Accept': 'application/json', 'User-Agent': 'Prime-Connections/1', **headers})
         response = connection.getresponse()
         if (response.status in (301, 307, 308) and
-                re.fullmatch(r'/redfish/v1/Systems(?:/[A-Za-z0-9_-]{1,80})?', path) and
+                re.fullmatch(REDFISH_READ_PATH, path) and not path.endswith('/') and
                 response.getheader('Location') in (path+'/', origin+path+'/')):
             # iLO canonicalizes collection/member URLs. This is not an arbitrary
             # redirect or transport fallback; only one trailing slash is allowed.
@@ -379,6 +380,85 @@ def get_json(origin, path, headers, *, ignore_certificate_errors=False):
         connection.close()
 
 
+REDFISH_ID = r'[A-Za-z0-9_.-]{1,80}'
+REDFISH_READ_PATH = rf'/redfish/v1/(?:Systems|Managers)(?:/{REDFISH_ID}(?:/VirtualMedia(?:/{REDFISH_ID})?)?)?/?'
+BOOT_TARGETS = ('None', 'Pxe', 'Floppy', 'Cd', 'Usb', 'Hdd', 'BiosSetup', 'Utilities',
+                'Diags', 'UefiShell', 'UefiTarget', 'SDCard', 'UefiHttp', 'RemoteDrive')
+
+
+def redfish_members(data, collection):
+    members = data.get('Members')
+    if (not isinstance(members, list) or len(members) > 16 or data.get('Members@odata.nextLink')
+            or type(data.get('Members@odata.count', len(members))) is not int
+            or data.get('Members@odata.count', len(members)) != len(members)):
+        raise ValueError('Unsupported or incomplete Redfish collection')
+    paths = []
+    for member in members:
+        path = member.get('@odata.id') if isinstance(member, dict) else None
+        if (not isinstance(path, str) or not re.fullmatch(re.escape(collection)+'/'+REDFISH_ID+'/?', path)
+                or path.rstrip('/').split('/')[-1] in ('.', '..') or path.rstrip('/') in paths):
+            raise ValueError('Redfish member is outside the selected collection or duplicated')
+        paths.append(path.rstrip('/'))
+    return paths
+
+
+def installation_snapshot(target, headers, arguments, transport):
+    """GET-only, selected-system boot/media evidence. Never return image URLs/OEM data."""
+    if not arguments:
+        paths = redfish_members(transport(target, '/redfish/v1/Systems', headers), '/redfish/v1/Systems')
+        return {'systemIds': [p.rsplit('/', 1)[1] for p in paths]}
+    if set(arguments) != {'systemId'} or not isinstance(arguments['systemId'], str):
+        raise ValueError('Select one discovered systemId explicitly')
+    system_id = arguments['systemId']
+    if not re.fullmatch(REDFISH_ID, system_id) or system_id in ('.', '..'):
+        raise ValueError('Invalid systemId')
+    systems = redfish_members(transport(target, '/redfish/v1/Systems', headers), '/redfish/v1/Systems')
+    selected = '/redfish/v1/Systems/'+system_id
+    if selected not in systems:
+        raise ValueError('Selected system is not in the observed collection')
+    data = transport(target, selected, headers)
+    boot = data.get('Boot') if isinstance(data.get('Boot'), dict) else {}
+    def enum(value, options):
+        return value if isinstance(value, str) and value in options else 'Unknown'
+    result = {'systemId': system_id, 'observedAt': time.time(), 'effectVerified': False,
+              'powerState': enum(data.get('PowerState'), ('On', 'Off', 'PoweringOn', 'PoweringOff', 'Paused')),
+              'boot': {'enabled': enum(boot.get('BootSourceOverrideEnabled'), ('Disabled', 'Once', 'Continuous')),
+                       'target': enum(boot.get('BootSourceOverrideTarget'), BOOT_TARGETS),
+                       'mode': enum(boot.get('BootSourceOverrideMode'), ('UEFI', 'Legacy'))},
+              'media': [], 'mediaStatus': 'not-advertised'}
+    # Prefer the system's own media. Otherwise use only explicitly linked managers;
+    # never guess that the first manager or device belongs to this server.
+    sources = [(selected, data)]
+    if 'VirtualMedia' not in data:
+        links = data.get('Links') if isinstance(data.get('Links'), dict) else {}
+        managers = links.get('ManagedBy', [])
+        manager_paths = redfish_members({'Members': managers}, '/redfish/v1/Managers')
+        if len(manager_paths) > 4:
+            raise ValueError('Too many linked managers')
+        sources = [(path, transport(target, path, headers)) for path in manager_paths]
+    for source, owner in sources:
+        link = owner.get('VirtualMedia')
+        if link is None:
+            continue
+        collection = source+'/VirtualMedia'
+        if (not isinstance(link, dict) or not isinstance(link.get('@odata.id'), str)
+                or link['@odata.id'].rstrip('/') != collection):
+            raise ValueError('Virtual media link is outside the observed resource')
+        paths = redfish_members(transport(target, collection, headers), collection)
+        for path in paths:
+            media = transport(target, path, headers)
+            types = media.get('MediaTypes', [])
+            result['media'].append({'resource': path,
+                'inserted': media.get('Inserted') if type(media.get('Inserted')) is bool else None,
+                'writeProtected': media.get('WriteProtected') if type(media.get('WriteProtected')) is bool else None,
+                'connectedVia': enum(media.get('ConnectedVia'), ('NotConnected', 'URI', 'Applet', 'Oem')),
+                'mediaTypes': [x for x in types if isinstance(x, str) and x in ('CD', 'DVD', 'USBStick', 'Floppy')]
+                              if isinstance(types, list) and len(types) <= 16 else [],
+                'imageConfigured': bool(media.get('Image')) if isinstance(media.get('Image'), str) else None})
+        result['mediaStatus'] = 'observed'
+    return result
+
+
 def perform(row, values, operation, arguments, transport):
     if not isinstance(arguments, dict):
         raise ValueError('Operation arguments must be an object')
@@ -399,13 +479,15 @@ def perform(row, values, operation, arguments, transport):
             if type(data.get(key)) is int and 0 <= data[key] <= 10**12:
                 result[key] = data[key]
         return result
-    if operation != 'redfish.systems' or arguments:
+    if operation not in ('redfish.systems', 'redfish.installation') or operation == 'redfish.systems' and arguments:
         raise ValueError('Unsupported operation or arguments')
     target = endpoint(values.get('endpoint'))
     if target != row['endpoint'] or not values.get('username') or not values.get('password') or ':' in values['username']:
         raise ValueError('Saved BMC credentials do not match this connection')
     encoded = base64.b64encode((values['username']+':'+values['password']).encode()).decode()
     headers = {'Authorization': 'Basic '+encoded}
+    if operation == 'redfish.installation':
+        return installation_snapshot(target, headers, arguments, transport)
     collection = transport(target, '/redfish/v1/Systems', headers)
     members = collection.get('Members')
     if not isinstance(members, list) or len(members) > 16 or collection.get('Members@odata.nextLink'):
