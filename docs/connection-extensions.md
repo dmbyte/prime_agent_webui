@@ -1,5 +1,8 @@
 # Native HTTP and private console connections
 
+For iLO, iDRAC, Supermicro, Lenovo and generic HTML5 console layouts, bounded
+diagnostics and firmware limitations, see [console compatibility](bmc-console-compatibility.md).
+
 For separately approved ISO mount/eject, optical one-time boot and graceful
 restart/power-on, see [BMC installation controls](bmc-installation-controls.md).
 That adapter uses a separate explicit Direct trusted broker connection; it does

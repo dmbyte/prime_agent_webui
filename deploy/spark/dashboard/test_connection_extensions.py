@@ -244,6 +244,26 @@ class ConsoleTests(unittest.TestCase):
         changed = self.call('sol.input', dict(args, requestId='c'*32, key='enter'))
         self.assertTrue(changed['approvalRequired'])
 
+    def test_kvm_capability_info_is_session_bound_and_read_only(self):
+        self.configure('bmc-kvm')
+        key = self.call('kvm.open')['sessionId']
+        self.worker.info.return_value = {'vendorFamily': 'dell-idrac', 'renderer': 'canvas',
+            'consoleReady': True, 'sameOriginOnly': True, 'inputRequiresApproval': True, 'hardwareCertified': False}
+        result = self.call('kvm.info', {'sessionId': key})
+        self.assertTrue(result['consoleReady']); self.assertFalse(result['hardwareCertified'])
+        self.worker.send.assert_not_called()
+        with self.assertRaises(PermissionError): self.call('kvm.info', {'sessionId': 'pc-'+'f'*16})
+        with self.assertRaises(ValueError): self.call('kvm.info', {'sessionId': key, 'selector': 'body'})
+
+    def test_unsupported_browser_returns_bounded_compatibility_without_session(self):
+        self.configure('bmc-kvm')
+        self.factory.side_effect = connection_browser.BrowserCompatibilityError('console-launch', 'launcher-unavailable', 'dell-idrac')
+        result = self.call('kvm.open')
+        self.assertFalse(result['sessionOpened'])
+        self.assertFalse(result['compatibility']['retryAllowed'])
+        self.assertEqual(self.manager.sessions.sessions, {})
+        self.worker.send.assert_not_called()
+
     def test_uncertain_input_survives_close_restart_and_new_session(self):
         self.configure('bmc-kvm')
         key = self.call('kvm.open')['sessionId']
@@ -561,6 +581,22 @@ class ConsoleBoundaryTests(unittest.TestCase):
         self.assertTrue(browser.allowed('https://192.168.1.4/html/index.html'))
         self.assertTrue(browser.allowed('wss://192.168.1.4/console', websocket=True))
         self.assertFalse(browser.allowed('ws://192.168.1.4/console', websocket=True))
+
+    def test_vendor_hints_select_reviewed_launch_labels_not_power_or_takeover(self):
+        worker = connection_browser_worker
+        cases = [('HPE iLO 4', 'hpe-ilo', 'HTML5'), ('iDRAC9', 'dell-idrac', 'Launch Virtual Console'),
+                 ('Supermicro BMC', 'supermicro', 'Launch Console'),
+                 ('Lenovo XClarity Controller', 'lenovo-xcc', 'Launch Remote Console'),
+                 ('Unknown appliance', 'generic-html5', 'HTML5 Console')]
+        for title, family, label in cases:
+            self.assertEqual(worker.vendor_family(title), family)
+            pattern = worker.launcher_pattern(family, '/home')
+            self.assertIsNotNone(pattern.fullmatch(label))
+            for unsafe in ('Reset', 'Power Off', 'Take Over', 'Launch Java Console', 'Enable HTML5', 'Change Settings'):
+                self.assertIsNone(pattern.fullmatch(unsafe))
+        self.assertIsNone(worker.launcher_pattern('generic-html5', '/home').fullmatch('HTML5'))
+        self.assertIsNone(worker.launcher_pattern('generic-html5', '/home').fullmatch('Launch Console'))
+        with self.assertRaises(ValueError): worker.vendor_family('iLO iDRAC9')
 
     def test_preexisting_management_chart_is_never_a_console(self):
         browser = connection_browser_worker.Browser.__new__(connection_browser_worker.Browser)

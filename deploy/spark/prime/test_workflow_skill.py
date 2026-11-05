@@ -134,7 +134,7 @@ class BMCWorkflowTests(unittest.TestCase):
         self.module = types.ModuleType('bmc_html5_kvm')
         self.module.PrivateKVMClient = self.cls
         self.module._connection_id = lambda value: value
-        self.module._connection_call = mock.Mock(return_value={'systemIds': ['1']})
+        self.module._connection_call = mock.Mock(return_value={'sessionId': self.client.session_id})
         patch = mock.patch.dict(sys.modules, {'bmc_html5_kvm': self.module})
         patch.start(); self.addCleanup(patch.stop)
 
@@ -164,10 +164,10 @@ class BMCWorkflowTests(unittest.TestCase):
         self.assertNotIn('must not appear', json.dumps(result))
 
     def test_open_loss_never_reopens_or_sends_input(self):
-        self.cls.open.side_effect = TimeoutError()
+        self.module._connection_call.side_effect = TimeoutError()
         self.assertEqual(self.b.open_console('console', self.client.connection_id)['state'], 'unknown')
         self.b.open_console('console', self.client.connection_id)
-        self.cls.open.assert_called_once()
+        self.module._connection_call.assert_called_once()
         with self.assertRaises(ValueError): self.b.key('boot', 'console', 'f9')
         self.client.input.assert_not_called()
 
@@ -175,6 +175,25 @@ class BMCWorkflowTests(unittest.TestCase):
         self.b.inspect(self.client.connection_id, system_id='1')
         self.module._connection_call.assert_called_once_with('call', connection=self.client.connection_id,
                                               operation='redfish.installation', arguments={'systemId': '1'})
+
+    def test_console_status_is_bound_to_the_retained_session(self):
+        self.b.open_console('console', self.client.connection_id)
+        self.module._connection_call.reset_mock()
+        self.b.console_status('console')
+        self.module._connection_call.assert_called_once_with('call', connection=self.client.connection_id,
+            operation='kvm.info', arguments={'sessionId': self.client.session_id})
+        with self.assertRaises(ValueError): self.b.console_status('missing')
+
+    def test_compatibility_blocked_console_retains_reason_and_never_reopens(self):
+        self.module._connection_call.return_value = {'sessionOpened': False,
+            'compatibility': {'stage': 'console-launch', 'reason': 'launcher-unavailable',
+                              'vendorFamily': 'dell-idrac', 'retryAllowed': False, 'requiresReview': True}}
+        result = self.b.open_console('console', self.client.connection_id)
+        self.assertEqual(result['state'], 'compatibility-blocked')
+        self.assertEqual(result['compatibility']['reason'], 'launcher-unavailable')
+        self.assertEqual(self.b.open_console('console', self.client.connection_id), result)
+        self.module._connection_call.assert_called_once()
+        with self.assertRaises(ValueError): self.b.key('input', 'console', 'f9')
 
     def test_installation_pending_reuses_id_without_automatic_next_step(self):
         call = self.module._connection_call

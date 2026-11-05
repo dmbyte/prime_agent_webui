@@ -17,6 +17,12 @@ operations. To call, send `action='call', connection=id, operation=operation,
 arguments=arguments` with the same token. Do not print request headers or bodies.
 
 `redfish.systems` and `ipmi.status` take `{}` and return bounded status.
+For installation observation use `prime-workflows`: enumerate system IDs then
+select the intended one. Read-only discovery recognizes standard and bounded
+legacy HPE links and reports media occupancy/capability flags without returning
+image URLs. HTML5 console support is a separate path: use `bmc-html5-kvm` and
+its compatibility guide for iLO, iDRAC, Supermicro, Lenovo XCC or generic HTML5.
+Do not treat a working console as proof of supported Redfish/OEM writes.
 The trusted host adapter can perform IPMI/SOL even though the task's own UDP
 transport is unavailable. `sol.open` takes a fresh `requestId=uuid.uuid4().hex`
 and requires owner approval in Settings → My connections → Console and BMC action

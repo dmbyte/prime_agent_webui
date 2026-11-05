@@ -12,6 +12,10 @@ changes require a separate `redfish-install` connection and the skill's
 then resume the same ID. Never batch or automatically chain mount, boot and
 restart; unknown receipts cannot authorize the next step. Console input still
 requires exact owner approval and fresh visual verification.
+For controller compatibility, use `bmc-html5-kvm` capability guidance and the
+workflow helper's retained open/status result. Distinguish the detected UI family,
+session readiness and actual hardware validation. Unsupported layouts or ports
+need review; do not guess OEM actions, change security settings or force takeover.
 
 ## LAN hosting
 

@@ -1,9 +1,21 @@
 ---
 name: bmc-html5-kvm
-description: Inspect and control a saved-target HTML5 BMC console through task-bound connections, human-approved inputs and durable receipts. Legacy persistent KVM sessions are read-only.
+description: Inspect and control saved-target HTML5 consoles for iLO, iDRAC, Supermicro, Lenovo XCC or generic HTML5 layouts through task-bound connections, approved input and durable receipts. Discover compatibility; never assume hardware certification.
 ---
 
 # Saved-target HTML5 BMC KVM
+
+For vendor differences, capability status and unsupported layouts, read
+[compatibility.md](references/compatibility.md). Console UI support is separate
+from Redfish/OEM media and power support. A working HTML5 console does not grant
+permission to change media, boot, power or another operator's console session.
+
+Prefer the installed `prime-workflows` helper for retained open diagnostics:
+`b.open_console(step, connection)` returns `opened`, `compatibility-blocked` or
+`unknown`. On success `b.console_status(step)` reports the detected UI family
+and renderer; inspect a capture before any input. On compatibility-blocked,
+report the bounded stage/reason and stop, without changing IDs or trying another
+credential. The lower-level client below remains available for known layouts.
 
 Use `PrivateKVMClient` for console control. It uses the task's saved connection
 grant, not a password in tool code. Network operations, LAN/Full access, tools
@@ -29,7 +41,7 @@ print(result)
 ```
 
 `input()` sends a request, not an automatic keypress. If `approvalRequired` is
-true, tell the owner to review **Settings → My connections → Console action
+true, tell the owner to review **Settings → My connections → Console and BMC action
 approvals**. Only after their approval, retry `kvm.input` with the same ID and
 identical arguments. Do not rerun a cell that regenerates IDs. Do not poll faster
 than five seconds or longer than five minutes. Never self-approve.
@@ -64,7 +76,10 @@ revoked with their task/connection. They do not have the legacy cross-task lease
 or general KVM popout. Do not promise uninterrupted virtual media or multi-day
 console operation. The private broker supports only reviewed login/HTML5 layouts;
 unsupported launchers are compatibility failures, not permission to guess or
-expose secrets. iLO 4 login/capture was verified; live iLO 5 remains unvalidated.
+expose secrets. Reviewed layout families include iLO, iDRAC, Supermicro, Lenovo
+XCC and explicit generic HTML5/noVNC launchers. This is not certification of all
+versions: iLO 4 had prior live login/capture evidence; other firmware needs its
+own live acceptance. Legacy Java/ActiveX-only consoles are not HTML5 support.
 Do not reboot, change boot overrides, virtual media or BIOS settings merely to
 test a console. Screenshots can contain private OS data and remain subject to
 external-inference privacy controls.

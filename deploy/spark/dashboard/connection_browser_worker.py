@@ -14,6 +14,44 @@ import time
 from urllib.parse import urlsplit
 
 STAGES = {'launch', 'navigation', 'login-form', 'login-submit', 'console-launch', 'console-surface'}
+VENDORS = ('hpe-ilo', 'dell-idrac', 'supermicro', 'lenovo-xcc', 'generic-html5')
+USERNAME = 'input[type=text]:visible, input[type=email]:visible, input:not([type]):visible'
+REASONS = {'Ambiguous login form': 'ambiguous-login', 'Ambiguous login frames': 'ambiguous-login',
+           'Supported login form not found': 'login-form-unavailable',
+           'Unsupported login control': 'login-control-unavailable',
+           'Ambiguous controller family': 'ambiguous-vendor',
+           'Ambiguous HTML5 console launcher': 'ambiguous-launcher',
+           'Ambiguous console navigation': 'ambiguous-navigation',
+           'Unsupported HTML5 console launcher': 'launcher-unavailable',
+           'No unambiguous console surface; control denied': 'surface-unavailable'}
+
+
+def vendor_family(text):
+    """UI hints select reviewed controls, never privileges or target URLs."""
+    patterns = {'hpe-ilo': r'\biLO(?:\s*[4567])?\b', 'dell-idrac': r'\biDRAC\d*\b',
+                'supermicro': r'\bSuper\s*micro\b', 'lenovo-xcc': r'\bXClarity\b|\bLenovo\s+XCC\b'}
+    found = [name for name, pattern in patterns.items() if re.search(pattern, text[:16000], re.I)]
+    if len(found) > 1:
+        raise ValueError('Ambiguous controller family')
+    return found[0] if found else 'generic-html5'
+
+
+def launcher_pattern(vendor, path):
+    # Launching a viewer is allowed, changing its preferred type or forcibly
+    # taking another operator's session is not. Java/download-only fails closed.
+    names = [r'(?:Launch |Start )?(?:e?HTML5)(?: Remote)?(?: Console)?', r'noVNC Console']
+    if vendor == 'hpe-ilo' or path == '/html/summary.html':
+        names += [r'HTML5 Integrated Remote Console', r'Launch HTML5 Console']
+    if vendor == 'dell-idrac':
+        names += [r'Launch Virtual Console', r'Start (?:the )?Virtual Console']
+    if vendor == 'supermicro':
+        names += [r'Launch Console', r'(?:Launch )?iKVM(?:\/HTML5| Console)?']
+    if vendor == 'lenovo-xcc':
+        names += [r'Launch Remote Console', r'Start Remote Console']
+    # Bare HTML5 is known on iLO's overview, but ambiguous on an unknown UI.
+    if vendor != 'hpe-ilo' and path != '/html/summary.html':
+        names[0] = r'(?:Launch |Start )?(?:e?HTML5)(?: Remote)? Console'
+    return re.compile('^(?:'+'|'.join(names)+')$', re.I)
 
 
 class Browser:
@@ -25,6 +63,8 @@ class Browser:
         self.kvm = request['kind'] == 'kvm'
         self.console_canvases_before = {}
         self.authenticated = False
+        self.vendor = 'generic-html5'
+        self.navigation_steps = 0
         stage = 'launch'
         try:
             home = self.runtime.name
@@ -53,7 +93,7 @@ class Browser:
             stage = 'login-form'
             frame = self.login_frame()
             password = frame.locator('input[type=password]:visible')
-            username = frame.locator('input[type=text]:visible, input[type=email]:visible')
+            username = frame.locator(USERNAME)
             submit = frame.get_by_role('button', name=re.compile(r'^(log\s*in|sign\s*in)$', re.I))
             if submit.count() != 1:
                 raise ValueError('Unsupported login control')
@@ -65,10 +105,11 @@ class Browser:
             if not self.allowed(self.page.url):
                 raise ValueError('Login left approved BMC')
             self.authenticated = True
+            self.vendor = self.detect_vendor()
             if self.kvm:
                 stage = 'console-launch'
                 controls = self.console_launcher()
-                self.console_canvases_before = {frame: frame.locator('canvas:visible').element_handles()
+                self.console_canvases_before = {frame: frame.locator('canvas:visible, video:visible').element_handles()
                     for page in self.context.pages[:8] for frame in page.frames[:16] if self.allowed(frame.url)}
                 controls.click()
                 stage = 'console-surface'
@@ -81,6 +122,7 @@ class Browser:
         except BaseException as error:
             self.close()
             error.prime_stage = stage
+            error.prime_vendor = self.vendor
             raise
         finally:
             request.clear()  # Never retain the login payload in the request loop.
@@ -99,7 +141,7 @@ class Browser:
                     continue
                 passwords = frame.locator('input[type=password]:visible').count()
                 if passwords:
-                    usernames = frame.locator('input[type=text]:visible, input[type=email]:visible').count()
+                    usernames = frame.locator(USERNAME).count()
                     if passwords != 1 or usernames > 1:
                         raise ValueError('Ambiguous login form')
                     if usernames == 1:
@@ -111,22 +153,40 @@ class Browser:
             self.page.wait_for_timeout(100)
         raise ValueError('Supported login form not found')
 
+    def detect_vendor(self):
+        evidence = []
+        for frame in self.page.frames[:16]:
+            if self.allowed(frame.url):
+                evidence.extend(frame.locator('title,h1,h2,[role=banner]').all_text_contents()[:32])
+        return vendor_family(' '.join(evidence)[:16000])
+
     def console_launcher(self):
         deadline = time.monotonic()+15
+        visited = set()
         while time.monotonic() < deadline:
             candidates = []
+            navigation = []
             for frame in self.page.frames[:16]:
                 if not self.allowed(frame.url): continue
-                # Observed iLO 4 overview uses a short HTML5 label. Never apply
-                # that ambiguous shortcut to arbitrary pages or management charts.
-                pattern = r'^HTML5( Remote)? Console$'
-                if urlsplit(frame.url).path == '/html/summary.html':
-                    pattern = r'^(HTML5|HTML5( Remote)? Console)$'
+                pattern = launcher_pattern(self.vendor, urlsplit(frame.url).path)
                 for role in ('link', 'button'):
-                    controls = frame.get_by_role(role, name=re.compile(pattern, re.I))
-                    candidates.extend(controls.all())
+                    controls = frame.get_by_role(role, name=pattern)
+                    candidates.extend(control for control in controls.all() if control.is_visible())
+                if self.vendor != 'generic-html5' and self.navigation_steps < 2:
+                    for role in ('link', 'button', 'tab'):
+                        controls = frame.get_by_role(role, name=re.compile(
+                            r'^(Remote Console|Virtual Console|Remote Control|Console & Media|Remote Console & Media)$', re.I))
+                        for control in controls.all():
+                            label = control.inner_text().strip().lower()
+                            if control.is_visible() and label not in visited:
+                                navigation.append((control, label))
             if len(candidates) > 1: raise ValueError('Ambiguous HTML5 console launcher')
             if candidates: return candidates[0]
+            if len(navigation) > 1: raise ValueError('Ambiguous console navigation')
+            if navigation:
+                control, label = navigation[0]
+                visited.add(label); self.navigation_steps += 1
+                control.click()
             self.page.wait_for_timeout(100)
         raise ValueError('Unsupported HTML5 console launcher')
 
@@ -135,7 +195,7 @@ class Browser:
         for page in self.context.pages[:8]:
             for frame in page.frames[:16]:
                 if self.allowed(frame.url) and frame.locator('input[type=password]:visible').count() == 0:
-                    nodes = frame.locator('canvas:visible')
+                    nodes = frame.locator('canvas:visible, video:visible')
                     for index in range(min(nodes.count(), 8)):
                         node = nodes.nth(index)
                         # iLO 4 inserts a new console into an existing frame.
@@ -157,6 +217,15 @@ class Browser:
 
     def call(self, request):
         action = request['action']
+        if action == 'info':
+            surface = self.surface() if self.kvm else None
+            renderer = surface.evaluate('(node)=>node.tagName.toLowerCase()') if surface else None
+            if renderer not in (None, 'canvas', 'video'):
+                raise ValueError('Unsupported renderer')
+            return {'vendorFamily': self.vendor, 'renderer': renderer,
+                    'consoleReady': self.kvm and surface is not None,
+                    'sameOriginOnly': True, 'inputRequiresApproval': True,
+                    'hardwareCertified': False}
         if action == 'capture':
             if not self.allowed(self.page.url):
                 raise ValueError()
@@ -233,7 +302,10 @@ def main():
                 print(json.dumps({'ok': True, 'result': result}), flush=True)
             except Exception as error:
                 stage = getattr(error, 'prime_stage', '')
-                print(json.dumps({'ok':False, 'stage':stage if stage in STAGES else 'operation'}), flush=True)
+                vendor = getattr(error, 'prime_vendor', 'generic-html5')
+                print(json.dumps({'ok':False, 'stage':stage if stage in STAGES else 'operation',
+                    'vendorFamily': vendor if vendor in VENDORS else 'generic-html5',
+                    'reason': REASONS.get(str(error), 'authentication-or-runtime-unavailable')}), flush=True)
                 break
     finally:
         if browser:

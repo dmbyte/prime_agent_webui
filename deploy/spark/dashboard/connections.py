@@ -24,8 +24,8 @@ ADAPTERS = {'github-readonly': ['github.repository'],
             'redfish-readonly': ['redfish.systems', 'redfish.installation'],
             'redfish-install': ['redfish.installation', 'redfish.media.insert', 'redfish.media.eject',
                                 'redfish.boot.once', 'redfish.boot.restart', 'redfish.receipt']}
-CONSOLE_ADAPTERS = {'bmc-browser': ['browser.open', 'browser.capture', 'browser.close'],
-                    'bmc-kvm': ['kvm.open', 'kvm.capture', 'kvm.input', 'kvm.receipt', 'kvm.close'],
+CONSOLE_ADAPTERS = {'bmc-browser': ['browser.open', 'browser.capture', 'browser.info', 'browser.close'],
+                    'bmc-kvm': ['kvm.open', 'kvm.capture', 'kvm.info', 'kvm.input', 'kvm.receipt', 'kvm.close'],
                     'ipmi-sol': ['ipmi.status', 'sol.open', 'sol.read', 'sol.input', 'sol.receipt', 'sol.close']}
 ADAPTERS.update(CONSOLE_ADAPTERS)
 
@@ -399,7 +399,7 @@ BOOT_TARGETS = ('None', 'Pxe', 'Floppy', 'Cd', 'Usb', 'Hdd', 'BiosSetup', 'Utili
                 'Diags', 'UefiShell', 'UefiTarget', 'SDCard', 'UefiHttp', 'RemoteDrive')
 
 
-def redfish_members(data, collection):
+def redfish_members(data, collection, *, legacy=False):
     members = data.get('Members')
     if (not isinstance(members, list) or len(members) > 16 or data.get('Members@odata.nextLink')
             or type(data.get('Members@odata.count', len(members))) is not int
@@ -407,12 +407,33 @@ def redfish_members(data, collection):
         raise ValueError('Unsupported or incomplete Redfish collection')
     paths = []
     for member in members:
-        path = member.get('@odata.id') if isinstance(member, dict) else None
+        path = member.get('@odata.id', member.get('href') if legacy else None) if isinstance(member, dict) else None
+        if legacy and isinstance(member, dict) and '@odata.id' in member and 'href' in member:
+            if not isinstance(member['@odata.id'], str) or not isinstance(member['href'], str) or member['@odata.id'].rstrip('/') != member['href'].rstrip('/'):
+                raise ValueError('Conflicting legacy and standard member links')
         if (not isinstance(path, str) or not re.fullmatch(re.escape(collection)+'/'+REDFISH_ID+'/?', path)
                 or path.rstrip('/').split('/')[-1] in ('.', '..') or path.rstrip('/') in paths):
             raise ValueError('Redfish member is outside the selected collection or duplicated')
         paths.append(path.rstrip('/'))
     return paths
+
+
+def observation_link(data, name):
+    """Read-only alias resolution; never used to select an OEM write route."""
+    links = data.get('links') if isinstance(data.get('links'), dict) else {}
+    return data[name] if name in data else links.get(name)
+
+
+def observation_path(link):
+    if not isinstance(link, dict):
+        raise ValueError('Expected an observed resource link')
+    modern, legacy = link.get('@odata.id'), link.get('href')
+    if modern is not None and legacy is not None and modern != legacy:
+        raise ValueError('Conflicting resource links')
+    path = modern if modern is not None else legacy
+    if not isinstance(path, str):
+        raise ValueError('Expected a resource path')
+    return path.rstrip('/')
 
 
 def installation_snapshot(target, headers, arguments, transport):
@@ -438,30 +459,40 @@ def installation_snapshot(target, headers, arguments, transport):
               'boot': {'enabled': enum(boot.get('BootSourceOverrideEnabled'), ('Disabled', 'Once', 'Continuous')),
                        'target': enum(boot.get('BootSourceOverrideTarget'), BOOT_TARGETS),
                        'mode': enum(boot.get('BootSourceOverrideMode'), ('UEFI', 'Legacy'))},
-              'media': [], 'mediaStatus': 'not-advertised'}
+              'media': [], 'mediaStatus': 'not-advertised',
+              'schemaFlavor': 'legacy-links' if 'links' in data else 'redfish',
+              'standardBootModeAdvertised': boot.get('BootSourceOverrideMode') in ('UEFI', 'Legacy'),
+              'standardOpticalBootAdvertised': isinstance(boot.get('BootSourceOverrideTarget@Redfish.AllowableValues'), list)
+                  and 'Cd' in boot['BootSourceOverrideTarget@Redfish.AllowableValues']}
     # Prefer the system's own media. Otherwise use only explicitly linked managers;
     # never guess that the first manager or device belongs to this server.
     sources = [(selected, data)]
-    if 'VirtualMedia' not in data:
-        links = data.get('Links') if isinstance(data.get('Links'), dict) else {}
+    if observation_link(data, 'VirtualMedia') is None:
+        links = data.get('Links') if isinstance(data.get('Links'), dict) else data.get('links', {})
+        if not isinstance(links, dict): raise ValueError('Unsupported resource links')
         managers = links.get('ManagedBy', [])
-        manager_paths = redfish_members({'Members': managers}, '/redfish/v1/Managers')
+        manager_paths = redfish_members({'Members': managers}, '/redfish/v1/Managers', legacy=True)
         if len(manager_paths) > 4:
             raise ValueError('Too many linked managers')
         sources = [(path, transport(target, path, headers)) for path in manager_paths]
     for source, owner in sources:
-        link = owner.get('VirtualMedia')
+        link = observation_link(owner, 'VirtualMedia')
         if link is None:
             continue
         collection = source+'/VirtualMedia'
-        if (not isinstance(link, dict) or not isinstance(link.get('@odata.id'), str)
-                or link['@odata.id'].rstrip('/') != collection):
+        if observation_path(link) != collection:
             raise ValueError('Virtual media link is outside the observed resource')
-        paths = redfish_members(transport(target, collection, headers), collection)
+        paths = redfish_members(transport(target, collection, headers), collection, legacy=True)
         for path in paths:
             media = transport(target, path, headers)
             types = media.get('MediaTypes', [])
+            actions = media.get('Actions') if isinstance(media.get('Actions'), dict) else {}
+            def standard_action(name):
+                entry = actions.get('#VirtualMedia.'+name)
+                return isinstance(entry, dict) and entry.get('target') in (path+'/Actions/VirtualMedia.'+name, path+'/Actions/VirtualMedia.'+name+'/')
             result['media'].append({'resource': path,
+                'standardInsertAdvertised': standard_action('InsertMedia'),
+                'standardEjectAdvertised': standard_action('EjectMedia'),
                 'inserted': media.get('Inserted') if type(media.get('Inserted')) is bool else None,
                 'writeProtected': media.get('WriteProtected') if type(media.get('WriteProtected')) is bool else None,
                 'connectedVia': enum(media.get('ConnectedVia'), ('NotConnected', 'URI', 'Applet', 'Oem')),

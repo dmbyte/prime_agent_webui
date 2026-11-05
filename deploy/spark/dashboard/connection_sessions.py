@@ -6,7 +6,7 @@ import threading
 import time
 
 from connection_approvals import Approvals
-from connection_browser import BrowserSession
+from connection_browser import BrowserSession, BrowserCompatibilityError
 import connection_sol
 
 
@@ -82,6 +82,9 @@ class Sessions:
                 expiry = min(time.time()+3600, claim['expiresAt'], row['expiresAt'])
                 try:
                     worker = self.sol_factory(values) if family == 'sol' else self.browser_factory(self.native, key, values, family, expiry)
+                except BrowserCompatibilityError as error:
+                    if family == 'sol': raise
+                    return {'sessionOpened': False, 'compatibility': error.report}
                 except Exception:
                     if family == 'sol':
                         return self.approvals.finish(owner, claim, request['connection'], arguments, False)
@@ -107,13 +110,13 @@ class Sessions:
             if (not session or session['owner'] != owner or session['taskId'] != claim['taskId']
                     or session['connection'] != request['connection'] or session['family'] != family):
                 raise PermissionError('Console does not belong to this task and connection')
-            if action in ('capture', 'read', 'close'):
+            if action in ('capture', 'read', 'info', 'close'):
                 if set(arguments) != {'sessionId'}:
                     raise ValueError('Unexpected console arguments')
                 if action == 'close':
                     self.close(key)
                     return {'closed': True}
-                result = session['worker'].read()
+                result = session['worker'].info() if action == 'info' and family in ('browser', 'kvm') else session['worker'].read()
             elif action == 'input' and family in ('kvm', 'sol'):
                 connection_sol.validate_input(arguments)
                 pending = self.approvals.require(owner, claim, request['connection'], row, operation, arguments)

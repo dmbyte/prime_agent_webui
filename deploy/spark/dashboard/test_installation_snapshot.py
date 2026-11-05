@@ -50,6 +50,32 @@ class InstallationTests(unittest.TestCase):
         self.assertEqual(self.call()['media'], [])
         self.assertEqual(self.transport.call_count, 3)
 
+    def test_legacy_hpe_links_discover_occupied_media_without_claiming_write_support(self):
+        self.data[self.system]['links'] = {'ManagedBy': [{'href': self.manager}]}
+        del self.data[self.system]['Links']
+        self.data[self.system]['Boot'].pop('BootSourceOverrideMode')
+        self.data[self.system]['Boot']['BootSourceOverrideSupported'] = ['Cd']
+        self.data[self.manager] = {'links': {'VirtualMedia': {'href': self.collection}}}
+        self.data[self.collection] = {'Members': [{'href': self.media}]}
+        result = self.call()
+        self.assertEqual(result['schemaFlavor'], 'legacy-links')
+        self.assertEqual(result['mediaStatus'], 'observed')
+        self.assertTrue(result['media'][0]['inserted'])
+        self.assertFalse(result['standardBootModeAdvertised'])
+        self.assertFalse(result['standardOpticalBootAdvertised'])
+        self.assertFalse(result['media'][0]['standardInsertAdvertised'])
+        self.assertNotIn('private.iso', json.dumps(result))
+
+    def test_legacy_aliases_do_not_enable_foreign_or_conflicting_links(self):
+        self.data[self.system].pop('Links')
+        for member in ({'href': 'https://evil/Managers/1'}, {'href': '/redfish/v1/Managers/..'},
+                       {'@odata.id': self.manager, 'href': '/redfish/v1/Managers/other'},
+                       {'@odata.id': None, 'href': self.manager}):
+            self.data[self.system]['links'] = {'ManagedBy': [member]}
+            with self.assertRaises(ValueError): self.call()
+        with self.assertRaises(ValueError):
+            connections.observation_path({'@odata.id': self.collection, 'href': self.collection+'/other'})
+
     def test_missing_and_unknown_are_not_false_success(self):
         self.data[self.system] = {'Boot': {'BootSourceOverrideTarget': 'OEM-private'}}
         result = self.call()

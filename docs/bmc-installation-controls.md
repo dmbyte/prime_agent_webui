@@ -12,13 +12,15 @@ any particular iLO/BMC firmware.
 A read-only iLO 4 preflight found legacy `links.ManagedBy`,
 `links.VirtualMedia`, `BootSourceOverrideSupported` and HPE OEM media data,
 without the body ETags and standard media actions required by this adapter.
-The standard observer therefore did not discover that target's virtual media;
-`not-advertised` must **not** be interpreted as empty or absent hardware. Separate
-read-only legacy discovery found an occupied slot. No media was changed.
+The original standard-only observer did not discover that target's virtual
+media. The read-only observer now resolves bounded legacy links and reports both
+slots, including the occupied slot, with separate standard-action capability
+flags. `not-advertised` must **not** mean empty or absent hardware. No media was
+changed. This discovery fix does not enable legacy writes.
 
 HPE documents these pre-Redfish differences in its
 [iLO 4 migration guide](https://servermanagementportal.ext.hpe.com/docs/redfishservices/ilos/ilo5/ilo5_adaptation).
-This adapter does not currently translate them. Missing body ETags do not prove
+The write adapter does not translate them. Missing body ETags do not prove
 the firmware has no HTTP-header ETag support. Supporting legacy HPE writes needs
 a separately reviewed compatibility implementation and hardware acceptance,
 not silently dropping prerequisites, assuming boot mode or guessing actions.

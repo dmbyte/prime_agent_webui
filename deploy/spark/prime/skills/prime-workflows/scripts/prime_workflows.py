@@ -344,7 +344,7 @@ class BMCWorkflow(Records):
                                 arguments={} if system_id is None else {'systemId': system_id})
 
     def open_console(self, step, connection):
-        from bmc_html5_kvm import PrivateKVMClient, _connection_id
+        from bmc_html5_kvm import _connection_call, _connection_id
         _connection_id(connection)
         with self.lock(step):
             record, fresh = self.begin(step, ['kvm.open', connection])
@@ -353,8 +353,14 @@ class BMCWorkflow(Records):
             record.update(connection=connection, requestId=uuid.uuid4().hex)
             self.write(step, record)
             try:
-                client = PrivateKVMClient.open(connection, request_id=record['requestId'])
-                record.update(state='opened', sessionId=client.session_id)
+                response = _connection_call('call', connection=connection, operation='kvm.open',
+                    arguments={'requestId': record['requestId']})
+                if response.get('sessionOpened') is False and isinstance(response.get('compatibility'), dict):
+                    record.update(state='compatibility-blocked', compatibility=response['compatibility'])
+                elif isinstance(response.get('sessionId'), str) and re.fullmatch(r'pc-[a-f0-9]{16}', response['sessionId']):
+                    record.update(state='opened', sessionId=response['sessionId'])
+                else:
+                    raise ValueError('Invalid console open response')
             except Exception:
                 record.update(state='unknown')
             finally:
@@ -367,6 +373,14 @@ class BMCWorkflow(Records):
         if not record or record.get('state') != 'opened':
             raise ValueError('No known opened console; do not reopen after uncertain dispatch')
         return PrivateKVMClient(record['connection'], record['sessionId'])
+
+    def console_status(self, console):
+        from bmc_html5_kvm import _connection_call
+        record = self.read(console)
+        if not record or record.get('state') != 'opened':
+            raise ValueError('No known opened console; do not reopen after uncertain dispatch')
+        return _connection_call('call', connection=record['connection'], operation='kvm.info',
+                                arguments={'sessionId': record['sessionId']})
 
     def capture(self, console, filename):
         self.path(filename)

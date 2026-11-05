@@ -48,6 +48,12 @@ on auth/API/broker, with a broker-only protected target-lock directory. Fresh
 installations default to off; no credentials, target grants or approvals are
 created by activation. See the linked guide for exact service settings.
 
+[HTML5 console compatibility](docs/bmc-console-compatibility.md) covers reviewed
+iLO, iDRAC, Supermicro, Lenovo and generic layouts, including popup/frame and
+canvas/video consoles. Unsupported layouts produce retained diagnostics. Live
+firmware coverage is not universal; saved-target and exact-input approval rules
+remain in force, and legacy discovery does not enable OEM media/power writes.
+
 The [reliable task core](docs/reliable-tasks.md) verifies API sessions even on
 loopback, saves requests before runner startup, checkpoints tool-step status and
 retains failure reports across API restarts without automatically replaying

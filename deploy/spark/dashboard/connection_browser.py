@@ -12,6 +12,13 @@ import skill_credentials as credentials
 from runtime_maintenance import admitted
 
 
+class BrowserCompatibilityError(RuntimeError):
+    def __init__(self, stage, reason, vendor):
+        self.report = {'stage': stage, 'reason': reason, 'vendorFamily': vendor,
+                       'retryAllowed': False, 'requiresReview': True}
+        super().__init__('Private console compatibility requires review')
+
+
 class BrowserSession:
     @admitted
     def __init__(self, runtime, name, values, kind, expiry):
@@ -60,11 +67,19 @@ class BrowserSession:
         if data.get('ok') is not True or not isinstance(data.get('result'), dict):
             stages = {'launch','navigation','login-form','login-submit','console-launch','console-surface','operation'}
             stage = data.get('stage') if data.get('stage') in stages else 'operation'
-            raise RuntimeError('Private browser failed at '+stage+'; check TLS, login or console compatibility')
+            reasons = {'ambiguous-login','login-form-unavailable','login-control-unavailable','ambiguous-vendor',
+                       'ambiguous-launcher','ambiguous-navigation','launcher-unavailable','surface-unavailable'}
+            reason = data.get('reason') if data.get('reason') in reasons else 'authentication-or-runtime-unavailable'
+            vendors = {'hpe-ilo','dell-idrac','supermicro','lenovo-xcc','generic-html5'}
+            vendor = data.get('vendorFamily') if data.get('vendorFamily') in vendors else 'generic-html5'
+            raise BrowserCompatibilityError(stage, reason, vendor)
         return data['result']
 
     def read(self):
         return self.call({'action': 'capture'})
+
+    def info(self):
+        return self.call({'action': 'info'})
 
     def send(self, arguments):
         return self.call({'action': 'input', **{k: v for k, v in arguments.items() if k in ('key', 'text')}})

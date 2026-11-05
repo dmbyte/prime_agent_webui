@@ -112,9 +112,8 @@ def client(host,state,manifest):
     token=manager.issue(owner,task,None,policy)
     request={'action':'call','token':token,'connection':key,'operation':'browser.open','arguments':{'requestId':'a'*32}}
     try:
-        try: manager.dispatch(request,owner)
-        except RuntimeError: pass
-        else: raise AssertionError('Strict private browser unexpectedly accepted expired fixture')
+        strict = manager.dispatch(request,owner)
+        assert strict.get('sessionOpened') is False and strict.get('compatibility', {}).get('stage') == 'navigation', 'Strict private browser unexpectedly accepted expired fixture'
         assert not manager.sessions.sessions
         manager.vault.change(owner,[req],{'action':'save-target','key':target,'name':'Synthetic target','values':{},'ignoreCertificateErrors':True})
         manager.change(owner,dict(body,id=key)); manager.revoke(task)

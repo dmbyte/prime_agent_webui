@@ -16,8 +16,10 @@ media booleans/enums. No image URLs, serials, names, OEM strings or credentials
 are returned. A configured image or inserted media does not prove that the ISO
 is reachable, correct, or booted. Missing media advertisement is `not-advertised`,
 not empty/ejected. Unknown fields remain unknown. Unsupported/paginated or
-off-target resource links fail closed. Systems with nonstandard OEM media need
-an independently reviewed adapter; do not fall back to arbitrary HTTP.
+off-target resource links fail closed. Bounded legacy HPE `links`/`href` aliases
+are recognized for observation; schema flavor and standard-action availability
+are reported without interpreting OEM fields as write permission. Systems with
+nonstandard OEM media still need an independently reviewed write adapter.
 
 For ISO hosting, use `lan-web-host` and verify the intended file size/hash and
 URL separately. Mount, optical one-time boot and readback-gated restart use the
@@ -27,6 +29,7 @@ Existing saved-console input is available through this exact-approval helper:
 
 ```python
 b.open_console('console-v1', kvm_connection)
+b.console_status('console-v1')  # only after opened; family/renderer, not hardware certification
 b.capture('console-v1', 'before.png')  # inspect the image before deciding input
 b.key('boot-menu-v1', 'console-v1', 'f9')
 ```
@@ -35,6 +38,8 @@ This saves one request ID before contacting the broker. If approval is required,
 ask the owner to approve that exact action in Settings → My connections. Then
 call the **same** `key` invocation to consume it. Do not approve it yourself.
 Repeated calls after dispatch read the retained result; no input is replayed.
+An open returning `compatibility-blocked` retains a safe stage/reason; report it
+and stop. It is not an opened session, and repeating it does not retry the login.
 For transport loss, interruption or uncertain receipt:
 
 ```python

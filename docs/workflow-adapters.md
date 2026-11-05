@@ -54,6 +54,12 @@ and uncertain outcomes stop for read-only receipt lookup and a fresh capture.
 Acknowledgement is not independently verified BIOS/installer effect. No automatic
 first-system selection, blind key sequence, text/password entry, reset or reboot.
 
+Console open retains unsupported-layout diagnostics as `compatibility-blocked`;
+`console_status` reports bounded vendor/renderer/readiness metadata. Read-only
+media discovery handles legacy HPE links without enabling OEM writes. See
+[multi-vendor console compatibility](bmc-console-compatibility.md) for supported
+layout families, matched activation files and live-validation limits.
+
 The separate opt-in [installation controls](bmc-installation-controls.md) provide
 standard ISO mount/eject, one-time optical boot and readback-gated graceful
 restart/power-on. Each needs exact owner approval, not just saved-credential
