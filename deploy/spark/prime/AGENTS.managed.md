@@ -6,8 +6,12 @@ For coding build/test/artifact/preview work and BMC installation observation,
 load the installed `prime-workflows` skill. Prefer its bounded helpers over
 rewriting subprocess loops, saved-connection calls or action-ID bookkeeping.
 Retained results are evidence, not authority: an unknown result must be
-reconciled, not retried under a new ID. BMC observation is read-only; console
-input still requires exact owner approval and fresh visual verification.
+reconciled, not retried under a new ID. BMC observation is read-only. Installation
+changes require a separate `redfish-install` connection and the skill's
+`references/bmc-controls.md`: request one exact action, pause for owner approval,
+then resume the same ID. Never batch or automatically chain mount, boot and
+restart; unknown receipts cannot authorize the next step. Console input still
+requires exact owner approval and fresh visual verification.
 
 ## LAN hosting
 

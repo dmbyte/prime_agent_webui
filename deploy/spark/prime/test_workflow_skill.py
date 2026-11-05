@@ -176,6 +176,42 @@ class BMCWorkflowTests(unittest.TestCase):
         self.module._connection_call.assert_called_once_with('call', connection=self.client.connection_id,
                                               operation='redfish.installation', arguments={'systemId': '1'})
 
+    def test_installation_pending_reuses_id_without_automatic_next_step(self):
+        call = self.module._connection_call
+        call.side_effect = [{'approvalRequired': True, 'approvalId': 'a_'+'c'*64},
+                            {'actionReceipt': {'state': 'acknowledged'}}]
+        kw = dict(system_id='1', media_resource='/redfish/v1/Managers/1/VirtualMedia/CD',
+                  image_url='http://192.168.1.9/a.iso')
+        first = self.b.mount_iso('mount', self.client.connection_id, **kw)
+        self.assertEqual(first['state'], 'approval-required')
+        second = self.b.mount_iso('mount', self.client.connection_id, **kw)
+        self.assertEqual(first['requestId'], second['requestId'])
+        self.assertEqual(second['state'], 'acknowledged')
+        self.assertEqual(call.call_args_list[0], call.call_args_list[1])
+        self.b.mount_iso('mount', self.client.connection_id, **kw)
+        self.assertEqual(call.call_count, 2)
+        with self.assertRaises(ValueError):
+            self.b.boot_iso_once('boot', 'c_'+'f'*32, system_id='1', media_step='mount', mode='UEFI')
+        call.side_effect = None; call.return_value = {'approvalRequired': True, 'approvalId': 'a_'+'d'*64}
+        self.b.boot_iso_once('boot', self.client.connection_id, system_id='1', media_step='mount', mode='UEFI')
+        self.assertEqual(call.call_args.kwargs['arguments']['mediaRequestId'], second['requestId'])
+        with self.assertRaises(ValueError):
+            self.b.restart_for_iso('reset', self.client.connection_id, system_id='1', boot_step='boot', reset_type='On')
+
+    def test_installation_unknown_survives_reload_and_receipt_never_promotes(self):
+        call = self.module._connection_call; call.side_effect = TimeoutError('private upstream')
+        kw = dict(system_id='1', media_resource='/redfish/v1/Managers/1/VirtualMedia/CD')
+        first = self.b.eject_media('eject', self.client.connection_id, **kw)
+        self.assertEqual(first['state'], 'unknown')
+        self.assertNotIn('private upstream', json.dumps(first))
+        restored = workflows.BMCWorkflow(self.root)
+        self.assertEqual(restored.eject_media('eject', self.client.connection_id, **kw), first)
+        call.assert_called_once()
+        call.side_effect = None; call.return_value = {'actionReceipt': {'state': 'acknowledged'}}
+        restored.installation_receipt('eject')
+        self.assertEqual(call.call_args.kwargs['operation'], 'redfish.receipt')
+        self.assertEqual(restored.read('eject')['state'], 'unknown')
+
 
 if __name__ == '__main__':
     unittest.main()

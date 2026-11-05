@@ -19,7 +19,7 @@ arguments=arguments` with the same token. Do not print request headers or bodies
 `redfish.systems` and `ipmi.status` take `{}` and return bounded status.
 The trusted host adapter can perform IPMI/SOL even though the task's own UDP
 transport is unavailable. `sol.open` takes a fresh `requestId=uuid.uuid4().hex`
-and requires owner approval in Settings → My connections → Console action
+and requires owner approval in Settings → My connections → Console and BMC action
 approvals. Retry the identical request only after approval; never self-approve.
 Retain `sessionId`; `sol.read`/`sol.close` take only that ID. Read before input;
 check `connected` and `active`, not just the presence of a session ID. Opening
@@ -33,7 +33,12 @@ the model. TLS exceptions, HTTP transport and IPMI cipher choice are saved owner
 settings, not task arguments. Cipher 17 is the default; an owner may explicitly
 choose legacy encrypted cipher 3 for a reusable target. Never request a cipher
 override in a tool call or automatically downgrade after a failure. There is no
-reset, boot override, arbitrary HTTP or global SOL deactivation API.
+reset or boot override in the read-only/IPMI connections, and no arbitrary HTTP
+or global SOL deactivation API. For ISO mount/eject, one-time optical boot and
+graceful restart/power-on, load the installed `prime-workflows` skill and its
+`references/bmc-controls.md`. These require a separately enabled `redfish-install`
+connection and one exact owner approval per action. Never use the legacy direct
+library to bypass that approval or recover an unknown action by resending it.
 Private saved sessions last at most one hour, five minutes idle and no longer
 than their task/grant. Private captures currently return to the task; the legacy
 console viewer described below is a separate path.

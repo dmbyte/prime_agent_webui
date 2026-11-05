@@ -38,7 +38,15 @@ A faster failed task is not a promotion pass; existing v1 failures remain record
 
 The [workflow adapters](docs/workflow-adapters.md) add retained coding build/test
 results, artifact hashes, LAN previews, and read-only BMC boot/media evidence with
-exact-approved console steps. They do not automatically reboot or install a server.
+exact-approved console steps. A separate opt-in
+[BMC installation connection](docs/bmc-installation-controls.md) adds ISO mount/eject,
+one-time optical boot and readback-gated graceful restart/power-on. Every change
+needs its own owner approval; read-only connections gain no write access. This is
+not automatic OS installation or evidence of vendor-wide hardware compatibility.
+The November 5 reference deployment enables `PRIME_CONNECTION_BMC_WRITES_ENABLED=1`
+on auth/API/broker, with a broker-only protected target-lock directory. Fresh
+installations default to off; no credentials, target grants or approvals are
+created by activation. See the linked guide for exact service settings.
 
 The [reliable task core](docs/reliable-tasks.md) verifies API sessions even on
 loopback, saves requests before runner startup, checkpoints tool-step status and

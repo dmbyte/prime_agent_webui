@@ -269,6 +269,69 @@ class CodingWorkflow(Records):
 
 
 class BMCWorkflow(Records):
+    def _installation(self, step, connection, operation, arguments):
+        from bmc_html5_kvm import _connection_call, _connection_id
+        _connection_id(connection)
+        with self.lock(step):
+            record, fresh = self.begin(step, [operation, connection, arguments])
+            if not fresh and record['state'] != 'approval-required':
+                return record
+            if fresh:
+                record.update(requestId=uuid.uuid4().hex, connection=connection, operation=operation)
+            record['state'] = 'running'
+            self.write(step, record)
+            try:
+                response = _connection_call('call', connection=connection, operation=operation,
+                    arguments={**arguments, 'requestId': record['requestId']})
+                if response.get('approvalRequired') is True:
+                    if not re.fullmatch(r'a_[a-f0-9]{64}', str(response.get('approvalId', ''))):
+                        raise ValueError('Invalid approval response')
+                    state = 'approval-required'
+                else:
+                    state = response.get('actionReceipt', {}).get('state')
+                    if state not in ('acknowledged', 'unknown'):
+                        raise ValueError('Invalid action receipt')
+                record.update(state=state, response=response, effectVerified=False)
+            except Exception:
+                record.update(state='unknown', effectVerified=False)
+            finally:
+                self.write(step, record)
+            return record
+
+    def _prerequisite(self, step, connection, operation):
+        record = self.read(step)
+        if (not record or record.get('state') != 'acknowledged' or record.get('connection') != connection
+                or record.get('operation') != operation):
+            raise ValueError('Inspect/reconcile the prerequisite; do not bypass it with a new action ID')
+        return record['requestId']
+
+    def mount_iso(self, step, connection, *, system_id, media_resource, image_url):
+        return self._installation(step, connection, 'redfish.media.insert',
+            {'systemId': system_id, 'mediaResource': media_resource, 'imageUrl': image_url})
+
+    def eject_media(self, step, connection, *, system_id, media_resource):
+        return self._installation(step, connection, 'redfish.media.eject',
+            {'systemId': system_id, 'mediaResource': media_resource})
+
+    def boot_iso_once(self, step, connection, *, system_id, media_step, mode):
+        request_id = self._prerequisite(media_step, connection, 'redfish.media.insert')
+        return self._installation(step, connection, 'redfish.boot.once',
+            {'systemId': system_id, 'mediaRequestId': request_id, 'mode': mode})
+
+    def restart_for_iso(self, step, connection, *, system_id, boot_step, reset_type):
+        request_id = self._prerequisite(boot_step, connection, 'redfish.boot.once')
+        return self._installation(step, connection, 'redfish.boot.restart',
+            {'systemId': system_id, 'bootRequestId': request_id, 'resetType': reset_type})
+
+    def installation_receipt(self, step):
+        from bmc_html5_kvm import _connection_call
+        with self.lock(step):
+            record = self.read(step)
+            if not record or not str(record.get('operation', '')).startswith('redfish.'):
+                raise ValueError('No retained installation action')
+            return _connection_call('call', connection=record['connection'], operation='redfish.receipt',
+                                    arguments={'requestId': record['requestId']})
+
     @staticmethod
     def connections():
         from bmc_html5_kvm import _connection_call

@@ -21,7 +21,9 @@ import urllib.parse
 import skill_credentials as credentials
 
 ADAPTERS = {'github-readonly': ['github.repository'],
-            'redfish-readonly': ['redfish.systems', 'redfish.installation']}
+            'redfish-readonly': ['redfish.systems', 'redfish.installation'],
+            'redfish-install': ['redfish.installation', 'redfish.media.insert', 'redfish.media.eject',
+                                'redfish.boot.once', 'redfish.boot.restart', 'redfish.receipt']}
 CONSOLE_ADAPTERS = {'bmc-browser': ['browser.open', 'browser.capture', 'browser.close'],
                     'bmc-kvm': ['kvm.open', 'kvm.capture', 'kvm.input', 'kvm.receipt', 'kvm.close'],
                     'ipmi-sol': ['ipmi.status', 'sol.open', 'sol.read', 'sol.input', 'sol.receipt', 'sol.close']}
@@ -74,6 +76,10 @@ def permitted(row, context):
     if context.get('executionMode') == 'deny':
         return False
     mode = context.get('networkMode', 'restricted')
+    if row['adapter'] == 'redfish-install':
+        return (os.environ.get('PRIME_CONNECTION_BMC_WRITES_ENABLED') == '1'
+                and row.get('httpTransport') == 'direct' and mode in ('lan', 'full')
+                and context.get('profile') == 'network-operations')
     if row['adapter'] in CONSOLE_ADAPTERS:
         return (row['adapter'] in console_adapters() and mode in ('lan', 'full')
                 and context.get('profile') == 'network-operations')
@@ -147,6 +153,7 @@ class Connections:
                 'projects': [{'id': key, 'name': row.get('name', key)} for key, row in self.metadata().get('projects', {}).items()
                              if row.get('owner') == owner],
                 'runtimeEnabled': os.environ.get('PRIME_CONNECTIONS_ENABLED') == '1',
+                'bmcWriteRuntimeEnabled': os.environ.get('PRIME_CONNECTION_BMC_WRITES_ENABLED') == '1',
                 'consoleRuntimeEnabled': os.environ.get('PRIME_CONNECTION_CONSOLES_ENABLED') == '1',
                 'consoleAdapters': sorted(console_adapters()),
                 'defaultHttpTransport': os.environ.get('PRIME_CONNECTION_HTTP_TRANSPORT', 'direct'),
@@ -194,6 +201,8 @@ class Connections:
                 http_transport = body.get('httpTransport', rows.get(key, {}).get('httpTransport', 'default'))
                 if http_transport not in ('default', 'direct', 'openshell') or (req['adapter'] in CONSOLE_ADAPTERS and http_transport != 'default'):
                     raise ValueError('Select a supported HTTP transport for a read-only HTTP connection')
+                if req['adapter'] == 'redfish-install' and http_transport != 'direct':
+                    raise ValueError('BMC installation requires explicit Direct trusted broker transport')
                 credential_key = body.get('credentialKey')
                 if not isinstance(credential_key, str):
                     raise ValueError('Select a saved credential')
@@ -276,7 +285,7 @@ class Connections:
             raise PermissionError('Task is no longer active')
         return claim
 
-    def dispatch(self, request, expected_owner, transport=None):
+    def dispatch(self, request, expected_owner, transport=None, write_transport=None):
         if os.environ.get('PRIME_CONNECTIONS_ENABLED') != '1':
             raise PermissionError('Connections are not activated')
         if not isinstance(request, dict) or set(request) - {'token', 'action', 'connection', 'operation', 'arguments'}:
@@ -306,7 +315,11 @@ class Connections:
                 raise ValueError('Connection operation timed out')
             still_authorized()
             return transport(*args) if transport else get_json(*args, ignore_certificate_errors=ignore_certificate_errors)
-        if row['adapter'] in CONSOLE_ADAPTERS:
+        if row['adapter'] == 'redfish-install':
+            from connection_installation import dispatch
+            result = dispatch(self, request, expected_owner, claim, row, values, bounded_transport,
+                              still_authorized, ignore_certificate_errors, write_transport)
+        elif row['adapter'] in CONSOLE_ADAPTERS:
             if self.sessions is None:
                 raise PermissionError('Private console runtime is not activated')
             result = self.sessions.dispatch(request, expected_owner, claim, row,

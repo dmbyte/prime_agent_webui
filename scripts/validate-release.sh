@@ -25,6 +25,8 @@ required=(
   deploy/spark/update/verify-openshell.py
   deploy/spark/dashboard/connection_http_worker.py
   deploy/spark/dashboard/connection_approvals.py
+  deploy/spark/dashboard/connection_installation.py
+  deploy/spark/dashboard/test_installation_controls.py
   deploy/spark/dashboard/connection_sessions.py
   deploy/spark/dashboard/connection_browser.py
   deploy/spark/dashboard/connection_browser_worker.py

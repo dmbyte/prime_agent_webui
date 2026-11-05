@@ -1,5 +1,10 @@
 # Native HTTP and private console connections
 
+For separately approved ISO mount/eject, optical one-time boot and graceful
+restart/power-on, see [BMC installation controls](bmc-installation-controls.md).
+That adapter uses a separate explicit Direct trusted broker connection; it does
+not widen native GET policies or existing read-only grants.
+
 Private browser/KVM captures are bounded to 700,000 PNG bytes. The task gateway
 and private client permit a 1,000,000-byte JSON envelope to accommodate base64;
 the gateway's old 64-KiB metadata ceiling rejected otherwise valid captures.

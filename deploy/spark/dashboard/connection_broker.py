@@ -7,6 +7,7 @@ import threading
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import connections
+from connection_installation import InstallationPrecondition
 from connection_sol import IPMIUnavailable
 
 
@@ -57,6 +58,8 @@ class Handler(BaseHTTPRequestHandler):
             status = 200
         except connections.UnsupportedCertificatePolicy:
             status, result = 400, {'error': 'Native OpenShell HTTP does not support this saved certificate exception. Use verified TLS, or explicitly select Direct trusted broker for this connection in Settings. No fallback was attempted.'}
+        except InstallationPrecondition as error:
+            status, result = 409, {'error': str(error)}
         except IPMIUnavailable as error:
             status, result = 502, {'error': str(error)}
         except PermissionError:

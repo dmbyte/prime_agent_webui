@@ -2,7 +2,8 @@
 
 The managed `prime-workflows` skill adds deterministic helpers around the existing
 Prime/OpenShell execution path. No extra model, resident agent, database, cloud
-provider, task-image rebuild or new privilege is required. Detailed usage lives
+provider or task-image rebuild is required. Read-only helpers use existing
+permissions; installation controls require the separate opt-in gate below. Detailed usage lives
 with the [skill](../deploy/spark/prime/skills/prime-workflows/SKILL.md).
 
 ## Coding
@@ -53,10 +54,12 @@ and uncertain outcomes stop for read-only receipt lookup and a fresh capture.
 Acknowledgement is not independently verified BIOS/installer effect. No automatic
 first-system selection, blind key sequence, text/password entry, reset or reboot.
 
-**Not implemented:** trusted Redfish media insertion/ejection, boot-setting PATCH,
-reset, a complete unattended installation state machine, or vendor-wide hardware
-certification. These require separate write authorization and acceptance tests;
-do not use a raw-credential fallback to manufacture those capabilities.
+The separate opt-in [installation controls](bmc-installation-controls.md) provide
+standard ISO mount/eject, one-time optical boot and readback-gated graceful
+restart/power-on. Each needs exact owner approval, not just saved-credential
+access. Unknown acknowledgements cannot authorize subsequent actions. A complete
+unattended installation state machine and vendor-wide hardware certification
+remain unimplemented; do not use a raw-credential fallback.
 
 ## Installation, ownership and recovery
 
@@ -90,7 +93,8 @@ does not restore task credentials, approvals or external processes.
 Run `scripts/validate-release.sh`. Tests exercise real subprocess success/failure,
 bounded output, missing artifacts, timeout/child termination, no replay after
 restart, input/path validation, publication uncertainty, KVM approval ID reuse,
-lost acknowledgement, and Redfish link/projection/GET-only constraints. Tests use
+lost acknowledgement, Redfish link/projection/GET-only constraints, separate
+installation approvals, fresh prerequisites, transport and no-replay gates. Tests use
 synthetic accounts and targets. No real BMC reboot, media mount, installer input
 or investment transaction is part of this suite. A live task acceptance should
 use synthetic files only and retain its result for review.

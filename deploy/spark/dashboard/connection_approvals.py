@@ -62,7 +62,8 @@ class Approvals:
         state = row['state']
         if state in ('dispatching', 'consumed'):
             state = 'unknown'
-        acknowledged = ('SOL worker created; read must report connected before input.' if row['operation'] == 'sol.open'
+        acknowledged = ('BMC acknowledged the request; verify current media/boot/console state. This is not proof of installation.' if row['operation'].startswith('redfish.') else
+                        'SOL worker created; read must report connected before input.' if row['operation'] == 'sol.open'
                         else 'Worker acknowledged input; verify the target using capture/read.')
         return {'actionReceipt': {'id': path.stem, 'requestId': row['arguments']['requestId'],
                 'operation': row['operation'], 'state': state, 'retryAllowed': False,
@@ -113,12 +114,23 @@ class Approvals:
                                      connection=row['connection'], attemptedAt=row.get('attemptedAt', 0)))
             return sorted(rows, key=lambda r: r['attemptedAt'], reverse=True)[:20]
 
-    def require(self, owner, claim, connection_id, row, operation, arguments):
+    def acknowledged_arguments(self, owner, claim, connection_id, row, nonce, operation):
+        """Internal prerequisite evidence, never a new approval or a secret API."""
+        with self.lock():
+            _, previous = self._find(owner, claim, connection_id, nonce)
+            if (not previous or previous['revision'] != row['revision'] or previous['operation'] != operation
+                    or previous['state'] != 'acknowledged'):
+                raise PermissionError('Required acknowledged action is unavailable; reconcile before continuing')
+            return dict(previous['arguments'])
+
+    def require(self, owner, claim, connection_id, row, operation, arguments, *, preconditions=None):
         nonce = arguments.get('requestId')
         if not isinstance(nonce, str) or not re.fullmatch(r'[a-f0-9]{32}', nonce):
             raise ValueError('Console input needs a fresh 32-hex requestId; retry the same ID after approval')
         record = {'owner': owner, 'taskId': claim['taskId'], 'connection': connection_id,
                   'revision': row['revision'], 'operation': operation, 'arguments': arguments}
+        if preconditions is not None:
+            record['preconditions'] = preconditions
         key = 'a_'+hashlib.sha256(json.dumps(record, sort_keys=True).encode()).hexdigest()
         with self.lock():
             path = self.root/(key+'.json')
@@ -147,7 +159,7 @@ class Approvals:
                     raise ValueError('Console approval queue full')
                 record.update(state='pending', expiresAt=min(time.time()+300, claim['expiresAt'], row['expiresAt']))
                 self._save(path, record)
-        return {'approvalRequired': True, 'approvalId': key, 'message': 'Review the exact console action in Settings → My connections, then retry with the same requestId.'}
+        return {'approvalRequired': True, 'approvalId': key, 'message': 'Review the exact action in Settings → My connections, then retry with the same requestId.'}
 
     def pending(self, owner):
         if not self.root.exists():

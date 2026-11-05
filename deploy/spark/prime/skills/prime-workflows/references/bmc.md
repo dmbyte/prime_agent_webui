@@ -20,8 +20,9 @@ off-target resource links fail closed. Systems with nonstandard OEM media need
 an independently reviewed adapter; do not fall back to arbitrary HTTP.
 
 For ISO hosting, use `lan-web-host` and verify the intended file size/hash and
-URL separately. This version does **not** provide a Redfish mount, boot PATCH,
-reset, or automated installer sequence. Those are not granted by read access.
+URL separately. Mount, optical one-time boot and readback-gated restart use the
+separate adapter in [bmc-controls.md](bmc-controls.md); read access never grants
+those changes. There is no automated installer sequence.
 Existing saved-console input is available through this exact-approval helper:
 
 ```python

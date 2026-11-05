@@ -94,7 +94,7 @@
     save.onclick = () => run('save');
     remove.onclick = () => {if (confirm('Delete your saved values for this connection? This does not revoke the credential at its provider.')) run('delete');};
     actions.append(save, remove); box.append(actions);
-    if (row.status === 'saved' && ['redfish-readonly', 'bmc-browser', 'bmc-kvm', 'ipmi-sol'].includes(row.adapter) && row.scope !== 'project') {
+    if (row.status === 'saved' && ['redfish-readonly', 'redfish-install', 'bmc-browser', 'bmc-kvm', 'ipmi-sol'].includes(row.adapter) && row.scope !== 'project') {
       const reuse = el('button', 'Create reusable target from this login'); reuse.type = 'button';
       reuse.onclick = async () => {
         const name = prompt('Name for this saved target (the original entry stays unchanged):'); if (!name) return;
@@ -165,6 +165,8 @@
     const refreshFields = () => {
       const requirement = data.requirements.find(r => r.key === req.value);
       httpTransport.parentElement.hidden = !requirement || ['bmc-browser', 'bmc-kvm', 'ipmi-sol'].includes(requirement.adapter);
+      httpTransport.disabled = requirement?.adapter === 'redfish-install';
+      if (httpTransport.disabled) httpTransport.value = 'direct';
       const credential = sources.find(r => r.key === source.value);
       if (credential?.kind === 'bmc-target') target.value = credential.endpoint;
       target.readOnly = credential?.kind === 'bmc-target';
@@ -184,7 +186,7 @@
       refreshFields();
     };
     req.onchange = refreshFields; source.onchange = () => {refreshRequirements(); save.disabled = !req.options.length;}; refreshRequirements();
-    form.append(el('p', 'Saving invalidates existing task grants; new tasks receive the new grant. Credential access does not authorize publishing, rebooting or trading. SOL opening and console input require separate exact-action approval below.', 'muted'));
+    form.append(el('p', 'Saving invalidates existing task grants; new tasks receive the new grant. Credential access does not authorize publishing, rebooting or trading. SOL opening, console input and every BMC installation change require separate exact-action approval below. Installation controls use a separate connection and Direct trusted broker; read-only grants never gain write access.', 'muted'));
     const status = el('p', '', 'muted'); status.setAttribute('role', 'status');
     const save = el('button', current.id ? 'Save connection changes' : 'Add connection'); save.type = 'submit'; save.disabled = !req.options.length;
     form.append(save, status);
@@ -214,6 +216,7 @@
       const refresh = el('button', 'Refresh connections'); refresh.type = 'button'; refresh.onclick = loadConnections; body.append(refresh);
       const approvals = el('div'); approvals.id = 'connectionApprovals'; body.append(approvals);
       renderApprovals(data.consoleApprovals || []);
+      body.append(el('p', `BMC installation write runtime: ${data.bmcWriteRuntimeEnabled ? 'enabled — separate grant and per-action approval required' : 'staged/disabled — administrator activation required'}. No connection is created automatically.`, 'muted'));
       renderReceipts(data.consoleReceipts || []);
       for (const row of data.connections) {
         const box = el('details', '', 'settings-card'); box.append(el('summary', row.name));
@@ -234,14 +237,20 @@
   }
   function renderApprovals(rows) {
     const root = document.getElementById('connectionApprovals'); if (!root) return;
-    root.replaceChildren(el('strong', 'Console action approvals'));
+    root.replaceChildren(el('strong', 'Console and BMC action approvals'));
     if (!rows.length) root.append(el('p', 'No pending actions. Refresh to check for requests.', 'muted'));
     for (const row of rows) {
       const card = el('div', '', 'settings-card');
       card.append(el('p', `${row.operation} · ${row.name || row.connection} · ${row.endpoint || 'unavailable target'}`));
       card.append(el('p', `Task ${row.taskId} · expires ${new Date(row.expiresAt*1000).toLocaleTimeString()}`, 'muted'));
       card.append(el('pre', JSON.stringify(row.arguments, null, 2)));
-      card.append(el('p', 'Only approve if you understand the effect on this server. Keys/text can change BIOS, boot, or the running OS. Never enter passwords through agent console input.', 'muted'));
+      if (row.operation.startsWith('redfish.') && row.preconditions?.review) {
+        card.append(el('p', 'Prerequisite image and boot configuration:', 'muted'));
+        card.append(el('pre', JSON.stringify(row.preconditions.review, null, 2)));
+      }
+      card.append(el('p', row.operation.startsWith('redfish.')
+        ? 'Approve only this exact server, system, media URL/resource and action. Mount/eject changes boot media; one-time boot changes the next boot; restart/power-on can interrupt work and start an installer. Image URLs are fetched by the BMC. State changes invalidate approval. An acknowledgement is not proof of successful boot or installation.'
+        : 'Only approve if you understand the effect on this server. Keys/text can change BIOS, boot, or the running OS. Never enter passwords through agent console input.', 'muted'));
       for (const [label, approve] of [['Allow once', true], ['Deny', false]]) {
         const button = el('button', label); button.type = 'button';
         button.onclick = async () => {
@@ -256,7 +265,7 @@
   }
   function renderReceipts(rows) {
     const root = document.getElementById('connectionApprovals'); if (!root || !rows.length) return;
-    const history = el('details'); history.append(el('summary', 'Recent console action receipts'));
+    const history = el('details'); history.append(el('summary', 'Recent console and BMC action receipts'));
     for (const row of rows) {
       const card = el('div', '', 'settings-card');
       card.append(el('p', `${row.operation} · ${row.state === 'acknowledged' ? 'Worker acknowledged; verify the target' : 'Outcome unknown — do not repeat'}`));

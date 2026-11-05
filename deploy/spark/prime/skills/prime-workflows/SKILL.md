@@ -1,6 +1,6 @@
 ---
 name: prime-workflows
-description: Run recoverable coding build/test/artifact/preview steps or inspect BMC boot and virtual media with saved connections and exact-approved console steps. Use for application verification and server installation workflows in Prime.
+description: Run recoverable coding build/test/artifact/preview steps or BMC ISO installation controls with saved connections and per-action approvals. Use for application verification and server installation workflows in Prime.
 ---
 
 # Prime workflow adapters
@@ -19,7 +19,10 @@ from prime_workflows import CodingWorkflow, BMCWorkflow
 
 Read [coding.md](references/coding.md) for build/test commands, artifact hashes
 and LAN previews. Read [bmc.md](references/bmc.md) for boot/media inspection and
-durable KVM request IDs. Do not load both guides for unrelated tasks.
+durable KVM request IDs, and [bmc-controls.md](references/bmc-controls.md) only
+when mounting/ejecting an ISO or changing one-time boot/restarting is requested.
+Do not load all guides for unrelated tasks. Invoke these scripts through Prime's
+`ipython` tool, not a guessed `bash` tool; they are not pre-imported packages.
 
 Use a distinct, meaningful step ID for each intended action. Reusing the same
 step returns its retained result, not a fresh execution. An `unknown` result

@@ -17,7 +17,7 @@ import time
 MANIFEST = 'credential-requirements.json'
 LOCK = threading.RLock()
 ID = re.compile(r'[a-z][a-z0-9_-]{0,63}')
-BMC_ADAPTERS = {'redfish-readonly', 'bmc-browser', 'bmc-kvm', 'ipmi-sol'}
+BMC_ADAPTERS = {'redfish-readonly', 'redfish-install', 'bmc-browser', 'bmc-kvm', 'ipmi-sol'}
 
 
 def target_requirement(key, record):
@@ -62,7 +62,7 @@ def declarations(value):
         if 'adapter' in row:
             adapter = row['adapter']
             expected = {'github-readonly': {'token'}, **{key: {'endpoint', 'username', 'password'}
-                        for key in ('redfish-readonly', 'bmc-browser', 'bmc-kvm', 'ipmi-sol')}}
+                        for key in BMC_ADAPTERS}}
             if not isinstance(adapter, str) or adapter not in expected or names != expected[adapter]:
                 raise ValueError('Unsupported credential adapter or fields')
             normalized['adapter'] = adapter

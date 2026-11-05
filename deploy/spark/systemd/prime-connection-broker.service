@@ -8,6 +8,7 @@ Type=simple
 Environment=PRIME_CONNECTIONS_ENABLED=0
 Environment=PRIME_CONNECTION_HTTP_TRANSPORT=direct
 Environment=PRIME_CONNECTION_CONSOLES_ENABLED=0
+Environment=PRIME_CONNECTION_BMC_WRITES_ENABLED=0
 ExecCondition=/usr/bin/test ${PRIME_CONNECTIONS_ENABLED} = 1
 ExecStart=/usr/bin/python3 %h/prime-dgx-dashboard/connection_broker.py
 Restart=on-failure

@@ -33,7 +33,9 @@ response, shell command or secret-read operation exists. GitHub uses the fixed
 repositories with Metadata read permission. Redfish accepts only an exact RFC1918
 IPv4 HTTPS origin on port 443. It reads `/redfish/v1/Systems` and at most 16 direct
 members, rejecting pagination, external links, traversal and encoded paths.
-Use a read-only BMC account. No reset, boot override or write is implemented.
+Use a read-only BMC account for this adapter. It cannot reset, change boot or
+write. The separate opt-in [installation adapter](bmc-installation-controls.md)
+requires a new connection and exact-action approval; old grants are unchanged.
 
 Installation observation additionally follows only a selected system's advertised
 VirtualMedia collection, or at most four explicitly linked managers and their
