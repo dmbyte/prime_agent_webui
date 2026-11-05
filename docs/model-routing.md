@@ -41,7 +41,10 @@ model must receive a supported effort. Existing saved manual high settings are
 not silently reset: choose Auto in the conversation header to adopt selection.
 
 Effort does not increase decode throughput or guarantee correctness. All local
-efforts use the same IQ4_XS weights and 262,144-token Q8 cache slot. Input and
+efforts use one resident model and a 262,144-token slot. The FP4 reference
+runtime uses FP8 target KV/BF16 draft KV; the retained IQ4_XS rollback runtime
+uses Q8 KV. This serving choice does not change routing or privacy approval.
+Input and
 output share that context; the task deadline is a separate control.
 
 ## Initial model routing

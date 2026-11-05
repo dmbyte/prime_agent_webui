@@ -1,0 +1,17 @@
+[Unit]
+Description=Qwen 3.8 Flash-Next FP4 on GB10, reviewed b12x fallback
+After=docker.service network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=2
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/python3 %h/vllm-qwen38/start.py
+ExecStop=/usr/bin/docker stop --time=60 vllm-qwen38
+TimeoutStartSec=2000
+TimeoutStopSec=120
+
+[Install]
+WantedBy=default.target

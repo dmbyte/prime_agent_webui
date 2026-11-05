@@ -99,6 +99,11 @@ required=(
   deploy/spark/llama-qwen38/llama.env.template
   deploy/spark/llama-qwen38/start.sh
   deploy/spark/systemd/llama-qwen38.service
+  deploy/spark/systemd/vllm-qwen38.service
+  deploy/spark/vllm-qwen38/start.py
+  deploy/spark/vllm-qwen38/README.md
+  evals/spark/prepare_trial.py
+  evals/spark/candidate.json
   docs/model-routing.md
   docs/user-credentials.md
   docs/connections.md
@@ -114,7 +119,7 @@ bash -n install.sh deploy/spark/update/update-prime-agent.sh deploy/spark/update
   deploy/spark/prime/install-skills.sh \
   deploy/spark/openshell/install.sh deploy/spark/openshell/install-update-guards.sh deploy/spark/openshell/install-hosting.sh deploy/spark/openshell/provision-volumes.sh \
   deploy/spark/container/prime-container-entrypoint.sh
-python3 -m compileall -q deploy/spark/dashboard deploy/spark/container deploy/spark/prime
+python3 -m compileall -q deploy/spark/dashboard deploy/spark/container deploy/spark/prime deploy/spark/vllm-qwen38
 python3 -c 'from cryptography.hazmat.primitives.ciphers.aead import AESGCM'
 test_lock=$(mktemp)
 trap 'rm -f "$test_lock"' EXIT

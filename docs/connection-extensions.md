@@ -1,5 +1,12 @@
 # Native HTTP and private console connections
 
+Private browser/KVM captures are bounded to 700,000 PNG bytes. The task gateway
+and private client permit a 1,000,000-byte JSON envelope to accommodate base64;
+the gateway's old 64-KiB metadata ceiling rejected otherwise valid captures.
+Requests, HTTP-adapter response limits, owner checks, grants and approval rules
+are unchanged. The update requires an idle-time model-gateway restart, not new
+task images. Oversized or malformed replies still fail closed.
+
 The reference Spark enables native OpenShell HTTP substitution and private
 **browser/KVM/IPMI/SOL** adapters. HTTP defaults to native substitution; an owner
 can explicitly choose direct trusted-broker HTTP per connection. Activation was

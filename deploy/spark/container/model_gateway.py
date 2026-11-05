@@ -8,6 +8,10 @@ import inference_policy
 ROOT = Path(os.environ.get("PRIME_GATEWAY_ROOT", "/var/lib/prime-runner"))
 CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 TARGETS = {"spark-nemotron": ("http", "127.0.0.1", 30000), "spark-qwen": ("http", "127.0.0.1", 30001)}
+# Private console workers cap PNGs at 700,000 bytes before base64 encoding.
+# Match the existing worker/client JSON envelope ceiling, not the HTTP metadata
+# adapter's smaller body limit. Keep requests and upstream adapters unchanged.
+CONNECTION_RESPONSE_LIMIT = 1_000_000
 HOP = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailers", "transfer-encoding", "upgrade", "host", "authorization", "chatgpt-account-id", "originator"}
 _credential_locks = {}
 _credential_locks_guard = threading.Lock()
@@ -120,8 +124,8 @@ class Handler(BaseHTTPRequestHandler):
                 conn.request('POST', '/connections', self.rfile.read(length),
                              {'Content-Type': 'application/json', 'X-Prime-Connection-Owner': user})
                 response = conn.getresponse()
-                raw = response.read(65537)
-                if len(raw) > 65536:
+                raw = response.read(CONNECTION_RESPONSE_LIMIT + 1)
+                if len(raw) > CONNECTION_RESPONSE_LIMIT:
                     return self.send_json(502, {'error': 'Connection response exceeded limit'})
                 return self.send_json(response.status, json.loads(raw))
             except (OSError, ValueError, http.client.HTTPException):

@@ -35,6 +35,78 @@ class ModelGatewayNetworkTests(unittest.TestCase):
 
 
 class ModelGatewayCredentialTests(unittest.TestCase):
+    def connection_reply(self, raw):
+        handler = object.__new__(model_gateway.Handler)
+        handler.server = mock.Mock(prime_user='alice')
+        handler.command, handler.path = 'POST', '/connections'
+        request = b'{"action":"call","token":"synthetic"}'
+        handler.rfile = io.BytesIO(request)
+        handler.headers = Message(); handler.headers['Content-Length'] = str(len(request))
+        handler.send_json = mock.Mock()
+        response = mock.Mock(status=200); response.read.return_value = raw
+        with mock.patch.dict(os.environ, {'PRIME_CONNECTIONS_ENABLED':'1'}), mock.patch.object(model_gateway.http.client,'HTTPConnection') as cls:
+            cls.return_value.getresponse.return_value = response
+            handler.proxy()
+            response.read.assert_called_once_with(1_000_001)
+            cls.return_value.close.assert_called_once()
+        return handler.send_json.call_args.args
+
+    def test_private_capture_larger_than_metadata_limit_is_preserved(self):
+        import base64
+        body = {'mimeType':'image/png','image':base64.b64encode(b'x'*700000).decode()}
+        self.assertEqual(self.connection_reply(json.dumps(body).encode()), (200,body))
+
+    def test_private_capture_envelope_remains_bounded(self):
+        status, body = self.connection_reply(b'x'*1_000_001)
+        self.assertEqual(status,502)
+        self.assertEqual(body,{'error':'Connection response exceeded limit'})
+
+    def test_invalid_capture_json_is_not_forwarded(self):
+        self.assertEqual(self.connection_reply(b'not JSON'), (502,{'error':'Connection broker unavailable'}))
+
+    def test_large_capture_crosses_real_broker_http_and_gateway_socket(self):
+        import http.client
+        import threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        payload = {'mimeType':'image/png','image':'synthetic-'*90000}
+        observed = []
+        class Upstream(BaseHTTPRequestHandler):
+            def log_message(self,*_): pass
+            def do_POST(self):
+                self.rfile.read(int(self.headers['Content-Length']))
+                observed.append(self.headers.get('X-Prime-Connection-Owner'))
+                raw = json.dumps(payload).encode()
+                self.send_response(200); self.send_header('Content-Length',str(len(raw)))
+                self.end_headers(); self.wfile.write(raw)
+        original = http.client.HTTPConnection
+        upstream = ThreadingHTTPServer(('127.0.0.1',0),Upstream)
+        upstream_thread = threading.Thread(target=upstream.serve_forever,daemon=True); upstream_thread.start()
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                path = str(Path(directory)/'gateway.sock')
+                gateway = model_gateway.Server(path,'synthetic-owner')
+                thread = threading.Thread(target=gateway.serve_forever,daemon=True); thread.start()
+                class UnixClient(original):
+                    def connect(self):
+                        self.sock = socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+                        self.sock.settimeout(5); self.sock.connect(path)
+                def routed(host,port,**kwargs):
+                    self.assertEqual((host,port),('127.0.0.1',8767))
+                    return original('127.0.0.1',upstream.server_port,**kwargs)
+                client = UnixClient('localhost',timeout=5)
+                try:
+                    with mock.patch.dict(os.environ,{'PRIME_CONNECTIONS_ENABLED':'1'}), mock.patch.object(model_gateway.http.client,'HTTPConnection',side_effect=routed):
+                        client.request('POST','/connections',b'{"token":"synthetic","action":"list"}',
+                            {'Content-Type':'application/json','X-Prime-Connection-Owner':'spoofed'})
+                        response = client.getresponse()
+                        self.assertEqual(response.status,200)
+                        self.assertEqual(json.loads(response.read()),payload)
+                    self.assertEqual(observed,['synthetic-owner'])
+                finally:
+                    client.close(); gateway.shutdown(); gateway.server_close(); thread.join(2)
+        finally:
+            upstream.shutdown(); upstream.server_close(); upstream_thread.join(2)
+
     def test_connection_route_overwrites_spoofed_owner_and_never_forwards_cookies(self):
         handler = object.__new__(model_gateway.Handler)
         handler.server = mock.Mock(prime_user='alice')

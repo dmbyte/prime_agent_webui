@@ -18,6 +18,16 @@ SPEC.loader.exec_module(api)
 
 
 class DashboardV2Tests(unittest.TestCase):
+    def test_slow_model_restart_is_queued_not_claimed_healthy(self):
+        with mock.patch.object(api.subprocess,'run',return_value=mock.Mock(returncode=0)) as run:
+            self.assertEqual(api.request_service_restart('vllm-qwen38','vllm-qwen38'),
+                {'restartRequested':'vllm-qwen38','status':'queued'})
+            self.assertEqual(run.call_args.args[0],['systemctl','--user','restart','--no-block','vllm-qwen38'])
+        for name,confirm in (('vllm-qwen38','yes'),('arbitrary','arbitrary')):
+            with mock.patch.object(api.subprocess,'run') as run:
+                with self.assertRaises(ValueError): api.request_service_restart(name,confirm)
+                run.assert_not_called()
+
     def test_task_connection_capability_is_redacted_from_runtime_logs(self):
         token = 'a'*32 + '.' + 'b'*64
         self.assertNotIn(token, api.safe_runtime_line(json.dumps({'text': token})))
@@ -695,6 +705,7 @@ for line in sys.stdin:
         self.assertIn(["systemctl", "is-active", "prime-runner-broker"], calls)
         self.assertIn(["systemctl", "is-active", "prime-model-gateway"], calls)
         self.assertIn(["systemctl", "--user", "is-active", "prime-dashboard-api"], calls)
+        self.assertIn(["systemctl", "--user", "is-active", "vllm-qwen38"], calls)
 
     def test_container_sessions_are_resolved_per_authenticated_owner(self):
         with tempfile.TemporaryDirectory() as directory, mock.patch.dict(api.os.environ, {"PRIME_TASK_RUNTIME":"openshell", "PRIME_RUNNER_STORAGE":directory}):

@@ -12,6 +12,10 @@ settings on one resident model. Nemotron is disabled, not deleted, on migrated
 systems. This branch includes changes after `v0.5.47`; it is not a new release
 tag and does not change `main`.
 
+**Reference deployment, November 5:** FP4 on the pinned GB10/b12x runtime is now
+the default, with 256K context. IQ4_XS/Q8 and Nemotron are stopped and retained.
+See the [exact FP4 installation/rollback profile](deploy/spark/vllm-qwen38/README.md).
+
 ![Prime Agent WebUI sample](docs/prime-webui-sample.jpg)
 
 > The screenshot contains synthetic sample data. No user conversations or
@@ -26,8 +30,11 @@ skills belong outside the repository and are excluded from version control.
 
 The optional [Spark model evaluation harness](evals/spark/README.md) compares
 synthetic workload contracts before changing inference engines. Its pinned FP4
-candidate is experimental: installing the WebUI does not download it, switch
-models, reduce context, or change provider/privacy settings.
+profile is installed separately: installing the WebUI does not download it,
+switch models, reduce context, or change provider/privacy settings.
+The broker-aware acceptance test also checks completed coding work, approved
+console actions with lost-reply recovery, retained screenshots and image reading.
+A faster failed task is not a promotion pass; existing v1 failures remain recorded.
 
 ## Why one Qwen model instead of two local models?
 
@@ -43,7 +50,7 @@ a second model instance. See [adaptive routing and cloud approval](docs/model-ro
 |---|---|---|
 | Resident local inference engines | Nemotron and Qwen | Qwen only; Nemotron artifacts retained for rollback |
 | Qwen context budget | 98,304 tokens in one slot | 262,144 tokens in one slot: about 2.67× the budget |
-| Qwen K/V cache | Q4 | Q8; model weights remain IQ4_XS |
+| Qwen K/V cache | Q4 | FP8 target / BF16 draft with FP4 weights; IQ4_XS/Q8 retained for rollback |
 | Routine vs complex work | Model selection and inter-model handoff | Agent-selected low/medium/extra-high local effort; approved cloud delegation |
 | Nontrivial code | Must route away from Nemotron to Qwen | Qwen is the local default; approved external models may also implement code |
 | Local concurrency | Separate engines can execute different work concurrently | One model slot; requests share/queue for that slot |
@@ -51,15 +58,16 @@ a second model instance. See [adaptive routing and cloud approval](docs/model-ro
 The practical advantages are:
 
 - **More memory for Qwen and tools.** Removing the second resident engine makes
-  room for the larger context and Q8 cache while retaining a tested system-memory
+  room for the larger context and KV allocation while retaining a tested system-memory
   reserve. This is one engine's cache, not a cache shared between models.
 - **More conversation and source material before compaction.** The larger Qwen
   budget helps longer coding, browser and console workflows. The total includes
   prompt **and** output; Prime still reserves 8,192 output tokens and compacts
   long histories. It is not unlimited task memory.
-- **Less cache quantization.** Q8 stores K/V at higher precision than Q4. It uses
-  more memory; we have not established a general accuracy improvement or
-  tokens-per-second increase from that change alone.
+- **A tested serving profile.** FP4 weights, FP8 target KV and BF16 draft KV are
+  distinct choices. They are not the same as IQ4_XS weights with Q8 KV; the latter
+  remains available for rollback. Lower weight precision alone is not evidence
+  of better speed or accuracy.
 - **Fewer inter-model handoffs and running inference services.** Routine and
   coding tasks use the same local provider and model behavior. Explicit cloud
   routes and bounded high-effort child tasks remain available, but a second local
@@ -71,7 +79,16 @@ The practical advantages are:
 
 ### What the tests establish—and what they do not
 
-On the reference Spark, a **249,943-token** chat recovered an early marker
+The November 5 broker-aware FP4 trials completed in **145.64 and 101.46 seconds**,
+passing coding, one approved console action with lost-reply reconciliation,
+retained captures, truthful final reports and both direct-image checks. Their
+task memory minima were **23.92 and 23.63 GiB available**. The matched corrected
+IQ4 run passed the underlying work/image checks but ended without a final report
+at 301.65 seconds. These small synthetic samples support a guarded deployment,
+not a general accuracy guarantee or long-running soak claim. See the
+[complete comparison and limitations](evals/spark/README.md).
+
+Earlier **IQ4 rollback-profile** measurements: a **249,943-token** chat recovered an early marker
 correctly, with **36.12 GiB minimum available RAM** during that test. Short
 synthetic arithmetic measured about **40–41 decode tokens/s**; near the context
 limit it measured **12.38 tokens/s**, with approximately **871 seconds total**
@@ -88,7 +105,8 @@ context. Do not re-enable both at the enlarged settings without revalidating RAM
 
 ## What this branch includes
 
-- Qwen local defaults, agent-selected subtask effort, 256K context and Q8 K/V cache.
+- Qwen local defaults, agent-selected subtask effort and 256K context; the FP4
+  runtime uses FP8 target/BF16 draft KV, with the former IQ4/Q8 runtime retained.
 - Account-bound, expiring no-training approval for external Codex inference;
   configured credentials alone do not permit private task routing.
 - A read-only console viewer for browser/KVM/SOL observations, and renewable
@@ -212,7 +230,7 @@ sudo apt-get install -y nginx openssl python3 curl git
 ```
 
 DGX Spark local Qwen hosting additionally requires NVIDIA's supported
-Ubuntu image, driver/container stack, Docker, and the IQ4_XS GGUF artifacts. See
+Ubuntu image, driver/container stack, Docker, and the chosen pinned model artifacts. See
 [the Spark deployment guide](deploy/spark/README.md); do not apply those GPU
 steps to ordinary Ubuntu/Debian hosts.
 
@@ -249,11 +267,21 @@ do not need Nemotron; existing installations retain its files for rollback.
 The current Spark recipe runs Prime tasks inside NVIDIA OpenShell with
 Qwen 3.8 Flash-Next as the default local model on a loopback-only endpoint.
 Nemotron 3.5 Lightning is retained but disabled to free memory for Qwen's
-256K context and Q8 cache. Install the base WebUI first, then apply the model and
+256K context and KV allocation. Install the base WebUI first, then apply the model and
 OpenShell pieces. On Ubuntu 24.04 DGX Spark systems, the extra host
 prerequisites are Docker 28 or newer, `jq`, `acl`, and `rsync`.
 
-Before building Qwen, stage all three IQ4_XS GGUF shards, the vision projector
+For the FP4 reference profile, follow the [pinned runtime installation and
+rollback guide](deploy/spark/vllm-qwen38/README.md). It documents the weight/image
+revision, all changed switches, explicit staging, read-only preflight, idle-time
+activation, startup health and rollback. It uses port 30001 and the same Prime
+catalog below. Never start FP4 alongside IQ4 or Nemotron.
+
+<details>
+<summary>Retained IQ4_XS installation and older dual-model migration</summary>
+
+This is an alternative/rollback recipe, not a second engine to start alongside FP4.
+Before building IQ4 Qwen, stage all three IQ4_XS GGUF shards, the vision projector
 and the shared-Q8 MTP head on NVMe. The build script also requires a clean,
 pre-existing reviewed llama.cpp checkout at its pinned revision; it does not
 clone that checkout or download weights. These external artifacts are not
@@ -303,6 +331,8 @@ restore the saved Qwen environment/start script and restart Qwen; then restore
 Prime settings, enable Nemotron and its Docker restart policy. Do not simply
 start both engines at the enlarged context without checking the 15% RAM reserve.
 
+</details>
+
 For a **fresh installation only**, install the local model catalog/defaults:
 
 ```bash
@@ -329,7 +359,8 @@ gateway. It installs the reviewed BMC and hosting skills; the following skill in
 pins the official NVIDIA catalog at commit
 `fd9f1466ff8a39178e488981e8b5118709392949`. See the component guides for details:
 [Nemotron](deploy/spark/vllm-nemotron35/README.md),
-[Qwen 3.8](deploy/spark/llama-qwen38/README.md), and
+[Qwen FP4](deploy/spark/vllm-qwen38/README.md),
+[retained Qwen IQ4](deploy/spark/llama-qwen38/README.md), and
 [OpenShell](deploy/spark/openshell/README.md).
 
 ### Deployed DGX Spark configuration
@@ -395,7 +426,34 @@ The vLLM command line includes:
 
 </details>
 
-#### Qwen 3.8 Flash-Next service
+#### Qwen 3.8 Flash-Next FP4 service
+
+The reviewed FP4 runtime is `vllm-qwen38.service`, with container `vllm-qwen38`.
+The [complete configuration and installation guide](deploy/spark/vllm-qwen38/README.md)
+pins the exact image/weight revision and upstream defaults. Changed parameters:
+
+```text
+PORT=30001                       # host bind: 127.0.0.1 only
+MAX_MODEL_LEN=262144
+MAX_NUM_SEQS=1
+GPU_MEMORY_UTILIZATION=0.76
+MAX_NUM_BATCHED_TOKENS=8192
+MTP_TOKENS=4
+QP_MOE=0
+--memory=98g --memory-swap=98g
+--ipc private --network bridge
+--cap-drop=ALL --security-opt=no-new-privileges
+```
+
+Target KV is FP8; draft KV is BF16. PLE stays on NVMe using the pinned recipe's
+io_uring, async/overlap and keepalive settings. Low/medium/high effort selection
+and protected cloud routing remain unchanged. Admin restart requests are queued;
+an accepted request does not mean the multi-minute startup is already healthy.
+
+<details>
+<summary>Retained IQ4_XS/Q8 service — rollback reference, not active with FP4</summary>
+
+#### Qwen IQ4_XS service
 
 Source files:
 `deploy/spark/llama-qwen38/llama.env.template`,
@@ -464,6 +522,8 @@ accuracy or capacity guarantee for arbitrary workloads. Both real OpenShell
 low-effort response and high-effort Python/assertion tests returned final reports.
 After switching back to short requests, retained prompt cache left 36.28 GiB
 available (35.62 GiB transient minimum, 29.28%); the 15% reserve still passed.
+
+</details>
 
 #### OpenShell task runtime
 

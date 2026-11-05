@@ -6,6 +6,7 @@
   "expected_download_bytes": 102267194619,
   "trial_port": 30002,
   "trial_name": "prime-eval-qwen-fp4",
-  "production_service": "llama-qwen38.service",
-  "status": "candidate_only_not_approved_for_production"
+  "production_service": "vllm-qwen38.service",
+  "rollback_service": "llama-qwen38.service",
+  "status": "reference_256k_profile_promoted_2026_11_05"
 }

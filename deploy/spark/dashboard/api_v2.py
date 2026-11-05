@@ -2454,9 +2454,19 @@ def inspect_archive(path):
     return len(names)
 
 
+def request_service_restart(service, confirmation):
+    allowed = {"prime-web", "openshell-gateway", "vllm-nemotron35", "llama-qwen38", "vllm-qwen38"}
+    if service not in allowed or confirmation != service:
+        raise ValueError("Explicit service confirmation is required")
+    result = subprocess.run(["systemctl", "--user", "restart", "--no-block", service], timeout=30, capture_output=True)
+    if result.returncode:
+        raise RuntimeError("Service restart request failed")
+    return {"restartRequested": service, "status": "queued"}
+
+
 def admin_status():
     services = {}
-    user_services = ("prime-auth", "prime-dashboard-api", "prime-web", "openshell-gateway", "vllm-nemotron35", "llama-qwen38")
+    user_services = ("prime-auth", "prime-dashboard-api", "prime-web", "openshell-gateway", "vllm-nemotron35", "llama-qwen38", "vllm-qwen38")
     system_services = ("prime-model-gateway", "prime-runner-broker")
     for name in user_services:
         result = subprocess.run(["systemctl", "--user", "is-active", name], capture_output=True, text=True, timeout=4)
@@ -2997,13 +3007,7 @@ class Handler(legacy.Handler):
             elif path == "/api/admin/restart":
                 self.require_admin()
                 service = str(payload.get("service", ""))
-                allowed = {"prime-web", "openshell-gateway", "vllm-nemotron35", "llama-qwen38"}
-                if service not in allowed or payload.get("confirm") != service:
-                    raise ValueError("Explicit service confirmation is required")
-                result = subprocess.run(["systemctl", "--user", "restart", service], timeout=30, capture_output=True)
-                if result.returncode:
-                    raise RuntimeError("Service restart failed")
-                self.send_json(200, {"restarted": service})
+                self.send_json(200, request_service_restart(service, payload.get("confirm")))
             elif path == "/api/admin/retention":
                 self.require_admin()
                 if payload.get("confirm") != "delete-expired-uploads":

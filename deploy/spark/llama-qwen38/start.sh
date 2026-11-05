@@ -4,6 +4,12 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "${script_dir}/llama.env"
 
+# Retained rollback engine must not contend with the promoted FP4 allocation.
+if docker inspect vllm-qwen38 --format '{{.State.Running}}' 2>/dev/null | grep -qx true; then
+  echo 'FP4 is running; stop it under idle maintenance admission before starting IQ4.' >&2
+  exit 1
+fi
+
 image="${IMAGE:-local/llama-qwen38-mtp:560abb66}"
 container="${CONTAINER_NAME:-llama-qwen38}"
 model_dir="${MODEL_DIR:-/home/dbyte/models/qwen38-flash-next-ud-iq4-xs}"

@@ -18,6 +18,23 @@ from run_screen import NoRedirect
 LOCK = '/var/lib/prime-runner/openshell-maintenance.lock'
 
 
+def idle_metrics(metrics):
+    families = {
+        'llama': {'llamacpp:requests_processing', 'llamacpp:requests_deferred'},
+        'vllm': {'vllm:num_requests_running', 'vllm:num_requests_waiting'},
+    }
+    found = set()
+    for line in metrics.splitlines():
+        if not line or line.startswith('#'): continue
+        name = line.split()[0].split('{',1)[0]
+        if name in set().union(*families.values()):
+            found.add(name)
+            if float(line.split()[-1]) != 0:
+                raise RuntimeError('Inference is busy; no changes made')
+    if found not in families.values():
+        raise RuntimeError('Cannot verify model is idle')
+
+
 def idle():
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
     users = json.loads((Path.home() / '.config/prime-agent/web-auth.json').read_text())['users']
@@ -37,17 +54,7 @@ def idle():
         raise RuntimeError('Sandbox exists; no changes made')
     with opener.open('http://127.0.0.1:30001/metrics', timeout=10) as response:
         metrics = response.read().decode()
-    found = set()
-    for line in metrics.splitlines():
-        if line.startswith('#'):
-            continue
-        for field in ('requests_processing', 'requests_deferred'):
-            if field in line.split(' ')[0]:
-                found.add(field)
-                if float(line.split()[-1]) != 0:
-                    raise RuntimeError('Inference is busy; no changes made')
-    if found != {'requests_processing', 'requests_deferred'}:
-        raise RuntimeError('Cannot verify model is idle')
+    idle_metrics(metrics)
 
 
 def main():
